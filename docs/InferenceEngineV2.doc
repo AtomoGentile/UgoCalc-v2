@@ -1,0 +1,231 @@
+{\rtf1\ansi\ansicpg1252\deff0\deflang1040
+{\fonttbl{\f0\froman\fcharset0 Times New Roman;}{\f1\fmodern\fcharset0 Courier New;}{\f2\fswiss\fcharset0 Arial;}}
+{\colortbl;\red0\green0\blue0;\red90\green90\blue90;}
+\viewkind4\uc1\pard\widowctrl\f0\fs22
+
+\qc\f2\b\fs40 UgoCalc \endash  Inference Engine V2\b0\fs20\par
+\b\fs28 Piano di progetto tecnico\b0\fs20\par
+\fs20\i Documento ufficiale di pianificazione \endash  propriet\'e0 di Simone, owner del progetto\i0\par
+\fs20 Data: 3 luglio 2026 \endash  Stato: pianificazione approvata, sviluppo non ancora iniziato\par
+\ql\pard\par
+
+\pard\brdrb\brdrs\brdrw10\brsp20 \par
+\pard\par
+
+\f2\b\fs32 1. Visione\b0\f0\fs22\par
+\par
+UgoCalc esiste per aiutarmi a contare i carboidrati dei pasti in modo pi\'f9 accurato e pi\'f9 rapido di quanto io possa fare a occhio. La versione attuale dell'app (V1) usa un singolo passaggio di visione artificiale per riconoscere gli alimenti e stimarne il peso, seguito da un abbinamento con le mie tabelle nutrizionali. Funziona, con un errore medio sui pesi intorno al 12,5%.\par
+\par
+Con la V2 non voglio un aggiustamento del prompt: voglio un vero motore di inferenza, composto da moduli indipendenti, ciascuno con una responsabilit\'e0 precisa, testabile separatamente e sostituibile senza toccare il resto del sistema. Ogni stima deve essere spiegabile: se l'app dice "165 g di riso", deve poter mostrare da dove viene quel numero, non solo dichiararlo.\par
+\par
+L'app si usa sia a casa sia al ristorante. Il sistema deve funzionare bene in entrambi i contesti, non solo in quello domestico.\par
+\par
+
+\f2\b\fs32 2. Principio di progetto\b0\f0\fs22\par
+\par
+\b I moduli basati su intelligenza artificiale percepiscono e propongono; i moduli deterministici decidono e calcolano.\b0\par
+\par
+Un modello linguistico multimodale \'e8 molto bravo a riconoscere alimenti, leggere una scena e stimare dimensioni relative. Non \'e8 affidabile nel fare aritmetica precisa n\'e9 nel mantenere coerenza numerica tra pi\'f9 stime. Per questo:\par
+\par
+\bullet  l'intelligenza artificiale non produce mai i grammi direttamente per gli alimenti a stima geometrica: produce dimensioni, conteggi, frazioni di riempimento e riferimenti di scala;\par
+\bullet  la conversione in grammi \'e8 affidata a codice deterministico, su tabelle locali di densit\'e0 e pesi unitari, verificabile con test automatici veri;\par
+\bullet  ogni numero finale porta con s\'e9 la propria catena di calcolo (formula, valori, fonti), cos\'ec da essere sempre spiegabile.\par
+\par
+
+\f2\b\fs32 3. Vincoli di progetto\b0\f0\fs22\par
+\par
+\bullet  Nessun training o hosting di modelli proprietari: tutta l'intelligenza artificiale passa dai provider gi\'e0 integrati (OpenAI, Anthropic, Google Gemini), con la mia chiave API.\par
+\bullet  Tutta la logica deterministica gira on-device, in Kotlin, senza alcun backend.\par
+\bullet  Costo contenuto: budget di riferimento di due chiamate al modello per analisi nel caso normale, una terza soltanto quando la verifica interna rileva un'incoerenza.\par
+\bullet  Nessuna catena lunga di chiamate sequenziali: i moduli che condividono lo stesso input restano accorpati in un'unica chiamata.\par
+\bullet  I provider restano intercambiabili: i contratti dati tra moduli sono JSON neutrali rispetto al provider, come nella V1.\par
+\bullet  La modalit\'e0 Casa/Ristorante \'e8 una mia scelta esplicita a inizio sessione, mai dedotta automaticamente dalla foto.\par
+\par
+
+\f2\b\fs32 4. Architettura del sistema\b0\f0\fs22\par
+\par
+Il flusso \'e8 composto da otto moduli, in sequenza logica:\par
+\par
+{\f1\fs18
+FOTO (1\endash 5) + EXIF\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M0 \endash  Controllo qualit\'e0 e ingestione\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[IA \endash  chiamata 1] M1 \endash  Percezione unificata (scala, inventario, misure grezze)\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|  SceneGraph\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M2 \endash  Router di strategia\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M3 \endash  Motore fisico (geometria/conteggio/contenitore \'ae grammi)\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|  WeightEstimate\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M4 \endash  Verifica di coerenza\'a0 ---- item flaggati ----> [IA \endash  eventuale] M5 \endash  Arbitrato selettivo\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[IA \endash  chiamata 2] M6 \endash  Nutrition Engine (abbinamento tabelle + ricerca online)\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M7 \endash  Calcolo carboidrati e grassi + spiegazione\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0|\par
+\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0\'a0v\par
+[deterministico] M8 \endash  Telemetria e archivio di apprendimento (Room)\par
+\par0}
+Nel caso normale, l'intero flusso costa due chiamate al modello (M1 e M6); una terza scatta solo quando M4 rileva un'anomalia.\par
+\par
+
+\f2\b\fs32 5. Moduli e responsabilit\'e0\b0\f0\fs22\par
+\par
+\b M0 \endash  Controllo qualit\'e0 e ingestione\b0\par
+Scarta o segnala le foto inutilizzabili (sfocatura, esposizione estrema, duplicati) prima di consumare token. Se tutte le foto sono scadenti, l'app me lo dice subito invece di produrre una stima inaffidabile.\par
+\par
+\b M1 \endash  Percezione unificata\b0\par
+Un'unica chiamata multimodale con tutte le foto della sessione, con tre output nello stesso passaggio:\par
+\bullet  ancoraggio di scala, con priorit\'e0 che dipende dalla modalit\'e0 di sessione (Casa/Ristorante \endash  vedi sezione 8);\par
+\bullet  inventario canonico degli alimenti, con alternative di identificazione e segnalazione delle occlusioni;\par
+\bullet  misure grezze per alimento (frazioni di superficie, altezze, conteggi, riempimento) \endash  mai grammi diretti.\par
+\par
+\b M2 \endash  Router di strategia\b0\par
+Assegna a ogni alimento riconosciuto una delle sei strategie di stima (sezione 6), tramite una tabella locale nome-alimento to strategia. \'c8 il punto di estensione principale del sistema: aggiungere una nuova strategia non richiede di toccare i prompt.\par
+\par
+\b M3 \endash  Motore fisico\b0\par
+Converte le misure grezze in grammi con formule deterministiche: geometria e densit\'e0 per gli alimenti distesi o a blocco, conteggio per peso unitario per gli alimenti numerabili, capacit\'e0 e riempimento per i contenitori, ripartizione da ricetta per i composti. Ogni risultato porta con s\'e9 la catena di calcolo completa.\par
+\par
+\b M4 \endash  Verifica di coerenza\b0\par
+Modulo gratuito e sempre attivo che controlla vincoli fisici (grammi per centimetro quadrato di piatto plausibili, peso entro un intervallo tipico), vincoli di scena (somma delle superfici, coerenza tra le foto) e coerenza identificativa (un'alternativa di identificazione che cambia sensibilmente i carboidrati resta segnalata come ambigua).\par
+\par
+\b M5 \endash  Arbitrato selettivo\b0\par
+Attivo solo sugli alimenti flaggati da M4: un'unica chiamata al modello, con le foto originali e il solo elenco degli elementi dubbi, per una rianalisi mirata. Nel caso tipico questo modulo non si attiva.\par
+\par
+\b M6 e M7 \endash  Nutrition Engine e calcolo finale\b0\par
+Il motore di abbinamento con le tabelle nutrizionali e la ricerca online di riserva restano quelli della V1, gi\'e0 solidi. Il calcolo finale di carboidrati e grassi include ora anche il report di spiegazione per alimento, assemblato dalle catene di calcolo di M3.\par
+\par
+\b M8 \endash  Telemetria e archivio di apprendimento\b0\par
+Ogni analisi salva l'intero percorso intermedio (scena riconosciuta, strategie scelte, catene di calcolo, esiti della verifica) insieme alle mie correzioni manuali. \'c8 la base sia per il benchmark (sezione 10) sia per il miglioramento nel tempo dei fattori di correzione (sezione 8).\par
+\par
+
+\f2\b\fs32 6. Tassonomia degli alimenti per strategia di stima\b0\f0\fs22\par
+\par
+La categoria di un alimento serve a un solo scopo: scegliere come calcolarne il peso. Le sei strategie sono:\par
+\par
+{\trowd\trgaph108\trleft0\trbrdrt\brdrs\brdrw10\trbrdrl\brdrs\brdrw10\trbrdrb\brdrs\brdrw10\trbrdrr\brdrs\brdrw10
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx2200
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx5200
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9500
+\pard\intbl\b\fs18 Categoria\cell Esempi\cell Metodo di calcolo\cell\b0\row
+\pard\intbl\fs18 Contabile\cell frutta intera, polpette, biscotti, fette\cell numero di pezzi per peso unitario di riferimento\cell\row
+\pard\intbl\fs18 Distesa sul piatto\cell pasta, riso, insalate, contorni\cell superficie coperta per altezza per riempimento per densit\'e0\cell\row
+\pard\intbl\fs18 A contenitore\cell latte, minestre, yogurt, succhi\cell capacit\'e0 per frazione di riempimento per densit\'e0\cell\row
+\pard\intbl\fs18 Blocco misurabile\cell carne, pesce, torte, formaggio, pane a fetta\cell forma geometrica per dimensioni per densit\'e0\cell\row
+\pard\intbl\fs18 Composto o occluso\cell lasagne, ripieni, sughi coprenti, panini farciti\cell peso totale geometrico per ripartizione da ricetta\cell\row
+\pard\intbl\fs18 Trascurabile\cell olio, spolverate, salse leggere\cell valore fisso di riferimento, dichiarato incerto\cell\row
+}
+\pard\par
+
+\f2\b\fs32 7. Contratti dati tra moduli\b0\f0\fs22\par
+\par
+Ogni modulo riceve un input strutturato e restituisce un output strutturato in JSON, secondo lo stesso pattern di serializzazione gi\'e0 in uso nella V1. Regola generale: ogni valore numerico viaggia insieme alla propria incertezza e alla propria provenienza.\par
+\par
+\b M1 \endash  M2 (SceneGraph):\b0  elenco delle ancore di scala individuate con relativa fonte e confidenza; elenco degli alimenti con nome, alternative di identificazione, grado di occlusione e misure grezze; relazioni di sovrapposizione tra alimenti.\par
+\par
+\b M3 \endash  M4 (WeightEstimate):\b0  per ciascun alimento, la strategia usata, il peso stimato, l'intervallo di confidenza e la catena di calcolo completa (formula, valori, fonti).\par
+\par
+\b M4 \endash  M5 (VerificationReport):\b0  esito di ciascun vincolo verificato e, se presenti, gli alimenti flaggati con il motivo.\par
+\par
+\b M8 (record di analisi):\b0  copia integrale dei documenti precedenti, pi\'f9 le versioni di prompt, tabelle e modello usati, pi\'f9 la modalit\'e0 di sessione e le mie eventuali correzioni.\par
+\par
+
+\f2\b\fs32 8. Modalit\'e0 Casa/Ristorante e calibrazione\b0\f0\fs22\par
+\par
+Seleziono la modalit\'e0 (Casa o Ristorante) esplicitamente all'avvio di ogni sessione di analisi: l'app non la deduce mai dall'immagine. La modalit\'e0 viene salvata su ogni analisi e determina sia l'ordine delle ancore di scala tentate da M1, sia quale insieme di fattori di correzione applicare.\par
+\par
+\b Calibrazione delle stoviglie di casa \endash  attiva solo in modalit\'e0 Casa.\b0  Confermo una volta i diametri dei miei piatti e le capacit\'e0 di bicchieri e ciotole abituali; quando M1 riconosce una di queste stoviglie, il valore calibrato diventa un'ancora certa. Fuori casa questo meccanismo non interviene.\par
+\par
+\b Riferimenti corporei personali \endash  condivisi tra le due modalit\'e0.\b0  Misure come la larghezza del mio dito o l'apertura della mano sono propriet\'e0 della persona, non del luogo: le calibro una volta e restano valide ovunque. Sono l'ancora di scala di prima scelta quando le stoviglie non sono calibrabili, pi\'f9 precise di una stima generica.\par
+\par
+\b Fattori di correzione appresi \endash  distinti per modalit\'e0 e per categoria di stima.\b0  Le mie correzioni manuali nel tempo permettono di individuare bias sistematici (per esempio una sottostima costante delle porzioni di un certo tipo), tenuti separati tra Casa e Ristorante perch\'e9 non \'e8 detto che coincidano.\par
+\par
+Questa struttura richiede tre nuove tabelle nel database locale (calibrazione stoviglie di casa, riferimenti corporei, fattori di correzione) e una modifica alla tabella esistente dello storico analisi, a cui viene aggiunto il campo della modalit\'e0.\par
+\par
+
+\f2\b\fs32 9. Rischi e colli di bottiglia\b0\f0\fs22\par
+\par
+{\trowd\trgaph108\trleft0\trbrdrt\brdrs\brdrw10\trbrdrl\brdrs\brdrw10\trbrdrb\brdrs\brdrw10\trbrdrr\brdrs\brdrw10
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx1000
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx5500
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9500
+\pard\intbl\b\fs18 Gravit\'e0\cell Rischio\cell Mitigazione\cell\b0\row
+\pard\intbl\fs18 Alta\cell L'errore si compone tra i moduli e il sistema modulare rende peggio della V1\cell Benchmark come prerequisito; M1 tiene la percezione in un'unica chiamata; confronto in ombra con la V1 finch\'e9 la V2 non vince sul benchmark\cell\row
+\pard\intbl\fs18 Alta\cell Assenza di scala affidabile, soprattutto al ristorante\cell Ancore corporee e universali come prima linea; in assenza totale, confidenza dichiarata bassa invece di una falsa precisione\cell\row
+\pard\intbl\fs18 Media\cell Tabella di densit\'e0 incompleta o imprecisa\cell Errore sistematico visibile nel benchmark, correggibile in un file dati senza toccare il codice\cell\row
+\pard\intbl\fs18 Media\cell Il modello non rispetta il formato atteso delle misure\cell Validazione rigida dello schema, un tentativo di recupero, fallback sulla stima diretta in stile V1\cell\row
+\pard\intbl\fs18 Media\cell Latenza e costo raddoppiati rispetto alla V1\cell Budget fissato a due chiamate nel caso normale, terza chiamata solo su segnalazione\cell\row
+\pard\intbl\fs18 Media\cell Alimenti composti o occlusi restano difficili da stimare con precisione\cell Intervalli di confidenza ampi mostrati esplicitamente, mai nascosti\cell\row
+\pard\intbl\fs18 Media\cell Le fasce di confidenza dichiarate non riflettono l'errore reale\cell Metrica di calibrazione della confidenza dedicata, misurabile solo con il benchmark\cell\row
+\pard\intbl\fs18 Sempre presente\cell Una stima errata pu\'f2 influenzare una decisione clinica (dose di insulina)\cell Intervalli sempre visibili, verifica pi\'f9 severa sugli alimenti ad alto impatto, invito alla correzione manuale quando la scala non \'e8 affidabile\cell\row
+}
+\pard\par
+
+\f2\b\fs32 10. Piano di validazione\b0\f0\fs22\par
+\par
+\b Prerequisito: benchmark pesato.\b0  Prima di sviluppare qualunque modulo, costruisco un insieme di 30-50 pasti reali, in proporzione realistica tra casa e ristorante, con il peso vero registrato (pesatura in cucina per i pasti di casa, stima della porzione dichiarata o pesatura degli avanzi per i pasti fuori). Da qui in avanti ogni modifica alla pipeline si valuta solo confrontandola con questo benchmark, mai a sensazione.\par
+\par
+\b Sviluppo incrementale in modalit\'e0 ombra:\b0\par
+\bullet  Fase 0 \endash  benchmark e raccolta telemetria sulla V1 attuale, nessun cambiamento visibile.\par
+\bullet  Fase 1 \endash  calibrazione domestica iniettata nella V1 esistente, misurata sul benchmark.\par
+\bullet  Fase 2 \endash  nuova percezione e motore fisico attivi in ombra: l'app continua a mostrare la V1 ma registra anche l'esito della V2, per un confronto diretto.\par
+\bullet  Fase 3 \endash  passaggio alla V2 solo se supera la V1 sul benchmark; la V1 resta disponibile come rete di sicurezza.\par
+\bullet  Fase 4 \endash  raffinamento continuo delle tabelle fisiche e dei fattori di correzione con le mie correzioni manuali.\par
+\par
+Ogni fase \'e8 un pezzo di lavoro autonomo, completabile e verificabile separatamente.\par
+\par
+
+\f2\b\fs32 11. Piano di test\b0\f0\fs22\par
+\par
+I moduli deterministici (controllo qualit\'e0, router, motore fisico, verifica, calcolo finale) sono coperti da test automatici classici: casi con valori noti calcolati a mano, casi limite, propriet\'e0 di monotonia. Il motore fisico \'e8 il modulo con la copertura pi\'f9 estesa, essendo il cuore della precisione del sistema.\par
+\par
+I moduli basati su intelligenza artificiale (percezione, arbitrato, abbinamento nutrizionale) non si prestano a test automatici in senso classico: vengono valutati con un insieme di casi di riferimento fissi, controllando che l'output rispetti lo schema atteso e resti entro una tolleranza numerica definita, ripetuti a ogni cambio di prompt o di modello.\par
+\par
+
+\f2\b\fs32 12. Metriche di successo\b0\f0\fs22\par
+\par
+\b Metriche primarie:\b0  errore assoluto di carboidrati per pasto, in grammi; percentuale di pasti con errore entro dieci e entro venti grammi.\par
+\par
+\b Metriche diagnostiche:\b0  errore percentuale medio sul peso per alimento, scomposto per categoria e per qualit\'e0 dell'ancoraggio di scala; percentuale di alimenti presenti ma non rilevati (l'errore pi\'f9 grave, perch\'e9 equivale al cento per cento di errore su quell'alimento) e di alimenti inventati.\par
+\par
+\b Metriche di sistema:\b0  calibrazione della confidenza dichiarata rispetto all'errore reale; copertura effettiva degli intervalli di confidenza; frequenza di attivazione dell'arbitrato selettivo e suo beneficio netto; latenza e costo per analisi rispetto alla V1.\par
+\par
+Tutte le metriche vengono riportate separatamente per modalit\'e0 Casa e Ristorante, non aggregate in un'unica media.\par
+\par
+
+\f2\b\fs32 13. Sviluppi futuri, fuori dal perimetro della V2\b0\f0\fs22\par
+\par
+\bullet  Fotografie prima e dopo il pasto, per stimare il consumato reale a partire dagli avanzi.\par
+\bullet  Un oggetto di riferimento esplicito nelle foto, quando manca qualunque altra ancora di scala.\par
+\bullet  Utilizzo della mappa di profondit\'e0 dei dispositivi che la supportano, come ancora di scala aggiuntiva.\par
+\bullet  Uso prudente della storia dei pasti come indizio debole sull'inventario, senza mai farlo prevalere sull'evidenza visiva.\par
+\bullet  Adozione di modelli multimodali eseguibili localmente sul dispositivo, quando saranno abbastanza affidabili: la struttura a moduli con contratti dati resta la stessa.\par
+\par
+
+\f2\b\fs32 14. Decisioni chiave\b0\f0\fs22\par
+\par
+{\trowd\trgaph108\trleft0\trbrdrt\brdrs\brdrw10\trbrdrl\brdrs\brdrw10\trbrdrb\brdrs\brdrw10\trbrdrr\brdrs\brdrw10
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx3200
+\clbrdrt\brdrs\brdrw10\clbrdrl\brdrs\brdrw10\clbrdrb\brdrs\brdrw10\clbrdrr\brdrs\brdrw10\cellx9500
+\pard\intbl\b\fs18 Ambito\cell Decisione\cell\b0\row
+\pard\intbl\fs18 Percezione visiva\cell Una sola chiamata unificata per scala, inventario e misure grezze\cell\row
+\pard\intbl\fs18 Peso in grammi\cell Sempre calcolato da un motore fisico deterministico, mai dichiarato direttamente dal modello\cell\row
+\pard\intbl\fs18 Tassonomia alimenti\cell Sei categorie definite dalla strategia di calcolo, non dalla geometria o dalla composizione\cell\row
+\pard\intbl\fs18 Verifica\cell Sempre attiva e deterministica; intervento del modello solo sugli alimenti segnalati\cell\row
+\pard\intbl\fs18 Motore nutrizionale\cell Quello della V1, gi\'e0 solido, senza riscritture\cell\row
+\pard\intbl\fs18 Prerequisito di sviluppo\cell Benchmark pesato, casa e ristorante, prima di scrivere qualunque modulo\cell\row
+\pard\intbl\fs18 Ancora di scala principale\cell Riferimenti corporei e universali, non le stoviglie di casa\cell\row
+\pard\intbl\fs18 Modalit\'e0 di sessione\cell Selezione esplicita mia a inizio sessione, mai dedotta dall'immagine\cell\row
+\pard\intbl\fs18 Calibrazione\cell Due meccanismi distinti: stoviglie di casa e riferimenti corporei condivisi\cell\row
+}
+\pard\par
+\par
+\i\fs18 Fine del documento.\i0\par
+}
