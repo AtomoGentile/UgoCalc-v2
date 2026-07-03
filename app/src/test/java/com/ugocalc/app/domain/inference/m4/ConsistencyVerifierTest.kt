@@ -23,6 +23,7 @@ class ConsistencyVerifierTest {
     @Test
     fun `a plausible scene passes every constraint and flags nothing`() {
         val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
             ancore = emptyList(),
             alimenti = listOf(
                 food("riso", RawMeasurements(frazionePiatto = 0.4)),
@@ -42,7 +43,7 @@ class ConsistencyVerifierTest {
 
     @Test
     fun `a weight outside the typical range is flagged as a physical violation`() {
-        val scene = SceneGraph(ancore = emptyList(), alimenti = listOf(food("pollo")))
+        val scene = SceneGraph(schemaVersion = SceneGraph.SCHEMA_VERSION, ancore = emptyList(), alimenti = listOf(food("pollo")))
         val estimates = listOf(estimate("pollo", EstimationStrategy.BLOCCO_MISURABILE, 2500.0))
         val report = verifier.verify(scene, estimates, scale)
 
@@ -55,7 +56,7 @@ class ConsistencyVerifierTest {
     @Test
     fun `an implausible plate areal density is flagged`() {
         // 100 g su appena l'1% del piatto → ~17 g/cm², ben oltre il massimo plausibile.
-        val scene = SceneGraph(ancore = emptyList(), alimenti = listOf(food("riso", RawMeasurements(frazionePiatto = 0.01))))
+        val scene = SceneGraph(schemaVersion = SceneGraph.SCHEMA_VERSION, ancore = emptyList(), alimenti = listOf(food("riso", RawMeasurements(frazionePiatto = 0.01))))
         val estimates = listOf(estimate("riso", EstimationStrategy.DISTESA_SUL_PIATTO, 100.0))
         val report = verifier.verify(scene, estimates, scale)
 
@@ -66,6 +67,7 @@ class ConsistencyVerifierTest {
     @Test
     fun `plate coverage over 100 percent flags a scene inconsistency on the largest item`() {
         val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
             ancore = emptyList(),
             alimenti = listOf(
                 food("insalata", RawMeasurements(frazionePiatto = 0.8)),
@@ -86,6 +88,7 @@ class ConsistencyVerifierTest {
     @Test
     fun `alternatives with non-high confidence are flagged as identity-ambiguous, high confidence is not`() {
         val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
             ancore = emptyList(),
             alimenti = listOf(
                 food("pane", alternative = listOf("focaccia"), confidenza = Confidence.MEDIO),

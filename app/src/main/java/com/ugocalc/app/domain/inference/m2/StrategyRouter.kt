@@ -1,6 +1,8 @@
 package com.ugocalc.app.domain.inference.m2
 
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
+import com.ugocalc.app.domain.inference.model.PerceivedFood
+import com.ugocalc.app.domain.inference.model.RawMeasurements
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import java.text.Normalizer
 
@@ -29,9 +31,44 @@ class StrategyRouter(
         }
     }
 
-    /** Assegna la strategia a tutti gli alimenti di uno [SceneGraph], preservandone l'ordine. */
-    fun route(scene: SceneGraph): List<StrategyAssignment> =
-        scene.alimenti.map { route(it.nome) }
+    /**
+     * Assegna la strategia a un alimento percepito. Se il nome non combacia con nessuna regola,
+     * il fallback non è fisso ma è la strategia più prudente **compatibile con le misure
+     * disponibili** (§5 M2): un alimento sconosciuto ma contato va da Contabile, uno in un
+     * contenitore va da A contenitore, ecc. L'assegnazione resta marcata come non esplicita,
+     * così la confidenza a valle viene abbassata.
+     */
+    fun route(food: PerceivedFood): StrategyAssignment {
+        val perNome = route(food.nome)
+        if (perNome.abbinamentoEsplicito) return perNome
+        return perNome.copy(strategia = prudentFallback(food.misureGrezze))
+    }
+
+    /**
+     * Assegna la strategia a tutti gli alimenti di uno [SceneGraph], preservandone l'ordine.
+     * Rifiuta esplicitamente (errore gestito, non crash) uno SceneGraph con `schema_version`
+     * non riconosciuta (§7 "Versionamento dello schema"): prompt e data class devono evolvere
+     * insieme, e un disallineamento deve emergere subito, non come deserializzazione parziale.
+     */
+    fun route(scene: SceneGraph): SceneRoutingResult {
+        if (scene.schemaVersion != SceneGraph.SCHEMA_VERSION) {
+            return SceneRoutingResult.SchemaNonSupportato(
+                trovata = scene.schemaVersion,
+                attesa = SceneGraph.SCHEMA_VERSION,
+            )
+        }
+        return SceneRoutingResult.Ok(scene.alimenti.map { route(it) })
+    }
+
+    /** Strategia più prudente compatibile con le misure grezze effettivamente presenti. */
+    private fun prudentFallback(m: RawMeasurements): EstimationStrategy = when {
+        m.conteggio != null -> EstimationStrategy.CONTABILE
+        m.contenitore != null || m.frazioneRiempimento != null -> EstimationStrategy.A_CONTENITORE
+        m.frazionePiatto != null -> EstimationStrategy.DISTESA_SUL_PIATTO
+        m.diametroCm != null || (m.lunghezzaCm != null && m.larghezzaCm != null) ->
+            EstimationStrategy.BLOCCO_MISURABILE
+        else -> fallback
+    }
 
     private fun matchesWholeWord(nomeNormalizzato: String, keyword: String): Boolean {
         val kw = normalize(keyword)
@@ -67,3 +104,14 @@ data class StrategyRule(
     val keywords: List<String>,
     val strategia: EstimationStrategy,
 )
+
+/**
+ * Esito del routing di un intero [SceneGraph] (§7 "Versionamento dello schema"). [Ok] porta
+ * l'assegnazione per ciascun alimento; [SchemaNonSupportato] segnala che lo schema dichiarato da M1
+ * non è quello atteso dalla pipeline corrente — errore gestito esplicitamente, non un crash o una
+ * deserializzazione parziale.
+ */
+sealed interface SceneRoutingResult {
+    data class Ok(val assegnazioni: List<StrategyAssignment>) : SceneRoutingResult
+    data class SchemaNonSupportato(val trovata: Int, val attesa: Int) : SceneRoutingResult
+}
