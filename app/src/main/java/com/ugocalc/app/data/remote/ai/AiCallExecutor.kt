@@ -31,17 +31,15 @@ class AiCallExecutor @Inject constructor(
     private val anthropicClient: AnthropicCompletionClient,
     private val geminiClient: GeminiCompletionClient,
     private val apiKeyStore: SecureApiKeyStore,
-    @PublishedApi internal val json: Json,
+    internal val json: Json,
 ) {
 
-    @PublishedApi
     internal fun clientFor(provider: AiProviderType): AiTextCompletionClient = when (provider) {
         AiProviderType.OPENAI -> openAiClient
         AiProviderType.ANTHROPIC -> anthropicClient
         AiProviderType.GEMINI -> geminiClient
     }
 
-    @PublishedApi
     internal fun apiKeyFor(model: AiModel): String =
         apiKeyStore.getApiKey(model.provider)
             ?: throw AiCallException("Nessuna API key configurata per ${model.displayName}")
@@ -51,7 +49,7 @@ class AiCallExecutor @Inject constructor(
         images.map { bytes -> ImagePart(android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP), mimeType) }
 
     /** Chiama [AiTextCompletionClient.completeJson] con retry e decodifica la risposta in [T]. */
-    suspend inline fun <reified T> completeJson(
+    internal suspend inline fun <reified T> completeJson(
         model: AiModel,
         userText: String,
         images: List<ImagePart> = emptyList(),
@@ -65,7 +63,7 @@ class AiCallExecutor @Inject constructor(
     }
 
     /** Chiama [AiTextCompletionClient.searchOnline] con retry e decodifica la risposta in [T]. */
-    suspend inline fun <reified T> searchOnline(model: AiModel, userText: String): T {
+    internal suspend inline fun <reified T> searchOnline(model: AiModel, userText: String): T {
         val client = clientFor(model.provider)
         val apiKey = apiKeyFor(model)
         return withRetry {
@@ -83,8 +81,7 @@ class AiCallExecutor @Inject constructor(
      * Qualunque altro [AiCallException] (es. 429 quota esaurita, chiave mancante) NON va ripetuto
      * subito: peggiorerebbe un eventuale blocco lato provider.
      */
-    @PublishedApi
-    internal suspend fun <T> withRetry(maxAttempts: Int = 2, block: suspend () -> T): T {
+    internal suspend inline fun <T> withRetry(maxAttempts: Int = 2, crossinline block: suspend () -> T): T {
         var lastError: AiCallException? = null
         repeat(maxAttempts) { attempt ->
             try {
@@ -100,7 +97,6 @@ class AiCallExecutor @Inject constructor(
         throw lastError!!
     }
 
-    @PublishedApi
     internal inline fun <reified T> decodeDto(raw: String): T {
         val cleaned = stripMarkdownFences(raw)
         return try {
@@ -113,12 +109,10 @@ class AiCallExecutor @Inject constructor(
     }
 
     /** Rimuove eventuali fence markdown (```json ... ```) che alcuni modelli aggiungono nonostante il prompt lo vieti. */
-    @PublishedApi
     internal fun stripMarkdownFences(raw: String): String =
         raw.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
 
     /** Include un estratto della risposta grezza: senza, un fallimento di parsing è indiagnosticabile a distanza. */
-    @PublishedApi
     internal fun malformedJsonMessage(cleaned: String, cause: Exception): String {
         val preview = cleaned.take(300).ifBlank { "(risposta vuota)" }
         return "JSON malformato nella risposta del modello (${cause.message}). Risposta ricevuta: $preview"
