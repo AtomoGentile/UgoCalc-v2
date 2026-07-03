@@ -53,14 +53,52 @@ class StrategyRouterTest {
     @Test
     fun `routing a scene preserves order and count`() {
         val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
             ancore = emptyList(),
             alimenti = listOf(food("riso"), food("pollo"), food("mela")),
         )
-        val assignments = router.route(scene)
+        val result = router.route(scene) as SceneRoutingResult.Ok
+        val assignments = result.assegnazioni
         assertEquals(3, assignments.size)
         assertEquals(EstimationStrategy.DISTESA_SUL_PIATTO, assignments[0].strategia)
         assertEquals(EstimationStrategy.BLOCCO_MISURABILE, assignments[1].strategia)
         assertEquals(EstimationStrategy.CONTABILE, assignments[2].strategia)
+    }
+
+    @Test
+    fun `a scene with an unrecognized schema version is rejected explicitly`() {
+        val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION + 1,
+            ancore = emptyList(),
+            alimenti = listOf(food("riso")),
+        )
+        val result = router.route(scene)
+        assertTrue(result is SceneRoutingResult.SchemaNonSupportato)
+        result as SceneRoutingResult.SchemaNonSupportato
+        assertEquals(SceneGraph.SCHEMA_VERSION + 1, result.trovata)
+        assertEquals(SceneGraph.SCHEMA_VERSION, result.attesa)
+    }
+
+    @Test
+    fun `an unknown food falls back to a measurement-compatible strategy, not always the fixed default`() {
+        val contenitore = router.route(
+            PerceivedFood(
+                nome = "pietanza aliena",
+                misureGrezze = RawMeasurements(contenitore = "ciotola", frazioneRiempimento = 0.5),
+                confidenza = Confidence.BASSO,
+            ),
+        )
+        assertEquals(EstimationStrategy.A_CONTENITORE, contenitore.strategia)
+        assertFalse(contenitore.abbinamentoEsplicito)
+
+        val contabile = router.route(
+            PerceivedFood(
+                nome = "pietanza aliena",
+                misureGrezze = RawMeasurements(conteggio = 3),
+                confidenza = Confidence.BASSO,
+            ),
+        )
+        assertEquals(EstimationStrategy.CONTABILE, contabile.strategia)
     }
 
     private fun assertStrategy(nome: String, atteso: EstimationStrategy) {

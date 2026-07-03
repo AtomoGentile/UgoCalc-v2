@@ -13,13 +13,26 @@ import kotlinx.serialization.Serializable
  */
 @Serializable
 data class SceneGraph(
+    /**
+     * Versione dello schema dichiarata dall'output di M1 (§7 "Versionamento dello schema").
+     * Prompt e data class evolvono insieme: ogni modifica allo schema incrementa
+     * [SCHEMA_VERSION] nello stesso commit che tocca entrambi. Il campo non ha default JSON di
+     * proposito: un output che non dichiara la versione fallisce la deserializzazione rigida
+     * invece di passare in silenzio. M2 rifiuta (errore gestito) le versioni non riconosciute.
+     */
+    @SerialName("schema_version") val schemaVersion: Int,
     /** Ancore di scala individuate nella scena, ciascuna con fonte e confidenza (§5 M1, §8). */
     val ancore: List<ScaleAnchor>,
     /** Inventario canonico degli alimenti, con misure grezze e occlusioni. */
     val alimenti: List<PerceivedFood>,
     /** Relazioni di sovrapposizione tra alimenti, utili a M4 per la coerenza di scena (§7). */
     @SerialName("sovrapposizioni") val sovrapposizioni: List<OverlapRelation> = emptyList(),
-)
+) {
+    companion object {
+        /** Versione corrente dello schema SceneGraph attesa da prompt M1 e pipeline. */
+        const val SCHEMA_VERSION = 1
+    }
+}
 
 /**
  * Un riferimento di scala riconosciuto nella scena. La priorità con cui vengono tentate dipende
