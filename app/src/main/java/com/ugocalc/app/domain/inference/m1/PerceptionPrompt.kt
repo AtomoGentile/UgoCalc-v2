@@ -42,7 +42,12 @@ object PerceptionPrompt {
 
         1. ANCORAGGIO DI SCALA: per ciascuna ancora individuata, restituisci il tipo, una breve
         descrizione, la dimensione reale in centimetri SOLO se nota con ragionevole certezza
-        (altrimenti ometti il campo) e una confidenza onesta.
+        (altrimenti ometti il campo) e una confidenza onesta. IMPORTANTE: se nella scena è presente
+        un alimento disteso su un piatto (da stimare per superficie coperta), la "dimensione_reale_cm"
+        dell'ancora scelta deve essere il DIAMETRO DEL PIATTO in centimetri, non la dimensione
+        dell'oggetto usato per dedurlo — anche quando parti da un riferimento corporeo o universale
+        (es. un dito, una moneta), il numero che riporti è quello dedotto per il piatto stesso: è
+        l'unico modo per cui chi userà questa misura possa calcolarne l'area reale.
 
         2. INVENTARIO ALIMENTI: elenca ogni alimento visibile, con nome canonico specifico e
         standardizzato (es. "pasta penne" non "pasta", "petto di pollo" non "carne"). Se non sei
