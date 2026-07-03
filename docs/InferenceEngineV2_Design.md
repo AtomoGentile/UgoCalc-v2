@@ -31,9 +31,16 @@ Il documento UC-OS contiene alcune idee giuste sepolte sotto un'inflazione conce
 - **Nessun contratto dati.** La Design Request chiedeva esplicitamente il formato dei dati tra i moduli; UC-OS mostra due frammenti JSON di telemetria e nient'altro. I contratti sono il cuore di un sistema modulare: qui sono specificati per intero (§7) e già implementati in Kotlin.
 - **Numeri di confidenza inventati.** "Alta ≈ 90–95% correttezza" dichiarato prima che esista un benchmark è un numero di fantasia. La calibrazione della confidenza è una *metrica da misurare* (§12), non una proprietà da dichiarare.
 - **Multi-model routing confuso.** "Claude Opus → architettura, Claude Fable → sviluppo" mescola gli strumenti di *sviluppo del progetto* con l'architettura *runtime dell'app*. Nel runtime esiste una sola cosa: provider intercambiabili dietro contratti JSON neutrali (§3), come già nella V1.
-- **Evolution Controller / rollback automatico.** Un sistema che "propone modifiche e promuove solo miglioramenti verificati" è un progetto di ricerca, non una feature. Per un'app a utente singolo la promozione di una modifica è una decisione *manuale* dell'owner, informata dal benchmark (§10). Il rollback è: la V1 resta disponibile finché la V2 non vince (§10, Fase 3).
+- **Evolution Controller come modulo che riscrive l'architettura da solo.** Un sistema che "propone modifiche e promuove solo miglioramenti verificati" al livello di prompt, strategie o modelli è un progetto di ricerca, non una feature per un'app a utente singolo: cambiare un prompt o un modello resta una decisione *umana*, informata dal benchmark (§10).
 
-Idee di UC-OS **salvate** (ridimensionate al giusto livello): telemetria di ogni inferenza (M8), ground truth a livelli Gold/Silver/Bronze (§9), fattori di correzione da bias stabili (§8), shadow mode (§10), versionamento di prompt/tabelle/modello nel record di analisi (§7), benchmark fisso come giudice di ogni versione (§10).
+Ma **l'ambizione di fondo di UC-OS — "il sistema impara dai propri errori e si corregge nel tempo" — è corretta e va tenuta**, non buttata via insieme all'inflazione del resto del documento. Va solo distinta con precisione da cosa NON deve essere automatico:
+
+- **Ciò che il sistema tara da solo, in continuo, senza intervento umano**: i fattori di correzione per bias stabili (§8) e la calibrazione della confidenza si ricalcolano automaticamente ogni volta che arriva nuovo ground truth in M8, e si applicano automaticamente al calcolo successivo — nessuna decisione dell'owner nel loop. Questo È il "self-improvement" reale: l'app diventa più precisa mano a mano che viene usata, senza rilasci di codice.
+- **Ciò che resta segnalato ma non agito in automatico**: il sistema rileva da solo un peggioramento di una metrica benchmark tra due versioni di prompt/motore e lo mostra come avviso (§13); ma cambiare prompt, motore o modello resta sempre una scelta dell'owner.
+
+Il confine non è "automatico vs manuale" in blocco, ma **"tarare parametri esistenti" (automatico) vs "cambiare l'architettura" (manuale)** — la stessa distinzione che un sistema di controllo fa tra un anello di retroazione e un cambio di algoritmo.
+
+Idee di UC-OS **salvate** (ridimensionate al giusto livello): telemetria di ogni inferenza (M8), ground truth a livelli Gold/Silver/Bronze (§9), fattori di correzione e calibrazione che si aggiornano da soli da bias stabili (§8, §13), rilevamento automatico di regressioni tra versioni (§13), shadow mode (§10), versionamento di prompt/tabelle/modello nel record di analisi (§7), benchmark fisso come giudice di ogni versione (§10).
 
 ### 0.3 Tabella di mappatura
 
@@ -45,7 +52,8 @@ Idee di UC-OS **salvate** (ridimensionate al giusto livello): telemetria di ogni
 | Categorie geometriche (regolari/irregolari/granulari/…) | **Sostituite da 6 strategie di calcolo** | La categoria serve a scegliere il metodo di stima, non a descrivere la forma |
 | UC-OS Core / scheduling / routing / cost control | **Scartato** | Nessuna responsabilità reale in un'app a utente singolo |
 | Fasce di confidenza dichiarate (90–95%…) | **Scartato**, diventa metrica di calibrazione (§12) | Numeri non misurati sono fantasia |
-| Evolution Controller + rollback automatico | **Scartato**, sostituito da promozione manuale su benchmark (§10) | Complessità da piattaforma per un problema da singolo sviluppatore |
+| Evolution Controller che riscrive prompt/strategie da solo | **Scartato**: cambio architetturale resta manuale, informato dal benchmark (§10) | Cambiare un prompt o un modello è una decisione umana, non delegabile |
+| "Il sistema impara e si corregge nel tempo" | **Mantenuto e reso concreto**: taratura automatica di bias e calibrazione (§8), rilevamento automatico di regressioni (§13) | L'ambizione era giusta; andava solo separata da "riscrivere l'architettura da solo" |
 | Telemetria, ground truth, bias correction, shadow mode, versioning | **Mantenuti e ridimensionati** (§7–§10, M8) | Sono la parte sana: rendono il sistema misurabile e migliorabile |
 
 ---
@@ -274,9 +282,15 @@ La modalità è selezionata **esplicitamente dall'utente** a inizio sessione, ma
 3. **Oggetto universale**: moneta, carta di credito, posata standard.
 4. **Stima generica**: in assenza di tutto, la confidenza dichiarata è **bassa** — mai falsa precisione.
 
-**Fattori di correzione appresi** — distinti **per modalità e per strategia**. Le correzioni manuali accumulate in M8 rivelano bias sistematici (es. sottostima costante del riso); il fattore correttivo si applica **solo su pattern stabili** (numerosità minima e segno del bias costante), mai su fluttuazioni. Casa e Ristorante hanno insiemi separati perché i bias non coincidono necessariamente.
+**Fattori di correzione appresi** — distinti **per modalità, per strategia e per modello IA usato in M1**. Le correzioni manuali accumulate in M8 rivelano bias sistematici (es. sottostima costante del riso); il fattore correttivo si applica **solo su pattern stabili** (numerosità minima e segno del bias costante), mai su fluttuazioni. Casa e Ristorante hanno insiemi separati perché i bias non coincidono necessariamente.
 
-Impatto sul database: tre nuove tabelle Room (calibrazione stoviglie, riferimenti corporei, fattori di correzione) + campo `modalita` sullo storico analisi.
+**Perché anche per modello, e non solo modalità/strategia.** Il bias non nasce nel calcolo (M3 è deterministico, stessa formula per tutti) ma nella **percezione** (M1): quanto un modello legge generosa la frazione di piatto coperta, quanto stima alta un'altezza, sono comportamenti specifici di quel modello IA, non della fisica del piatto. Un fattore di correzione calcolato sui dati di GPT-5.5 e applicato senza distinzione a una lettura di Gemini o Claude non è "meno preciso": è **nella direzione sbagliata**, perché corregge un bias che quel modello potrebbe non avere (o avere all'opposto).
+
+**Nessuna mescolanza tra modelli, mai — nemmeno come fallback.** Il segmento è sempre esattamente (modalità, strategia, modello M1) usato per quell'analisi: niente aggregazione con altri modelli, nemmeno temporanea o "in attesa di dati migliori". Se quel segmento specifico non ha ancora numerosità sufficiente (bias stabile su un numero minimo di correzioni), **non si applica alcun fattore di correzione**: M3 restituisce la stima grezza, non corretta, e la catena di calcolo lo dichiara esplicitamente ("fattore_correzione: nessuno — dati insufficienti per gpt-5.5/casa/distesa"). Una stima non corretta ma dichiarata tale è più sicura di una corretta con il bias di un modello diverso: la prima è onesta sui propri limiti, la seconda introduce con sicurezza apparente un errore che potrebbe andare nella direzione opposta a quella intesa. Chi cambia modello di percezione — nelle impostazioni, o perché un provider è temporaneamente non disponibile — riparte semplicemente da zero sulle correzioni per quel modello, esattamente come un utente nuovo.
+
+**Questo è il meccanismo di auto-miglioramento del sistema, ed è interamente automatico**: non serve alcuna decisione dell'owner né un rilascio di codice. Il ricalcolo gira on-device a ogni nuova correzione salvata in M8 (o come job periodico, es. all'apertura dell'app se sono passate 24h): aggrega gli errori recenti per (modalità, strategia, modello) — solo quel segmento, mai altri — verifica che il bias sia stabile, aggiorna il fattore. La riga sottostante nel calcolo di M3 lo consuma senza saperlo — è solo un moltiplicatore in più nella catena di calcolo, tracciato come qualunque altro valore con la propria fonte ("fattore_correzione: casa/distesa/gpt-5.5 v12"). Più il sistema viene usato **con quel modello specifico**, più le sue stime si avvicinano ai pesi reali di quell'utente — è la parte "impara nel tempo" della visione originale, realizzata senza bisogno di un componente che "propone modifiche" e senza mai scambiare il bias di un modello per quello di un altro.
+
+Impatto sul database: tre nuove tabelle Room (calibrazione stoviglie, riferimenti corporei, fattori di correzione con chiave **esatta** `modalita + strategia + modello_m1`, senza righe di aggregazione cross-modello) + campo `modalita` sullo storico analisi (il campo `modello` è già previsto in M8, §7).
 
 ## 9. Rischi e colli di bottiglia
 
@@ -335,11 +349,24 @@ Tutte le metriche sono riportate **separatamente per Casa e Ristorante**, mai ag
 
 ## 13. Sviluppi futuri, fuori dal perimetro della V2
 
+### 13.1 Percezione e dati
+
 - Foto **prima e dopo** il pasto, per stimare il consumato reale dagli avanzi.
 - Oggetto di riferimento esplicito nelle foto, quando manca qualunque altra ancora.
 - **Mappa di profondità** dei dispositivi che la supportano, come ancora di scala aggiuntiva.
 - Uso prudente della **storia dei pasti** come indizio debole sull'inventario, mai prevalente sull'evidenza visiva.
 - **Modelli multimodali on-device**, quando saranno abbastanza affidabili: i contratti dati restano gli stessi, cambia solo il provider dietro M1.
+
+### 13.2 Auto-evoluzione controllata
+
+Questa è la parte della visione originale di UC-OS che vale la pena costruire, ma solo **dopo** che la V2 base è in produzione e M8 ha accumulato abbastanza analisi da rendere le sue statistiche affidabili (indicativamente qualche centinaio di analisi con ground truth). Prematura in Fase 1–3 di §10, ha senso come evoluzione naturale della Fase 4.
+
+- **Dashboard di calibrazione automatica.** M8 già registra confidenza dichiarata ed errore reale per ogni alimento (§12); una vista che aggrega questi dati per fascia di confidenza e li aggiorna a ogni analisi rende visibile, senza calcolo manuale, se "confidenza alta" continua a corrispondere a un errore basso man mano che cambiano modello, stagione dei pasti o abitudini dell'utente.
+- **Rilevamento automatico di regressioni.** Ogni volta che si aggiunge un nuovo pasto al benchmark, o si cambia prompt/modello/tabella densità, un job ricalcola le metriche di §12 per la versione corrente e le confronta con lo storico versionato (§7). Se una metrica peggiora oltre una soglia, il sistema lo **segnala** (notifica o badge nell'app di sviluppo/debug) — non prende alcuna azione. È il "rileva regressioni" di UC-OS, spogliato della parte "propone modifiche e promuove da solo".
+- **Espansione dei fattori di correzione oltre (modalità × strategia).** Con più dati si può segmentare ulteriormente (es. per singolo alimento frequente, o per fascia oraria del pasto) mantenendo la stessa regola di attivazione solo su pattern stabili di §8 — più dati abilitano più granularità, non un meccanismo diverso.
+- **Suggerimenti di calibrazione stoviglie/riferimenti corporei.** Se il sistema nota che un'ancora calibrata produce sistematicamente un bias, può proporre (mai applicare da solo) una ricalibrazione — es. "il piatto grande sembra dare pesi 8% più bassi del reale da 15 pasti, vuoi ricalibrarlo?".
+
+Ciò che **resta fuori anche da questa fase**, per scelta e non per limite tecnico: nessun componente cambia da solo un prompt, una strategia o il modello in produzione. La promozione di un cambiamento architetturale passa sempre dal confronto in ombra sul benchmark (§10) e da una decisione esplicita dell'owner — l'automazione qui descritta accorcia il tempo per *scoprire* che serve un cambiamento, non decide *quale* cambiamento fare.
 
 ## 14. Decisioni chiave
 
@@ -354,7 +381,7 @@ Tutte le metriche sono riportate **separatamente per Casa e Ristorante**, mai ag
 | Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa |
 | Modalità di sessione | Selezione esplicita dell'utente a inizio sessione, mai dedotta dall'immagine |
 | Calibrazione | Due meccanismi distinti: stoviglie di casa e riferimenti corporei condivisi |
-| Evoluzione del sistema | Promozione manuale delle modifiche, informata dal benchmark; nessun "evolution controller" automatico |
+| Evoluzione del sistema | Taratura di bias e calibrazione **automatica e continua** (§8, §13.2); cambio di prompt/strategia/modello sempre **manuale**, informato dal benchmark — il sistema segnala le regressioni, non le risolve da solo |
 
 ---
 

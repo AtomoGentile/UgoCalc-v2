@@ -3,10 +3,12 @@ package com.ugocalc.app.domain.inference
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.QualityGate
 import com.ugocalc.app.domain.inference.m1.PerceptionOutcome
+import com.ugocalc.app.domain.inference.m5.ArbitrationOutcome
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.OcclusionDegree
 import com.ugocalc.app.domain.inference.model.PerceivedFood
 import com.ugocalc.app.domain.inference.model.RawMeasurements
+import com.ugocalc.app.domain.inference.model.RevisedFood
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
@@ -113,5 +115,99 @@ class V2AnalysisPipelineTest {
         assertEquals(EstimationStrategy.CONTABILE, verificato.stime[1].strategia)
         assertTrue(verificato.stime.all { it.pesoG > 0.0 })
         assertTrue(verificato.verifica.controlli.isNotEmpty())
+    }
+
+    /** Scena con un alimento ambiguo (alternative + confidenza non alta): fa scattare M4→M5. */
+    private val scenaAmbigua = SceneGraph(
+        schemaVersion = SceneGraph.SCHEMA_VERSION,
+        ancore = emptyList(),
+        alimenti = listOf(
+            PerceivedFood(
+                nome = "riso in bianco",
+                alternativeIdentificazione = listOf("riso basmati"),
+                occlusione = OcclusionDegree.NESSUNA,
+                misureGrezze = RawMeasurements(frazionePiatto = 0.45, altezzaCm = 2.1, riempimento = 0.8),
+                confidenza = Confidence.MEDIO,
+            ),
+        ),
+    )
+
+    @Test
+    fun `M4 flag triggers M5 exactly once and applies its revision`() = runBlocking {
+        var arbitrationCalls = 0
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            arbitrate = { _, _, _, _, flaggati ->
+                arbitrationCalls++
+                assertEquals(1, flaggati.size)
+                assertEquals("riso in bianco", flaggati.first().nomeAlimento)
+                ArbitrationOutcome.Riuscita(
+                    listOf(
+                        RevisedFood(
+                            nome = "riso in bianco",
+                            nomeConfermato = "riso basmati",
+                            confidenza = Confidence.ALTO,
+                            risolto = true,
+                        ),
+                    ),
+                )
+            },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        )
+
+        assertEquals(1, arbitrationCalls)
+        assertTrue(outcome is PipelineOutcome.Verificato)
+        val verificato = outcome as PipelineOutcome.Verificato
+        assertEquals("riso basmati", verificato.sceneGraph.alimenti.first().nome)
+        assertEquals("riso basmati", verificato.stime.first().nome)
+        assertTrue(verificato.sceneGraph.alimenti.first().alternativeIdentificazione.isEmpty())
+        assertTrue(
+            "l'ambiguità è stata risolta, M4 non deve più flaggare l'identità",
+            verificato.verifica.flaggati.none { it.motivo.contains("identificazione") },
+        )
+    }
+
+    @Test
+    fun `M5 unavailable leaves pre-arbitration estimate and declares the reason explicitly`() = runBlocking {
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        )
+
+        assertTrue(outcome is PipelineOutcome.Verificato)
+        val verificato = outcome as PipelineOutcome.Verificato
+        assertEquals("riso in bianco", verificato.sceneGraph.alimenti.first().nome)
+        assertEquals("nessuna API key configurata", verificato.arbitratoMotivoMancato)
+    }
+
+    @Test
+    fun `no flags means M5 is never invoked`() = runBlocking {
+        var arbitrationCalls = 0
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua.copy(alimenti = scenaAmbigua.alimenti.map { it.copy(confidenza = Confidence.ALTO, alternativeIdentificazione = emptyList()) })) },
+            arbitrate = { _, _, _, _, _ -> arbitrationCalls++; ArbitrationOutcome.NonDisponibile("non deve essere chiamato") },
+        )
+
+        pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        )
+
+        assertEquals(0, arbitrationCalls)
     }
 }
