@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "357422176719",
+    "project_id": "ugocalc-61d4a",
+    "storage_bucket": "ugocalc-61d4a.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:357422176719:android:84940241a6bf8773f49aba",
+        "android_client_info": {
+          "package_name": "com.ugocalc.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBV9vqf8zsRMWVMbXJgGNUIvlPo79Ovb-M"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

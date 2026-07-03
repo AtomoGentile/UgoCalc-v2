@@ -1,0 +1,35 @@
+# File sensibili / credenziali
+*.json
+!google-services.json
+credentials*
+*.pem
+*.key
+*.jks
+*.keystore
+# Service account Google Cloud (Vertex AI/Gemini): già coperto da *.json sopra, elencato qui
+# in modo esplicito per qualunque nome/percorso venga usato durante lo sviluppo locale.
+*service-account*.json
+*service_account*.json
+sa-key*.json
+vertex-*credentials*.json
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+
+# Build (a qualsiasi livello di profondità)
+**/build/
+/local.properties
+*.apk
+*.aab
+*.ap_
+*.dex
+
+# Gradle
+.gradle/
+gradle-app.setting
+!gradle-wrapper.jar
+!gradle-wrapper.properties
+
+# Log e cache
+*.log

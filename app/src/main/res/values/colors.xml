@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="analyze_green">#2E7D32</color>
+    <color name="analyze_red">#C62828</color>
+    <color name="analyze_disabled">#9E9E9E</color>
+    <color name="confidence_primary">#2E7D32</color>
+    <color name="window_background">#121212</color>
+</resources>

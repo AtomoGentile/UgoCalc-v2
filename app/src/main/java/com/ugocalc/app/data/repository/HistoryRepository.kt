@@ -1,0 +1,36 @@
+package com.ugocalc.app.data.repository
+
+import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
+import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.domain.model.AnalysisTotals
+import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class HistoryRepository @Inject constructor(
+    private val historyDao: AnalysisHistoryDao,
+    private val json: Json,
+) {
+    fun observeHistory(): Flow<List<AnalysisHistoryEntity>> = historyDao.observeAll()
+
+    suspend fun getById(id: Long): AnalysisHistoryEntity? = historyDao.getById(id)
+
+    /** Pulsante "Salva" (§2.4 punto 7): salva l'analisi corrente in Cronologia. */
+    suspend fun saveAnalysis(foodTitle: String, totals: AnalysisTotals, modelDisplayNames: List<String>): Long {
+        val entity = AnalysisHistoryEntity(
+            foodTitle = foodTitle,
+            analyzedAtEpochMillis = System.currentTimeMillis(),
+            totalChoG = totals.totalChoG,
+            totalGrassiG = totals.totalGrassiG,
+            modelDisplayNamesJson = json.encodeToString(modelDisplayNames),
+            detailsJson = json.encodeToString(totals.lines),
+        )
+        return historyDao.insert(entity)
+    }
+
+    /** "Pulizia database cronologia" (§2.2, icona cestino). */
+    suspend fun clearHistory() = historyDao.clearAll()
+}
