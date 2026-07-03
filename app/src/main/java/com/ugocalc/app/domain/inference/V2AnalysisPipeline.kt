@@ -12,6 +12,8 @@ import com.ugocalc.app.domain.inference.m3.ScaleContext
 import com.ugocalc.app.domain.inference.m3.ScaleResolver
 import com.ugocalc.app.domain.inference.m4.ConsistencyVerifier
 import com.ugocalc.app.domain.inference.m5.ArbitrationOutcome
+import com.ugocalc.app.domain.inference.m7.NutritionCalculator
+import com.ugocalc.app.domain.inference.m7.NutritionReport
 import com.ugocalc.app.domain.inference.model.FlaggedItem
 import com.ugocalc.app.domain.inference.model.RevisedFood
 import com.ugocalc.app.domain.inference.model.SceneGraph
@@ -19,6 +21,7 @@ import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.VerificationReport
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.NormalizedFoodEntry
 
 /**
  * Firma di M1 vista dalla pipeline: la stessa di [com.ugocalc.app.domain.inference.m1.UnifiedPerceptionEngine.perceive].
@@ -41,13 +44,19 @@ typealias ArbitrationStep = suspend (
     flaggati: List<FlaggedItem>,
 ) -> ArbitrationOutcome
 
+/** Firma di M6 vista dalla pipeline: dai nomi degli alimenti stimati agli abbinamenti nutrizionali trovati (§5 M6). */
+typealias NutritionMatchStep = suspend (
+    model: AiModel,
+    stime: List<WeightEstimate>,
+) -> Map<String, NormalizedFoodEntry>
+
 /** Una foto della sessione: metriche già calcolate per M0 e byte grezzi da inviare a M1 se accettata. */
 class SessionPhoto(val quality: PhotoQuality, val bytes: ByteArray)
 
 /**
- * Orchestra M0 → M1 → M2 → M3 → M4 → M5 (§4). M6 (nutrition engine), M7 (calcolo CHO/grassi) e M8
- * (telemetria) non esistono ancora: la pipeline si ferma al [VerificationReport] finale (post
- * arbitrato se scattato), che è già un punto di composizione utile e verificabile da solo.
+ * Orchestra M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 (§4). M8 (telemetria) non esiste ancora: la
+ * pipeline si ferma al [NutritionReport] finale, che è già il risultato mostrabile all'utente
+ * (CHO + grassi + spiegazione per alimento, §1).
  *
  * Ogni esito di errore gestito lungo la catena (§5) diventa un ramo esplicito di [PipelineOutcome],
  * mai un'eccezione silenziosa: foto tutte scadenti, fallback M1→V1, schema SceneGraph non
@@ -60,6 +69,7 @@ class V2AnalysisPipeline(
     private val physicsEngine: PhysicsEngine = PhysicsEngine(),
     private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
     private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
+    private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
 ) {
 
     suspend fun run(
@@ -90,17 +100,17 @@ class V2AnalysisPipeline(
         val verifica = consistencyVerifier.verify(sceneGraph, stime, scale)
 
         if (!verifica.richiedeArbitrato) {
-            return PipelineOutcome.Verificato(sceneGraph, stime, verifica)
+            return finalizza(sceneGraph, stime, verifica, model)
         }
 
         // M5, al massimo una volta per analisi (§5 M5): qualunque sia l'esito, M4 non lo richiama
         // una seconda volta sullo stesso flag.
         return when (val esito = arbitrate(model, immaginiValide, imageMimeType, sceneGraph, verifica.flaggati)) {
             is ArbitrationOutcome.NonDisponibile ->
-                PipelineOutcome.Verificato(sceneGraph, stime, verifica, arbitratoMotivoMancato = esito.motivo)
+                finalizza(sceneGraph, stime, verifica, model, arbitratoMotivoMancato = esito.motivo)
             is ArbitrationOutcome.Riuscita -> {
                 if (esito.revisioni.isEmpty()) {
-                    PipelineOutcome.Verificato(sceneGraph, stime, verifica)
+                    finalizza(sceneGraph, stime, verifica, model)
                 } else {
                     val scenaRivista = applicaRevisioni(sceneGraph, esito.revisioni)
                     val assegnazioniRiviste = when (val routing = strategyRouter.route(scenaRivista)) {
@@ -110,10 +120,23 @@ class V2AnalysisPipeline(
                     }
                     val stimeRiviste = stimaTutti(scenaRivista, assegnazioniRiviste, scale)
                     val verificaFinale = consistencyVerifier.verify(scenaRivista, stimeRiviste, scale)
-                    PipelineOutcome.Verificato(scenaRivista, stimeRiviste, verificaFinale)
+                    finalizza(scenaRivista, stimeRiviste, verificaFinale, model)
                 }
             }
         }
+    }
+
+    /** M6 (abbinamento nutrizionale) + M7 (calcolo CHO/grassi + spiegazione), sulle stime finali. */
+    private suspend fun finalizza(
+        scene: SceneGraph,
+        stime: List<WeightEstimate>,
+        verifica: VerificationReport,
+        model: AiModel,
+        arbitratoMotivoMancato: String? = null,
+    ): PipelineOutcome.Verificato {
+        val abbinamenti = matchNutrition(model, stime)
+        val nutrizione = NutritionCalculator.calculate(stime, abbinamenti)
+        return PipelineOutcome.Verificato(scene, stime, verifica, nutrizione, arbitratoMotivoMancato)
     }
 
     private fun stimaTutti(
@@ -161,15 +184,17 @@ sealed interface PipelineOutcome {
     data class SchemaNonSupportato(val trovata: Int, val attesa: Int) : PipelineOutcome
 
     /**
-     * M0–M4 completati, con M5 già applicato se era necessario: stime pesate e report di coerenza
-     * finali, pronti per M6. Se M4 aveva richiesto l'arbitrato ma M5 non è stato disponibile
-     * (§5 M5 "Fallimento gestito"), [arbitratoMotivoMancato] lo dichiara esplicitamente e [stime]
-     * / [verifica] restano quelli pre-arbitrato — mai spacciati per una stima già rivista.
+     * M0–M7 completati: stime pesate, report di coerenza (con M5 già applicato se necessario) e
+     * report nutrizionale finale (CHO + grassi + spiegazione per alimento, §1). Se M4 aveva
+     * richiesto l'arbitrato ma M5 non è stato disponibile (§5 M5 "Fallimento gestito"),
+     * [arbitratoMotivoMancato] lo dichiara esplicitamente e [stime] / [verifica] restano quelli
+     * pre-arbitrato — mai spacciati per una stima già rivista.
      */
     data class Verificato(
         val sceneGraph: SceneGraph,
         val stime: List<WeightEstimate>,
         val verifica: VerificationReport,
+        val nutrizione: NutritionReport,
         val arbitratoMotivoMancato: String? = null,
     ) : PipelineOutcome
 }
