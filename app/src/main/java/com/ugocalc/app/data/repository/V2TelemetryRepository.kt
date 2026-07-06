@@ -30,7 +30,12 @@ class V2TelemetryRepository @Inject constructor(
     private val dao: V2AnalysisRecordDao,
     private val json: Json,
 ) {
-    suspend fun record(outcome: PipelineOutcome.Verificato, model: AiModel, sessionMode: SessionMode): Long {
+    suspend fun record(
+        outcome: PipelineOutcome.Verificato,
+        model: AiModel,
+        sessionMode: SessionMode,
+        sessionId: String? = null,
+    ): Long {
         val entity = V2AnalysisRecordEntity(
             analyzedAtEpochMillis = System.currentTimeMillis(),
             sessionMode = sessionMode.name,
@@ -41,6 +46,7 @@ class V2TelemetryRepository @Inject constructor(
             verificationReportJson = json.encodeToString(outcome.verifica),
             nutritionReportJson = json.encodeToString(outcome.nutrizione),
             arbitratoMotivoMancato = outcome.arbitratoMotivoMancato,
+            sessionId = sessionId,
         )
         return dao.insert(entity)
     }

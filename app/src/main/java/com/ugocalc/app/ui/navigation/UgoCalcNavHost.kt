@@ -12,6 +12,8 @@ import androidx.navigation.navArgument
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
+import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
+import com.ugocalc.app.ui.bias.BenchmarkGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
 import com.ugocalc.app.ui.camera.CameraCaptureScreen
@@ -21,6 +23,7 @@ import com.ugocalc.app.ui.history.HistoryScreen
 import com.ugocalc.app.ui.home.HomeScreen
 import com.ugocalc.app.ui.manualentry.ManualFoodEntryScreen
 import com.ugocalc.app.ui.modelselect.ModelSelectionScreen
+import com.ugocalc.app.ui.overlaytest.OverlayTestScreen
 import com.ugocalc.app.ui.results.VisionResultsScreen
 import com.ugocalc.app.ui.settings.AccessibilitySettingsScreen
 import com.ugocalc.app.ui.settings.ApiSettingsScreen
@@ -143,9 +146,13 @@ fun UgoCalcNavHost(navController: NavHostController) {
             BiasEvolutionScreen(
                 onBack = { navController.popBackStack() },
                 onOpenGroundTruthEntry = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
+                onOpenBenchmarkGroundTruthEntry = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
+                onOpenBenchmarkDashboard = { navController.navigate(Routes.BENCHMARK_DASHBOARD) },
             )
         }
         composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
@@ -160,8 +167,11 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
                 onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
                 onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
+                onOpenOverlayTest = { navController.navigate(Routes.OVERLAY_TEST) },
             )
         }
+
+        composable(Routes.OVERLAY_TEST) { OverlayTestScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }

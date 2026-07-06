@@ -312,7 +312,7 @@ Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sott
 2. ~~Regola di sicurezza sull'ambiguità residua in M4~~ — **fatto**: dopo un tentativo di M5, `V2AnalysisPipeline` seleziona ora automaticamente, tra il nome originale e le alternative rimaste aperte, quello con il CHO/100g più alto (ricerca locale in `TableRepository`, nessuna chiamata IA aggiuntiva) e lo dichiara in `VerificationReport.ambiguitaRisolta` (§5 M4, §7). Resta da collegare alla UI (mostrarlo come stima cautelativa da confermare), il che dipende dal punto 1 — oggi la V2 non è ancora il flusso visibile.
 3. ~~Chiudere il ciclo di bias (§5 M8, §8)~~ — **fatto (§20, 6 luglio 2026)**: `GroundTruthEntryScreen` per registrare ground truth collegata a un record M8; `AppForegroundObserver` come trigger di ricalcolo all'apertura dell'app; `PhysicsEngine` consuma ora il fattore calcolato. Resta da valutare, quando ci saranno abbastanza dati reali, se il trigger all'apertura app è sufficiente o serve un vero job periodico (`WorkManager`, dipendenza già presente ma non ancora usata altrove).
 4. **Calibrazione persistente delle stoviglie e dei riferimenti corporei** (§8): tabelle Room dedicate, oggi inesistenti, così che una calibrazione fatta una volta non vada persa a ogni sessione.
-5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti.
+5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti. **Infrastruttura di raccolta fatta (§21)**: `sessionId` condiviso tra V1 e V2, tabella `benchmark_meals`, registrazione peso vero e dashboard di confronto MAE/CHO. **Resta da fare**: raccogliere davvero 30-50 pasti pesati in proporzione casa/ristorante — senza quei dati la dashboard resta vuota o statisticamente poco significativa.
 6. **Ripartizione da ricetta per la strategia Composto** (§5 M3, §6): oggi è un blocco geometrico rietichettato; una vera ripartizione tra ingredienti occlusi richiede una fonte di ricette (locale o online) non ancora progettata.
 7. **Metadati camera per M0** (§16): EXIF e movimento da giroscopio arrivano già alla V2 in ombra; mancano `CameraCharacteristics`, dimensione fisica del sensore e soglie calibrate su ISO/esposizione per usare questi dati in modo più robusto.
 8. **Export/import del record M8** (§17): oggi l'export copre cronologia V1, tabelle nutrizionali e fattori di bias, ma non `v2_analysis_records` — un cambio di telefono perderebbe lo storico di analisi V2 con ground truth.
@@ -437,6 +437,30 @@ I tre collegamenti mancanti individuati in §5 M8/§13 sono stati implementati:
 - `V2AnalysisPipelineFactory` inietta `BiasCorrectionRepository` e `SettingsRepository` e costruisce il passo leggendo il consenso e `currentFactor()` per il segmento esatto (modalità, strategia, modello) — mai un'aggregazione cross-modello, coerente con §8.
 
 **Limite che resta:** questo chiude il ciclo di apprendimento *dentro* il motore V2, ma la V2 gira ancora solo in modalità ombra (§13 punto 1): finché non è il flusso visibile, un fattore di correzione applicato in M3 non cambia il risultato che l'utente vede oggi in produzione, solo i dati raccolti per il benchmark futuro.
+
+---
+
+## 21. Infrastruttura per il benchmark pesato V1 vs V2 (§10, §13 punto 5)
+
+**Data: 6 luglio 2026.**
+
+Punto di partenza rivisto rispetto a quanto scritto in §13: la promozione della V2 a flusso visibile (punto 1) non può essere una scelta manuale dell'utente né dell'owner senza dati — deve basarsi sul benchmark pesato di §10, che finora non esisteva. Questo lavoro costruisce l'infrastruttura di raccolta dati necessaria; **il benchmark stesso resta da eseguire** (serve accumulare 30-50 pasti reali), e nessuna logica automatica sceglie V1 o V2 al posto dell'owner.
+
+**Collegamento tra le due stime sullo stesso pasto:**
+- `AnalysisSessionStore.Session` guadagna `sessionId` (UUID generato allo scatto, stabile su "Riprova", rigenerato solo con `reset()`).
+- `V2AnalysisRecordEntity` guadagna una colonna `sessionId` nullable (migrazione Room 6→7, `MIGRATION_6_7`), passata da `V2AnalysisPipelineFactory.create(sessionId)` a `V2TelemetryRepository.record(...)`.
+
+**Nuova tabella `benchmark_meals`** (`BenchmarkMealEntity`/`BenchmarkMealDao`, stessa migrazione 6→7): una riga per pasto, con i pesi grezzi stimati da V1 (`v1PesiPerAlimentoJson`, salvati automaticamente in `CameraCaptureViewModel.confirmPhotos()` — non condizionati al tasto "Salva" in cronologia, a differenza di `analysis_history`), il collegamento al record V2 (`v2RecordId`, popolato da `runV2ShadowAnalysisIfEnabled()` quando la pipeline completa), e il peso vero per alimento registrato dall'utente. I coefficienti CHO/100g trovati dal matching V1 (`v1NutrizionePerAlimentoJson`) si salvano solo se l'utente arriva a "Ricevi i CHO" nella stessa sessione (`VisionResultsViewModel.receiveCho()`) — best-effort, non blocca la raccolta del resto.
+
+**`BenchmarkRepository`** (nuovo): incapsula la lettura/scrittura di `benchmark_meals` e il join applicativo con `v2_analysis_records`. Non richiama mai l'AI di matching per calcolare il CHO "vero": riusa i coefficienti CHO/100g già trovati (da V1 o dalle righe già calcolate da V2) applicati al peso vero invece del peso stimato, restando nel budget di chiamate (§4).
+
+**UI nuova**, raggiungibile da "BIAS ed evoluzione del comportamento":
+- `BenchmarkGroundTruthEntryScreen`/ViewModel: registra il peso vero per alimento di un pasto tracciato (stesso pattern di `GroundTruthEntryScreen`, ma per il confronto V1/V2 invece che per la sola calibrazione V2).
+- `BenchmarkDashboardScreen`/ViewModel: mostra, sui pasti con peso vero registrato, l'errore medio di peso per alimento (MAE) e la percentuale di pasti con errore CHO entro 10g/20g (§12), per V1 e V2 a confronto, più il conteggio dei pasti raccolti finora rispetto ai 30-50 raccomandati. **Puramente diagnostica**: non switcha né consiglia automaticamente un motore.
+
+**Riuso del flag esistente:** l'attivazione resta lo switch `v2ShadowModeEnabled` già in `BiasEvolutionScreen` — non è stato aggiunto un nuovo interruttore, dato che l'attivazione della shadow mode è anche l'attivazione della raccolta dati per il benchmark.
+
+**Cosa resta da fare** (aggiorna §13 punto 5, non lo sostituisce): raccogliere davvero 30-50 pasti pesati in proporzione realistica casa/ristorante; solo a quel punto la dashboard di questo paragrafo avrà un campione statisticamente utile, e si potrà tornare al punto 1 di §13 con un criterio oggettivo invece che una preferenza.
 
 ---
 

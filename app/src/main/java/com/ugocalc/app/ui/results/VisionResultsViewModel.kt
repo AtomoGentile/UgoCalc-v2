@@ -2,6 +2,7 @@ package com.ugocalc.app.ui.results
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.MatchFoodsAcrossTablesUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
@@ -29,6 +30,7 @@ class VisionResultsViewModel @Inject constructor(
     private val sessionStore: AnalysisSessionStore,
     private val matchFoodsAcrossTables: MatchFoodsAcrossTablesUseCase,
     private val notificationHelper: AnalysisNotificationHelper,
+    private val benchmarkRepository: BenchmarkRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VisionResultsUiState())
@@ -63,6 +65,9 @@ class VisionResultsViewModel @Inject constructor(
             sessionStore.setTotals(com.ugocalc.app.domain.model.AnalysisTotals(lines))
             _uiState.value = _uiState.value.copy(isMatching = false, matchingDone = true)
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+            // §13 punto 5 (benchmark V1/V2): salva i coefficienti CHO/100g già trovati da V1, così la
+            // dashboard di confronto può calcolare il CHO "vero" senza richiamare l'AI di matching.
+            benchmarkRepository.recordV1NutritionCoefficients(sessionStore.session.value.sessionId, lines)
         }
     }
 }

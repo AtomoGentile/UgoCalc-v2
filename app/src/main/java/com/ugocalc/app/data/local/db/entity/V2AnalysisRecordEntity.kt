@@ -27,6 +27,8 @@ data class V2AnalysisRecordEntity(
     val verificationReportJson: String,
     val nutritionReportJson: String,
     val arbitratoMotivoMancato: String? = null,
+    /** Id di sessione condiviso con `benchmark_meals` (§10, §13 punto 5): collega questo record V2 alla stima V1 fatta sulle stesse foto. Nullo per i record salvati prima dell'introduzione del benchmark, o se la pipeline gira fuori da una sessione tracciata. */
+    val sessionId: String? = null,
     /** Peso reale in grammi per alimento, es. `{"riso in bianco": 170.0}`; nullo finché non corretto. */
     val groundTruthPesiJson: String? = null,
     /** Livello di affidabilità del ground truth: "gold" (bilancia), "silver" (etichetta), "bronze" (stima utente). */

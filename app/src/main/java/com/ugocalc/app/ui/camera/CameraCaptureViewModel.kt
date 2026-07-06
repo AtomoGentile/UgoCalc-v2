@@ -2,11 +2,14 @@ package com.ugocalc.app.ui.camera
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.di.ShadowAnalysisScope
+import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.SessionPhoto
 import com.ugocalc.app.domain.inference.V2AnalysisPipelineFactory
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
@@ -40,6 +43,7 @@ class CameraCaptureViewModel @Inject constructor(
     private val notificationHelper: AnalysisNotificationHelper,
     private val settingsRepository: SettingsRepository,
     private val v2PipelineFactory: V2AnalysisPipelineFactory,
+    private val benchmarkRepository: BenchmarkRepository,
     private val gyroscopeTracker: GyroscopeMotionTracker,
     @ShadowAnalysisScope private val shadowScope: CoroutineScope,
 ) : ViewModel() {
@@ -71,8 +75,28 @@ class CameraCaptureViewModel @Inject constructor(
             sessionStore.setVisionOutcomes(outcomes)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+            recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
         }
         runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
+    }
+
+    /**
+     * Salva subito i pesi grezzi per alimento stimati da V1, per il benchmark V1/V2 (§10, §13 punto
+     * 5): senza questo, un pasto per cui l'utente non preme "Salva" in cronologia sparirebbe anche
+     * dal confronto. Usa il modello di riferimento (il primo con successo), stesso criterio della V2
+     * shadow, così i due motori restano confrontabili sullo stesso modello quando possibile.
+     */
+    private suspend fun recordV1EstimateForBenchmarkIfEnabled(outcomes: List<ModelVisionOutcome>, models: List<AiModel>) {
+        if (!settingsRepository.settings.first().v2ShadowModeEnabled) return
+        val success = outcomes.filterIsInstance<ModelVisionOutcome.Success>().firstOrNull() ?: return
+        val session = sessionStore.session.value
+        benchmarkRepository.recordV1Estimate(
+            sessionId = session.sessionId,
+            capturedAtEpochMillis = System.currentTimeMillis(),
+            sessionMode = session.sessionMode,
+            aiModel = models.firstOrNull() ?: success.model,
+            pesiPerAlimento = success.result.alimenti.associate { it.nome to it.pesoStimatoG },
+        )
     }
 
     /**
@@ -81,9 +105,14 @@ class CameraCaptureViewModel @Inject constructor(
      * ViewModel viene distrutto appena la UI naviga verso i risultati V1, ben prima che le due
      * chiamate AI di V2 (M1 + M6) abbiano finito. Avvolto per intero in [runCatching]: un fallimento
      * qui (rete, quota, parsing) non deve mai emergere in UI né interrompere il flusso V1.
+     *
+     * Il [sessionId] della sessione corrente viene passato alla pipeline (§13 punto 5): collega il
+     * record di telemetria M8 al pasto tracciato nel benchmark, dove [recordV1EstimateForBenchmarkIfEnabled]
+     * ha già salvato la stima V1 sulle stesse foto.
      */
     private fun runV2ShadowAnalysisIfEnabled(capturedPhotos: List<CapturedPhoto>, models: List<AiModel>) {
         val model = models.firstOrNull() ?: return
+        val sessionId = sessionStore.session.value.sessionId
         shadowScope.launch {
             if (!settingsRepository.settings.first().v2ShadowModeEnabled) return@launch
             val sessionMode = sessionStore.session.value.sessionMode
@@ -93,7 +122,10 @@ class CameraCaptureViewModel @Inject constructor(
                     val cameraMetadata = extractCameraMetadata(photo.bytes)
                     SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata), photo.bytes)
                 }
-                v2PipelineFactory.create().run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+                val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+                if (outcome is PipelineOutcome.Verificato && outcome.telemetryId >= 0) {
+                    benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
+                }
             }
         }
     }
