@@ -16,7 +16,7 @@ import com.ugocalc.app.domain.inference.model.SessionMode
  */
 object PerceptionPrompt {
 
-    fun build(sessionMode: SessionMode): String = """
+    fun build(sessionMode: SessionMode, angleDescriptions: List<String?> = emptyList()): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
         PERCEZIONE UNIFICATA della scena: ancoraggio di scala, inventario degli alimenti e misure
         grezze nello stesso passaggio. NON stimare mai un peso in grammi: quello è compito esclusivo
@@ -24,11 +24,20 @@ object PerceptionPrompt {
         modello come te non è affidabile nell'aritmetica né nella coerenza numerica tra più stime:
         il tuo compito è percepire e descrivere, non calcolare.
 
-        Ti vengono fornite una o più fotografie dello STESSO pasto, scattate da angolazioni o
-        distanze diverse per aiutarti a valutare meglio porzioni, ancore di scala e alimenti
-        parzialmente nascosti in una singola foto. Considerale insieme come un'unica scena da
-        analizzare: non trattarle come pasti distinti né duplicare gli alimenti già contati. Se una
-        foto rivela dettagli non visibili nelle altre, usala per correggere o confermare le stime.
+        Ti vengono fornite una o più fotografie dello STESSO pasto, scattate seguendo SEMPRE questo
+        protocollo fisso (non casuale, puoi contarci): la PRIMA foto è ripresa dall'alto, con il
+        telefono pressoché parallelo al piatto (inclinazione ~90°) — usala come riferimento
+        principale per la forma del piatto e per "frazione_piatto", perché da questa angolazione la
+        superficie non è distorta da prospettiva. Le foto SUCCESSIVE (se presenti, fino a 4) sono
+        scattate a ~45° di inclinazione, ciascuna ruotata di circa 90° intorno al piatto rispetto
+        alla precedente: usale soprattutto per "altezza_cm", "riempimento" e la forma dei BLOCCHI
+        misurabili, perché da un'angolazione più bassa il profilo laterale del cibo è visibile,
+        cosa che la foto dall'alto non mostra. Il giro di 90° tra una foto e l'altra serve anche a
+        ridurre le occlusioni: se un alimento è nascosto in una vista, cerca prima nelle foto
+        successive (vista da un lato diverso del piatto) prima di dichiararlo non misurabile.
+        Considerale insieme come un'unica scena da analizzare: non trattarle come pasti distinti né
+        duplicare gli alimenti già contati.
+        ${angleReadingsBlock(angleDescriptions)}
 
         Il pasto è stato dichiarato dall'utente come "${modeLabel(sessionMode)}" (${modeDescription(sessionMode)}).
         Questo determina l'ordine in cui cercare un'ancora di scala affidabile:
@@ -115,6 +124,21 @@ object PerceptionPrompt {
 
     /** Versione dello schema dichiarata nel prompt: deve restare sincronizzata con [SceneGraph.SCHEMA_VERSION]. */
     val CURRENT_SCHEMA_VERSION: Int get() = SceneGraph.SCHEMA_VERSION
+
+    /**
+     * Angolazione REALMENTE misurata dai sensori per ciascuna foto (§13 punto 7), se disponibile:
+     * non solo il protocollo generico dichiarato sopra, ma il valore letto durante quello scatto
+     * specifico. Ometti l'intero blocco se nessuna foto ha una misura (permesso overlay non
+     * concesso, o sensori assenti) invece di elencare N righe vuote inutili.
+     */
+    private fun angleReadingsBlock(angleDescriptions: List<String?>): String {
+        if (angleDescriptions.none { it != null }) return ""
+        val righe = angleDescriptions.mapIndexed { index, descrizione ->
+            "Foto ${index + 1}: ${descrizione ?: "angolazione non misurata"}"
+        }
+        return "\nAngolazione misurata per ciascuna foto, nello stesso ordine in cui te le fornisco:\n" +
+            righe.joinToString("\n")
+    }
 
     private fun modeLabel(mode: SessionMode): String = when (mode) {
         SessionMode.CASA -> "casa"

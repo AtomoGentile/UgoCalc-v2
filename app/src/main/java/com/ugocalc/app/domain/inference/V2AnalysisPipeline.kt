@@ -35,6 +35,7 @@ typealias PerceptionStep = suspend (
     images: List<ByteArray>,
     imageMimeType: String,
     sessionMode: SessionMode,
+    angleDescriptions: List<String?>,
 ) -> PerceptionOutcome
 
 /** Firma di M5 vista dalla pipeline: la stessa di [com.ugocalc.app.domain.inference.m5.SelectiveArbitrationEngine.arbitrate]. */
@@ -124,9 +125,13 @@ class V2AnalysisPipeline(
         if (ingestion.tutteScadenti) return PipelineOutcome.NessunaFotoValida(ingestion.scartate)
 
         val fotoValideIds = ingestion.fotoValide.toSet()
-        val immaginiValide = photos.filter { it.quality.id in fotoValideIds }.map { it.bytes }
+        val fotoValide = photos.filter { it.quality.id in fotoValideIds }
+        val immaginiValide = fotoValide.map { it.bytes }
+        // Stesso ordine e stesso filtro di [immaginiValide] (costruite insieme da [fotoValide]):
+        // l'indice N in questa lista descrive SEMPRE la foto N in [immaginiValide] (§13 punto 7).
+        val angoliValidi = fotoValide.map { it.quality.angleDescription }
 
-        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode)) {
+        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi)) {
             is PerceptionOutcome.FallbackAV1 -> return PipelineOutcome.FallbackAV1(esito.motivo)
             is PerceptionOutcome.Riuscita -> esito.sceneGraph
         }

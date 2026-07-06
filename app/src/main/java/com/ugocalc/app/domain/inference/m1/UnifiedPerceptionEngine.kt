@@ -31,9 +31,10 @@ class UnifiedPerceptionEngine @Inject constructor(
         images: List<ByteArray>,
         imageMimeType: String,
         sessionMode: SessionMode,
+        angleDescriptions: List<String?> = emptyList(),
     ): PerceptionOutcome {
         val imageParts = executor.encodeImages(images, imageMimeType)
-        val prompt = PerceptionPrompt.build(sessionMode)
+        val prompt = PerceptionPrompt.build(sessionMode, angleDescriptions)
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, imageParts)
             PerceptionOutcome.Riuscita(sceneGraph)

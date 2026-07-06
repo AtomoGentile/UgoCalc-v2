@@ -27,6 +27,7 @@ fun computePhotoQuality(
     imageBytes: ByteArray,
     motionRadPerSec: Double? = null,
     cameraMetadata: CameraMetadata? = null,
+    angleDescription: String? = null,
 ): PhotoQuality {
     val luminance = decodeGrayscaleLuminance(imageBytes, METRICS_MAX_DIMENSION_PX)
     return PhotoQuality(
@@ -36,6 +37,7 @@ fun computePhotoQuality(
         hash = perceptualHash64(luminance),
         motionRadPerSec = motionRadPerSec,
         cameraMetadata = cameraMetadata,
+        angleDescription = angleDescription,
     )
 }
 
