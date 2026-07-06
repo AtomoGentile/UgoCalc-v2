@@ -16,6 +16,7 @@ import javax.inject.Inject
 data class BiasEvolutionUiState(
     val loading: Boolean = true,
     val consentGiven: Boolean = false,
+    val v2ShadowModeEnabled: Boolean = false,
     val corrections: List<BiasCorrectionEntity> = emptyList(),
 )
 
@@ -35,7 +36,10 @@ class BiasEvolutionViewModel @Inject constructor(
 
     init {
         settingsRepository.settings.onEach { settings ->
-            _uiState.value = _uiState.value.copy(consentGiven = settings.biasDataConsentGiven)
+            _uiState.value = _uiState.value.copy(
+                consentGiven = settings.biasDataConsentGiven,
+                v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
+            )
         }.launchIn(viewModelScope)
         refresh()
     }
@@ -49,5 +53,9 @@ class BiasEvolutionViewModel @Inject constructor(
 
     fun setConsentGiven(given: Boolean) {
         viewModelScope.launch { settingsRepository.setBiasDataConsentGiven(given) }
+    }
+
+    fun setV2ShadowModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setV2ShadowModeEnabled(enabled) }
     }
 }

@@ -1,5 +1,6 @@
 package com.ugocalc.app.ui
 
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.ModelVisionOutcome
@@ -25,6 +26,8 @@ class AnalysisSessionStore @Inject constructor() {
 
     data class Session(
         val selectedModels: List<AiModel> = emptyList(),
+        /** Scelta esplicita dell'utente a inizio analisi (piano V2 §8), mai dedotta dalla foto: usata oggi solo dalla pipeline V2 in ombra. */
+        val sessionMode: SessionMode = SessionMode.CASA,
         val capturedImages: List<ByteArray> = emptyList(),
         val imageMimeType: String = "image/jpeg",
         val visionOutcomes: List<ModelVisionOutcome> = emptyList(),
@@ -40,6 +43,8 @@ class AnalysisSessionStore @Inject constructor() {
     val session: StateFlow<Session> = _session
 
     fun setSelectedModels(models: List<AiModel>) = _session.update { it.copy(selectedModels = models) }
+
+    fun setSessionMode(mode: SessionMode) = _session.update { it.copy(sessionMode = mode) }
 
     /** [images] sono più scatti dello stesso piatto (§2.4 punto 2 esteso): tutti inviati insieme all'AI per un'analisi più accurata. */
     fun setCapturedImages(images: List<ByteArray>, mimeType: String) =

@@ -54,6 +54,14 @@ data class UserSettings(
      * non calcola né salva alcun fattore.
      */
     val biasDataConsentGiven: Boolean = false,
+    /**
+     * Consenso dedicato alla modalità ombra V2 (piano V2 §13 punto 1, §10 Fase 2): separato dal
+     * consenso bias perché qui, oltre al trattamento dati, c'è un costo reale — attivarlo fa partire
+     * 2 chiamate AI aggiuntive per analisi (M1 + M6 della pipeline V2), a pagamento con la chiave API
+     * dell'utente, solo per raccogliere dati di validazione. V1 resta comunque l'unica pipeline
+     * mostrata. Falso di default.
+     */
+    val v2ShadowModeEnabled: Boolean = false,
 )
 
 @Singleton
@@ -78,6 +86,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val HAS_SEEN_DATA_DISCLAIMER = booleanPreferencesKey("has_seen_data_disclaimer")
         val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
         val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
+        val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -100,6 +109,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             hasSeenDataDisclaimer = prefs[Keys.HAS_SEEN_DATA_DISCLAIMER] ?: false,
             lastSeenVersionCode = prefs[Keys.LAST_SEEN_VERSION_CODE] ?: 0,
             biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
+            v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
         )
     }
 
@@ -146,4 +156,6 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.LAST_SEEN_VERSION_CODE] = versionCode }
     suspend fun setBiasDataConsentGiven(given: Boolean) =
         context.dataStore.edit { it[Keys.BIAS_DATA_CONSENT_GIVEN] = given }
+    suspend fun setV2ShadowModeEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
 }

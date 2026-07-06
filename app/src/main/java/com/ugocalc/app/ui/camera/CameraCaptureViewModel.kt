@@ -2,13 +2,20 @@ package com.ugocalc.app.ui.camera
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.di.ShadowAnalysisScope
+import com.ugocalc.app.domain.inference.SessionPhoto
+import com.ugocalc.app.domain.inference.V2AnalysisPipelineFactory
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
+import com.ugocalc.app.util.computePhotoQuality
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -26,6 +33,9 @@ class CameraCaptureViewModel @Inject constructor(
     private val runVisionForModels: RunVisionForModelsUseCase,
     private val sessionStore: AnalysisSessionStore,
     private val notificationHelper: AnalysisNotificationHelper,
+    private val settingsRepository: SettingsRepository,
+    private val v2PipelineFactory: V2AnalysisPipelineFactory,
+    @ShadowAnalysisScope private val shadowScope: CoroutineScope,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CameraUiState())
@@ -54,6 +64,28 @@ class CameraCaptureViewModel @Inject constructor(
             sessionStore.setVisionOutcomes(outcomes)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+        }
+        runV2ShadowAnalysisIfEnabled(images, models)
+    }
+
+    /**
+     * Motore V2 in ombra (piano V2 §13 punto 1, §10 Fase 2): gira in aggiunta a V1, mai al posto —
+     * l'utente continua a vedere solo l'esito V1. Su [shadowScope], non su [viewModelScope]: questo
+     * ViewModel viene distrutto appena la UI naviga verso i risultati V1, ben prima che le due
+     * chiamate AI di V2 (M1 + M6) abbiano finito. Avvolto per intero in [runCatching]: un fallimento
+     * qui (rete, quota, parsing) non deve mai emergere in UI né interrompere il flusso V1.
+     */
+    private fun runV2ShadowAnalysisIfEnabled(images: List<ByteArray>, models: List<AiModel>) {
+        val model = models.firstOrNull() ?: return
+        shadowScope.launch {
+            if (!settingsRepository.settings.first().v2ShadowModeEnabled) return@launch
+            val sessionMode = sessionStore.session.value.sessionMode
+            runCatching {
+                val photos = images.mapIndexed { index, bytes ->
+                    SessionPhoto(computePhotoQuality("foto_$index", bytes), bytes)
+                }
+                v2PipelineFactory.create().run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+            }
         }
     }
 }
