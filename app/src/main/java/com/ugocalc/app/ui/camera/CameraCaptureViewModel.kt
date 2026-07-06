@@ -8,6 +8,7 @@ import com.ugocalc.app.di.ShadowAnalysisScope
 import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.SessionPhoto
 import com.ugocalc.app.domain.inference.V2AnalysisPipelineFactory
+import com.ugocalc.app.domain.inference.m0.QualityGate
 import com.ugocalc.app.domain.inference.toAnalysisTotals
 import com.ugocalc.app.domain.inference.toModelVisionSuccess
 import com.ugocalc.app.domain.model.AiModel
@@ -30,6 +31,9 @@ import javax.inject.Inject
 
 private const val CAPTURED_IMAGE_MIME_TYPE = "image/jpeg"
 
+/** Mostrato quando [QualityGate] scarta tutte le foto della sessione (§5): meglio un tono diretto che spinga a rifare lo scatto piuttosto che un errore tecnico. */
+const val PHOTO_QUALITY_WARNING = "Ma sei capace di fare una foto? La guardo e non capisco un ca...\nRifalla"
+
 /** Testo pronto per il prompt di M1 con l'angolazione REALMENTE misurata per questa foto, `null` se non disponibile (§13 punto 7). */
 private fun buildAngleDescription(photo: CapturedPhoto): String? {
     val angle = photo.measuredAngle ?: return null
@@ -51,6 +55,7 @@ data class CameraUiState(
     val capturedImages: List<CapturedPhoto> = emptyList(),
     val isAnalyzing: Boolean = false,
     val analysisDone: Boolean = false,
+    val qualityWarning: String? = null,
 )
 
 @HiltViewModel
@@ -80,40 +85,61 @@ class CameraCaptureViewModel @Inject constructor(
         }
     }
 
+    /** L'utente chiude l'avviso di foto scadenti e torna alla galleria per rifare gli scatti. */
+    fun dismissQualityWarning() {
+        _uiState.update { it.copy(qualityWarning = null) }
+    }
+
     /** Tutte le foto confermate → invio al Passaggio 1 per ciascun modello selezionato (§2.4 punto 3). */
     fun confirmPhotos(models: List<AiModel>) {
         val capturedPhotos = _uiState.value.capturedImages
         if (capturedPhotos.isEmpty()) return
+        viewModelScope.launch {
+            // Controllo qualità prima di spendere una sola chiamata AI (§5): se M0 scarterebbe tutte
+            // le foto, meglio dirlo subito e far rifare lo scatto piuttosto che produrre una stima
+            // inaffidabile con V1 (che non applica questo gate).
+            val qualityPhotos = capturedPhotos.mapIndexed { index, photo ->
+                val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                val cameraMetadata = extractCameraMetadata(photo.bytes)
+                computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo))
+            }
+            if (QualityGate().assess(qualityPhotos).tutteScadenti) {
+                _uiState.update { it.copy(qualityWarning = PHOTO_QUALITY_WARNING) }
+                return@launch
+            }
+            confirmPhotosAfterQualityCheck(capturedPhotos, models)
+        }
+    }
+
+    private suspend fun confirmPhotosAfterQualityCheck(capturedPhotos: List<CapturedPhoto>, models: List<AiModel>) {
         val images = capturedPhotos.map { it.bytes }
         sessionStore.setCapturedImages(images, CAPTURED_IMAGE_MIME_TYPE)
         _uiState.update { it.copy(isAnalyzing = true) }
-        viewModelScope.launch {
-            val settings = settingsRepository.settings.first()
-            val model = models.firstOrNull()
-            // Non più uno switch manuale (§13 punto 1, §20): il benchmark pesato decide se la V2 ha
-            // già superato la V1 sul CHO, su un numero sufficiente di pasti pesati.
-            val v2VisibleEnabled = benchmarkRepository.evaluatePromotion().promoteV2 && model != null
-            val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
-            if (v2Result != null) {
-                val (outcome, totals) = v2Result
-                sessionStore.setV2Result(outcome, totals)
-                _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
-                notificationHelper.notifyAnalysisCompletedIfBackgrounded()
-                return@launch
-            }
-            // Nessuna V2 visibile richiesta, oppure V2 fallita (foto scadenti, fallback dichiarato,
-            // schema non supportato, eccezione): la V1 resta sempre la rete di sicurezza (§13 punto 1).
-            val outcomes = runVisionForModels(models, images, CAPTURED_IMAGE_MIME_TYPE)
-            sessionStore.setVisionOutcomes(outcomes)
+        val settings = settingsRepository.settings.first()
+        val model = models.firstOrNull()
+        // Non più uno switch manuale (§13 punto 1, §20): il benchmark pesato decide se la V2 ha
+        // già superato la V1 sul CHO, su un numero sufficiente di pasti pesati.
+        val v2VisibleEnabled = benchmarkRepository.evaluatePromotion().promoteV2 && model != null
+        val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
+        if (v2Result != null) {
+            val (outcome, totals) = v2Result
+            sessionStore.setV2Result(outcome, totals)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
-            recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
-            // La modalità ombra ha senso solo quando la V2 non è già stata provata come motore
-            // primario in questa stessa analisi: farla girare due volte raddoppierebbe le chiamate
-            // AI senza alcun beneficio (§13 punto 1).
-            if (!v2VisibleEnabled) {
-                runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
-            }
+            return
+        }
+        // Nessuna V2 visibile richiesta, oppure V2 fallita (foto scadenti, fallback dichiarato,
+        // schema non supportato, eccezione): la V1 resta sempre la rete di sicurezza (§13 punto 1).
+        val outcomes = runVisionForModels(models, images, CAPTURED_IMAGE_MIME_TYPE)
+        sessionStore.setVisionOutcomes(outcomes)
+        _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
+        notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+        recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
+        // La modalità ombra ha senso solo quando la V2 non è già stata provata come motore
+        // primario in questa stessa analisi: farla girare due volte raddoppierebbe le chiamate
+        // AI senza alcun beneficio (§13 punto 1).
+        if (!v2VisibleEnabled) {
+            runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
         }
     }
 

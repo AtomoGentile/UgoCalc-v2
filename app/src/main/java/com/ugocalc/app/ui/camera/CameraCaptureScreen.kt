@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -263,6 +264,17 @@ fun CameraCaptureScreen(
 
         if (uiState.isAnalyzing) {
             LoadingOverlay()
+        }
+
+        val qualityWarning = uiState.qualityWarning
+        if (qualityWarning != null) {
+            AlertDialog(
+                onDismissRequest = viewModel::dismissQualityWarning,
+                confirmButton = {
+                    Button(onClick = viewModel::dismissQualityWarning) { Text("Rifai le foto") }
+                },
+                text = { Text(qualityWarning) },
+            )
         }
     }
 }
