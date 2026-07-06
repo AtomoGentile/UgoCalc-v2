@@ -3,10 +3,10 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
+import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator
 import com.ugocalc.app.domain.inference.m8.BiasCorrectionResult
 import com.ugocalc.app.domain.inference.m8.BiasObservation
-import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.SessionMode
@@ -85,25 +85,33 @@ class BiasCorrectionRepository @Inject constructor(
     }
 
     /**
-     * Ricalcola tutti i segmenti (modalità, strategia, modello, categoria) che hanno almeno un
-     * ground truth registrato (§8, §13 punto 3): pensato per un trigger periodico o all'apertura
-     * dell'app. No-op se il consenso non è dato — [recalculate] lo verifica comunque per ogni segmento.
+     * Ricalcola tutti i segmenti (modalità, strategia, modello, categoria alimentare) che hanno
+     * almeno un ground truth registrato (§8, §13 punto 3, §14): pensato per un trigger periodico o
+     * all'apertura dell'app. A differenza della versione precedente (solo sessionMode × strategy ×
+     * aiModelId), qui la combinazione (strategy, foodCategory) da ricalcolare è dedotta dalle
+     * osservazioni effettivamente presenti per ciascuna coppia (sessionMode, aiModelId), invece di
+     * provare tutto il prodotto cartesiano — molte combinazioni (es. strategia Contabile + categoria
+     * Pasta) non possono mai comparire nei dati. No-op se il consenso non è dato — [recalculate] lo
+     * verifica comunque per ogni segmento.
      */
     suspend fun recalculateAll(consentGiven: Boolean) {
         if (!consentGiven) return
         val segments = analysisDao.getSessionModeAiModelPairsWithGroundTruth()
         for (segment in segments) {
             val sessionMode = SessionMode.entries.firstOrNull { it.name == segment.sessionMode } ?: continue
-            for (strategy in EstimationStrategy.entries) {
-                for (foodCategory in FoodCategory.entries) {
-                    recalculate(sessionMode, strategy, segment.aiModelId, foodCategory, consentGiven)
-                }
+            val records = analysisDao.getWithGroundTruth(sessionMode.name, segment.aiModelId)
+            val presentCombos = records.flatMap { record ->
+                json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+                    .map { estimate -> estimate.strategia to FoodCategoryRouter.categorize(estimate.nome) }
+            }.distinct()
+            for ((strategy, foodCategory) in presentCombos) {
+                recalculate(sessionMode, strategy, segment.aiModelId, foodCategory, consentGiven)
             }
         }
     }
 
     private suspend fun usageStatsFor(correction: BiasCorrectionEntity): BiasCorrectionUsageStats? {
-        val foodCategory = try { FoodCategory.valueOf(correction.foodCategory) } catch (e: Exception) { return null }
+        val foodCategory = FoodCategory.entries.firstOrNull { it.name == correction.foodCategory } ?: return null
         val observations = observationsFor(correction.sessionMode, correction.strategy, correction.aiModelId, foodCategory)
         if (observations.isEmpty()) return null
 
@@ -138,9 +146,7 @@ class BiasCorrectionRepository @Inject constructor(
         return records.flatMap { record ->
             val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
             val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-            estimates.filter {
-                it.strategia.name == strategy && FoodCategoryRouter.categorize(it.nome) == foodCategory
-            }.mapNotNull { estimate ->
+            estimates.filter { it.strategia.name == strategy && FoodCategoryRouter.categorize(it.nome) == foodCategory }.mapNotNull { estimate ->
                 groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
             }
         }

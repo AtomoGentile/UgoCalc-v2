@@ -6,7 +6,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 
-/** M8/§8 – accesso ai fattori di correzione appresi, uno per ciascun segmento (modalità, strategia, modello, categoria). */
+/** M8/§8 – accesso ai fattori di correzione appresi, uno per ciascun segmento (modalità, strategia, modello, categoria alimentare). */
 @Dao
 interface BiasCorrectionDao {
     @Query("SELECT * FROM bias_corrections WHERE sessionMode = :sessionMode AND strategy = :strategy AND aiModelId = :aiModelId AND foodCategory = :foodCategory")
