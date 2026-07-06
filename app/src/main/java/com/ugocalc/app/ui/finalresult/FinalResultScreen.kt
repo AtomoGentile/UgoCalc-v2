@@ -62,6 +62,8 @@ import com.ugocalc.app.ui.theme.UgoGrey
 fun FinalResultScreen(
     onBack: () -> Unit,
     onSaved: () -> Unit,
+    onRegisterGroundTruth: () -> Unit,
+    onRegisterBenchmarkGroundTruth: () -> Unit,
     viewModel: FinalResultViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -189,6 +191,16 @@ fun FinalResultScreen(
 
             Button(onClick = { viewModel.save() }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
                 Text("Salva")
+            }
+            if (uiState.showGroundTruthCta) {
+                TextButton(onClick = onRegisterGroundTruth, modifier = Modifier.fillMaxWidth()) {
+                    Text("Registra il peso vero di questa analisi")
+                }
+            }
+            if (uiState.showBenchmarkGroundTruthCta) {
+                TextButton(onClick = onRegisterBenchmarkGroundTruth, modifier = Modifier.fillMaxWidth()) {
+                    Text("Benchmark: registra il peso vero di questo pasto")
+                }
             }
         }
     }

@@ -29,6 +29,10 @@ interface V2AnalysisRecordDao {
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity>
 
+    /** Il record appena creato per [sessionId], se ancora senza ground truth: per la scorciatoia "Registra peso vero" a fine analisi. */
+    @Query("SELECT * FROM v2_analysis_records WHERE sessionId = :sessionId AND groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC LIMIT 1")
+    suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity?
+
     /** Coppie (modalità, modello) per cui esiste almeno un ground truth: base per il ricalcolo periodico di tutti i segmenti (§8, §13). */
     @Query("SELECT DISTINCT sessionMode, aiModelId FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
     suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair>
