@@ -1,8 +1,11 @@
 package com.ugocalc.app
 
+import android.Manifest
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -14,6 +17,7 @@ import com.ugocalc.app.ui.components.WhatsNewDialog
 import com.ugocalc.app.ui.navigation.UgoCalcNavHost
 import com.ugocalc.app.ui.theme.AppFontFamily
 import com.ugocalc.app.ui.theme.UgoCalcTheme
+import com.ugocalc.app.util.isCameraPermissionGranted
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -21,8 +25,12 @@ class MainActivity : ComponentActivity() {
 
     private val appViewModel: AppViewModel by viewModels()
 
+    private val startupPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        requestStartupPermissions()
         setContent {
             val settings by appViewModel.settings.collectAsState()
             val showWhatsNew by appViewModel.showWhatsNew.collectAsState()
@@ -55,6 +63,19 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun requestStartupPermissions() {
+        val permissions = mutableListOf<String>()
+        if (!isCameraPermissionGranted(this)) {
+            permissions.add(Manifest.permission.CAMERA)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (permissions.isNotEmpty()) {
+            startupPermissionLauncher.launch(permissions.toTypedArray())
         }
     }
 }
