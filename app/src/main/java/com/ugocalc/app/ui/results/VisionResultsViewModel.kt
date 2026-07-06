@@ -53,9 +53,19 @@ class VisionResultsViewModel @Inject constructor(
         sessionStore.resetForRetry()
     }
 
-    /** Tocco su "Ricevi i CHO" (§2.4 punto 5): esegue il Passaggio 3 e calcola i totali. */
+    /**
+     * Tocco su "Ricevi i CHO" (§2.4 punto 5): esegue il Passaggio 3 e calcola i totali. Se il
+     * risultato mostrato viene dalla pipeline V2 (piano V2 §13 punto 1), M6/M7 hanno già calcolato
+     * i totali dentro la pipeline — qui non si rifà l'abbinamento, si passa solo allo stato
+     * "fatto" perché [sessionStore]'s totals sono già quelli giusti.
+     */
     fun receiveCho() {
         val state = _uiState.value
+        if (sessionStore.session.value.usingV2Engine) {
+            _uiState.value = state.copy(matchingDone = true)
+            notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+            return
+        }
         val referenceOutcome = state.successfulOutcomes.firstOrNull { it.model.id == state.referenceModelId }
             ?: state.successfulOutcomes.firstOrNull()
             ?: return

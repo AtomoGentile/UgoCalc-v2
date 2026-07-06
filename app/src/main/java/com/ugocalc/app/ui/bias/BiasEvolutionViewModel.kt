@@ -17,6 +17,7 @@ data class BiasEvolutionUiState(
     val loading: Boolean = true,
     val consentGiven: Boolean = false,
     val v2ShadowModeEnabled: Boolean = false,
+    val v2VisibleModeEnabled: Boolean = false,
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
 )
 
@@ -39,6 +40,7 @@ class BiasEvolutionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 consentGiven = settings.biasDataConsentGiven,
                 v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
+                v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
             )
         }.launchIn(viewModelScope)
         refresh()
@@ -57,5 +59,9 @@ class BiasEvolutionViewModel @Inject constructor(
 
     fun setV2ShadowModeEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setV2ShadowModeEnabled(enabled) }
+    }
+
+    fun setV2VisibleModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setV2VisibleModeEnabled(enabled) }
     }
 }
