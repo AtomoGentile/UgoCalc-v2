@@ -19,6 +19,12 @@ data class VisionAnalysisResult(
     val confidenzaGlobale: Confidence,
     val fattoriIncertezza: List<String> = emptyList(),
     val avvertenze: String = "",
+    /**
+     * Nomi degli alimenti su cui è stata applicata la regola di sicurezza "CHO più alto" (§13 punto
+     * 2): l'identificazione era ambigua, la pipeline ha scelto l'alternativa con più carboidrati.
+     * Mostrato in UI come avviso di stima cautelativa da confermare.
+     */
+    val stimeCautelative: List<String> = emptyList(),
 )
 
 /**

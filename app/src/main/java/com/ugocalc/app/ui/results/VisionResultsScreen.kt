@@ -111,7 +111,20 @@ private fun ModelResultCard(
                 is ModelVisionOutcome.Success -> {
                     Text("Confidenza globale: ${outcome.result.confidenzaGlobale}", style = MaterialTheme.typography.bodySmall)
                     outcome.result.alimenti.forEach { food ->
-                        Text("• ${food.nome} — ${food.pesoStimatoG.toInt()}g (${food.confidenza})", modifier = Modifier.padding(top = 4.dp))
+                        val isCautious = food.nome in outcome.result.stimeCautelative
+                        Text(
+                            "• ${food.nome} — ${food.pesoStimatoG.toInt()}g (${food.confidenza})",
+                            modifier = Modifier.padding(top = 4.dp),
+                            color = if (isCautious) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                            fontWeight = if (isCautious) FontWeight.Bold else FontWeight.Normal,
+                        )
+                        if (isCautious) {
+                            Text(
+                                "⚠️ Identificazione ambigua: è stata scelta l'alternativa con CHO più alto per sicurezza.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
                         Text(food.commento, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                     }
                     if (outcome.result.fattoriIncertezza.isNotEmpty()) {

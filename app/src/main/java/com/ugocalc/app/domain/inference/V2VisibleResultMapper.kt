@@ -34,6 +34,7 @@ fun PipelineOutcome.Verificato.toModelVisionSuccess(model: AiModel): ModelVision
         alimenti = alimenti,
         confidenzaGlobale = confidenzaGlobale,
         fattoriIncertezza = verifica.flaggati.map { it.motivo },
+        stimeCautelative = verifica.ambiguitaRisolta.map { it.nomeScelto },
     )
     return ModelVisionOutcome.Success(model, result)
 }
