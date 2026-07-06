@@ -17,6 +17,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ChevronLeft
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
@@ -25,7 +27,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ModalDrawerSheet
@@ -134,6 +135,10 @@ fun HomeScreen(
                         IconButton(onClick = onNavigateToHistory) {
                             Icon(Icons.Default.History, contentDescription = "Cronologia")
                         }
+                        SessionModeSelector(
+                            currentMode = uiState.sessionMode,
+                            onModeChange = viewModel::setSessionMode,
+                        )
                         IconButton(onClick = onNavigateToSettings) {
                             Icon(Icons.Default.Settings, contentDescription = "Impostazioni")
                         }
@@ -149,22 +154,6 @@ fun HomeScreen(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Top,
             ) {
-                // Scelta esplicita Casa/Ristorante (piano V2 §8), mai dedotta dalla foto: incide
-                // solo sulla pipeline V2 in ombra (§13), non sull'analisi V1 mostrata all'utente.
-                Row(modifier = Modifier.padding(top = 24.dp)) {
-                    FilterChip(
-                        selected = uiState.sessionMode == SessionMode.CASA,
-                        onClick = { viewModel.setSessionMode(SessionMode.CASA) },
-                        label = { Text("Casa") },
-                        modifier = Modifier.padding(end = 8.dp),
-                    )
-                    FilterChip(
-                        selected = uiState.sessionMode == SessionMode.RISTORANTE,
-                        onClick = { viewModel.setSessionMode(SessionMode.RISTORANTE) },
-                        label = { Text("Ristorante") },
-                    )
-                }
-
                 Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
                     AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
                         val preferred = uiState.preferredModels
@@ -212,6 +201,13 @@ fun HomeScreen(
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                     Text("Scansiona codice a barre")
                 }
+
+                Text(
+                    text = if (uiState.sessionMode == SessionMode.CASA) "Casa" else "Ristorante",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                )
 
                 if (uiState.favoritesEnabled) {
                     IconButton(
@@ -277,6 +273,27 @@ fun HomeScreen(
                 showAddFavoriteDialog = false
             },
         )
+    }
+}
+
+@Composable
+private fun SessionModeSelector(currentMode: SessionMode, onModeChange: (SessionMode) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.padding(horizontal = 4.dp),
+    ) {
+        IconButton(
+            onClick = { if (currentMode == SessionMode.RISTORANTE) onModeChange(SessionMode.CASA) },
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(Icons.Default.ChevronLeft, contentDescription = "Modalità precedente", modifier = Modifier.size(24.dp))
+        }
+        IconButton(
+            onClick = { if (currentMode == SessionMode.CASA) onModeChange(SessionMode.RISTORANTE) },
+            modifier = Modifier.size(40.dp),
+        ) {
+            Icon(Icons.Default.ChevronRight, contentDescription = "Modalità successiva", modifier = Modifier.size(24.dp))
+        }
     }
 }
 
