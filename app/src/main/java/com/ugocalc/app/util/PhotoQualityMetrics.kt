@@ -2,24 +2,55 @@ package com.ugocalc.app.util
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import androidx.exifinterface.media.ExifInterface
+import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
+import java.io.ByteArrayInputStream
 
 /** Lato massimo della Bitmap decodificata per calcolare le metriche: bastano poche decine di migliaia di pixel, non serve la risoluzione dello scatto originale. */
 private const val METRICS_MAX_DIMENSION_PX = 128
+
+/** Sentinella usata da [ExifInterface.getAttributeDouble]/[ExifInterface.getAttributeInt] per "tag assente". */
+private const val EXIF_ABSENT = -1.0
 
 /**
  * Estrae le metriche di qualità che [com.ugocalc.app.domain.inference.m0.QualityGate] si aspetta
  * già pronte (piano V2 §5 M0: "l'estrazione delle metriche dal bitmap è responsabilità del livello
  * Android"). Vive in `util` (non in `domain/inference`, che resta puro Kotlin testabile in JVM)
  * proprio perché dipende da `android.graphics.Bitmap`.
+ *
+ * [motionRadPerSec] e [cameraMetadata] arrivano da fonti indipendenti dal Bitmap (giroscopio, EXIF,
+ * §16): opzionali con default `null` per non rompere chiamate esistenti che non li passano.
  */
-fun computePhotoQuality(id: String, imageBytes: ByteArray): PhotoQuality {
+fun computePhotoQuality(
+    id: String,
+    imageBytes: ByteArray,
+    motionRadPerSec: Double? = null,
+    cameraMetadata: CameraMetadata? = null,
+): PhotoQuality {
     val luminance = decodeGrayscaleLuminance(imageBytes, METRICS_MAX_DIMENSION_PX)
     return PhotoQuality(
         id = id,
         sharpness = laplacianVariance(luminance),
         brightness = luminance.pixels.average(),
         hash = perceptualHash64(luminance),
+        motionRadPerSec = motionRadPerSec,
+        cameraMetadata = cameraMetadata,
+    )
+}
+
+/**
+ * Metadati camera diagnostici (§16), solo trasportati — [com.ugocalc.app.domain.inference.m0.QualityGate]
+ * non li usa per scartare nulla oggi (soglie ISO/esposizione non calibrate su dati reali, rischio di
+ * falsi scarti). Tutti i campi `null` se il tag EXIF è assente, come spesso accade su foto elaborate.
+ */
+fun extractCameraMetadata(imageBytes: ByteArray): CameraMetadata {
+    val exif = ExifInterface(ByteArrayInputStream(imageBytes))
+    return CameraMetadata(
+        isoValue = exif.getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, -1).takeIf { it > 0 },
+        exposureTimeSeconds = exif.getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, EXIF_ABSENT).takeIf { it > 0 },
+        focalLengthMm = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, EXIF_ABSENT).takeIf { it > 0 },
+        aperture = exif.getAttributeDouble(ExifInterface.TAG_F_NUMBER, EXIF_ABSENT).takeIf { it > 0 },
     )
 }
 

@@ -14,6 +14,7 @@ class QualityGate(
     private val brightnessMin: Double = DEFAULT_BRIGHTNESS_MIN,
     private val brightnessMax: Double = DEFAULT_BRIGHTNESS_MAX,
     private val duplicateMaxDistance: Int = DEFAULT_DUPLICATE_MAX_DISTANCE,
+    private val motionMaxRadPerSec: Double = DEFAULT_MOTION_MAX_RAD_PER_SEC,
 ) {
 
     fun assess(photos: List<PhotoQuality>): IngestionResult {
@@ -23,6 +24,8 @@ class QualityGate(
 
         for (foto in photos) {
             val motivo = when {
+                foto.motionRadPerSec != null && foto.motionRadPerSec > motionMaxRadPerSec ->
+                    PhotoRejectionReason.MOSSA_DAL_SENSORE
                 foto.sharpness < sharpnessMin -> PhotoRejectionReason.SFOCATA
                 foto.brightness < brightnessMin -> PhotoRejectionReason.TROPPO_SCURA
                 foto.brightness > brightnessMax -> PhotoRejectionReason.TROPPO_CHIARA
@@ -48,6 +51,8 @@ class QualityGate(
         const val DEFAULT_BRIGHTNESS_MAX = 220.0
         /** Distanza di Hamming massima tra hash percettivi a 64 bit per considerare due foto duplicate. */
         const val DEFAULT_DUPLICATE_MAX_DISTANCE = 10
+        /** Velocità angolare (giroscopio, §16) oltre la quale la foto è considerata mossa: soglia fisica, non una stima di nitidezza. */
+        const val DEFAULT_MOTION_MAX_RAD_PER_SEC = 1.0
 
         fun hammingDistance(a: Long, b: Long): Int = java.lang.Long.bitCount(a xor b)
     }
@@ -62,6 +67,18 @@ data class PhotoQuality(
     val sharpness: Double,
     val brightness: Double,
     val hash: Long,
+    /** Picco di velocità angolare del giroscopio vicino allo scatto (§16), `null` se non disponibile (nessun hardware, o dato non ancora collegato). */
+    val motionRadPerSec: Double? = null,
+    /** Metadati camera diagnostici (§16): mai letti da [QualityGate.assess], solo trasportati per un uso futuro (es. telemetria M8). */
+    val cameraMetadata: CameraMetadata? = null,
+)
+
+/** Metadati EXIF della fotocamera (§16): tutti nullable, i tag sono spesso assenti su foto elaborate. Solo diagnostica, nessuno scarto oggi si basa su questi valori. */
+data class CameraMetadata(
+    val isoValue: Int? = null,
+    val exposureTimeSeconds: Double? = null,
+    val focalLengthMm: Double? = null,
+    val aperture: Double? = null,
 )
 
 /** Motivo per cui una foto è stata scartata da M0. */
@@ -70,6 +87,8 @@ enum class PhotoRejectionReason {
     TROPPO_SCURA,
     TROPPO_CHIARA,
     DUPLICATA,
+    /** Velocità angolare del giroscopio oltre soglia vicino allo scatto (§16): foto probabilmente mossa. */
+    MOSSA_DAL_SENSORE,
 }
 
 /** Esito della valutazione di una singola foto. */

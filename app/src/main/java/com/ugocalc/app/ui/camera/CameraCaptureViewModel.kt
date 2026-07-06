@@ -10,7 +10,9 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
+import com.ugocalc.app.util.GyroscopeMotionTracker
 import com.ugocalc.app.util.computePhotoQuality
+import com.ugocalc.app.util.extractCameraMetadata
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,8 +24,11 @@ import javax.inject.Inject
 
 private const val CAPTURED_IMAGE_MIME_TYPE = "image/jpeg"
 
+/** [capturedAtEpochMillis] approssima l'istante dello scatto (§16): la fotocamera di sistema non offre alcun callback nell'istante esatto, si usa il timestamp del file scritto su disco. */
+data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long)
+
 data class CameraUiState(
-    val capturedImages: List<ByteArray> = emptyList(),
+    val capturedImages: List<CapturedPhoto> = emptyList(),
     val isAnalyzing: Boolean = false,
     val analysisDone: Boolean = false,
 )
@@ -35,6 +40,7 @@ class CameraCaptureViewModel @Inject constructor(
     private val notificationHelper: AnalysisNotificationHelper,
     private val settingsRepository: SettingsRepository,
     private val v2PipelineFactory: V2AnalysisPipelineFactory,
+    private val gyroscopeTracker: GyroscopeMotionTracker,
     @ShadowAnalysisScope private val shadowScope: CoroutineScope,
 ) : ViewModel() {
 
@@ -42,8 +48,8 @@ class CameraCaptureViewModel @Inject constructor(
     val uiState: StateFlow<CameraUiState> = _uiState
 
     /** Scatto avvenuto: si aggiunge alla galleria di foto di questa sessione (più scatti per un'analisi più efficace). */
-    fun onPhotoCaptured(imageBytes: ByteArray) {
-        _uiState.update { it.copy(capturedImages = it.capturedImages + imageBytes) }
+    fun onPhotoCaptured(imageBytes: ByteArray, capturedAtEpochMillis: Long) {
+        _uiState.update { it.copy(capturedImages = it.capturedImages + CapturedPhoto(imageBytes, capturedAtEpochMillis)) }
     }
 
     /** L'utente scarta una foto già scattata dalla galleria della sessione corrente. */
@@ -55,8 +61,9 @@ class CameraCaptureViewModel @Inject constructor(
 
     /** Tutte le foto confermate → invio al Passaggio 1 per ciascun modello selezionato (§2.4 punto 3). */
     fun confirmPhotos(models: List<AiModel>) {
-        val images = _uiState.value.capturedImages
-        if (images.isEmpty()) return
+        val capturedPhotos = _uiState.value.capturedImages
+        if (capturedPhotos.isEmpty()) return
+        val images = capturedPhotos.map { it.bytes }
         sessionStore.setCapturedImages(images, CAPTURED_IMAGE_MIME_TYPE)
         _uiState.update { it.copy(isAnalyzing = true) }
         viewModelScope.launch {
@@ -65,7 +72,7 @@ class CameraCaptureViewModel @Inject constructor(
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
         }
-        runV2ShadowAnalysisIfEnabled(images, models)
+        runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
     }
 
     /**
@@ -75,14 +82,16 @@ class CameraCaptureViewModel @Inject constructor(
      * chiamate AI di V2 (M1 + M6) abbiano finito. Avvolto per intero in [runCatching]: un fallimento
      * qui (rete, quota, parsing) non deve mai emergere in UI né interrompere il flusso V1.
      */
-    private fun runV2ShadowAnalysisIfEnabled(images: List<ByteArray>, models: List<AiModel>) {
+    private fun runV2ShadowAnalysisIfEnabled(capturedPhotos: List<CapturedPhoto>, models: List<AiModel>) {
         val model = models.firstOrNull() ?: return
         shadowScope.launch {
             if (!settingsRepository.settings.first().v2ShadowModeEnabled) return@launch
             val sessionMode = sessionStore.session.value.sessionMode
             runCatching {
-                val photos = images.mapIndexed { index, bytes ->
-                    SessionPhoto(computePhotoQuality("foto_$index", bytes), bytes)
+                val photos = capturedPhotos.mapIndexed { index, photo ->
+                    val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                    val cameraMetadata = extractCameraMetadata(photo.bytes)
+                    SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata), photo.bytes)
                 }
                 v2PipelineFactory.create().run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
             }
