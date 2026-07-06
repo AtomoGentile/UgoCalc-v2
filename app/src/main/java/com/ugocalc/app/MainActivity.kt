@@ -11,6 +11,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.rememberNavController
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.AppViewModel
 import com.ugocalc.app.ui.components.DataDisclaimerDialog
 import com.ugocalc.app.ui.components.WhatsNewDialog
@@ -35,14 +36,17 @@ class MainActivity : ComponentActivity() {
             val settings by appViewModel.settings.collectAsState()
             val showWhatsNew by appViewModel.showWhatsNew.collectAsState()
             val isReady by appViewModel.isReady.collectAsState()
+            // Icona Casa/Ristorante in Homepage (§ richiesta utente): sceglie quale delle due liste
+            // di colori personalizzati in Accessibilità applicare a tutta l'app.
+            val isRistorante = settings.activeSessionMode == SessionMode.RISTORANTE
             UgoCalcTheme(
                 appTheme = settings.theme,
                 textScale = settings.textScale,
-                primaryColor = settings.primaryColorArgb?.let { Color(it) },
-                secondaryColor = settings.secondaryColorArgb?.let { Color(it) },
-                tertiaryColor = settings.tertiaryColorArgb?.let { Color(it) },
-                backgroundColor = settings.backgroundColorArgb?.let { Color(it) },
-                errorColor = settings.errorColorArgb?.let { Color(it) },
+                primaryColor = (if (isRistorante) settings.primaryColorRistoranteArgb else settings.primaryColorArgb)?.let { Color(it) },
+                secondaryColor = (if (isRistorante) settings.secondaryColorRistoranteArgb else settings.secondaryColorArgb)?.let { Color(it) },
+                tertiaryColor = (if (isRistorante) settings.tertiaryColorRistoranteArgb else settings.tertiaryColorArgb)?.let { Color(it) },
+                backgroundColor = (if (isRistorante) settings.backgroundColorRistoranteArgb else settings.backgroundColorArgb)?.let { Color(it) },
+                errorColor = (if (isRistorante) settings.errorColorRistoranteArgb else settings.errorColorArgb)?.let { Color(it) },
                 fontFamily = settings.fontFamilyName
                     ?.let { name -> runCatching { AppFontFamily.valueOf(name) }.getOrNull() }
                     ?.fontFamily,

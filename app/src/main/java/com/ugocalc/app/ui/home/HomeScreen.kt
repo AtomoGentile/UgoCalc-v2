@@ -21,7 +21,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.RestaurantMenu
+import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -139,7 +139,7 @@ fun HomeScreen(
                             onClick = { viewModel.setSessionMode(if (uiState.sessionMode == SessionMode.CASA) SessionMode.RISTORANTE else SessionMode.CASA) }
                         ) {
                             Icon(
-                                if (uiState.sessionMode == SessionMode.CASA) Icons.Default.Home else Icons.Default.RestaurantMenu,
+                                if (uiState.sessionMode == SessionMode.CASA) Icons.Default.Home else Icons.Default.Restaurant,
                                 contentDescription = if (uiState.sessionMode == SessionMode.CASA) "Modalità Casa" else "Modalità Ristorante"
                             )
                         }

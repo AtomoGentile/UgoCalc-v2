@@ -3,6 +3,7 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
 import com.ugocalc.app.data.local.prefs.SettingsDataStore
 import com.ugocalc.app.data.local.prefs.UserSettings
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiProviderType
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
@@ -40,6 +41,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setLastSeenVersionCode(versionCode: Int) = dataStore.setLastSeenVersionCode(versionCode)
     suspend fun setBiasDataConsentGiven(given: Boolean) = dataStore.setBiasDataConsentGiven(given)
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) = dataStore.setV2ShadowModeEnabled(enabled)
+    suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)
