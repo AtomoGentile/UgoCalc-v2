@@ -2,6 +2,7 @@ package com.ugocalc.app.domain.inference.m7
 
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
+import kotlinx.serialization.Serializable
 
 /**
  * M7 – Calcolo carboidrati e grassi + spiegazione (piano V2 §5, §7). Deterministico: prende i grammi
@@ -36,6 +37,7 @@ object NutritionCalculator {
 }
 
 /** Contributo CHO/grassi di UN alimento più la sua spiegazione (§5 M7, §7 catena di calcolo). */
+@Serializable
 data class FoodNutritionLine(
     val nome: String,
     val pesoG: Double,
@@ -47,6 +49,7 @@ data class FoodNutritionLine(
 )
 
 /** Output finale di M7: righe per alimento e totali di sessione (§5 M7). */
+@Serializable
 data class NutritionReport(
     val righe: List<FoodNutritionLine>,
     val choTotaleG: Double,

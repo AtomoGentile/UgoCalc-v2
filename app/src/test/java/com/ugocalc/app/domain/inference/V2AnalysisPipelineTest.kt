@@ -210,4 +210,42 @@ class V2AnalysisPipelineTest {
 
         assertEquals(0, arbitrationCalls)
     }
+
+    @Test
+    fun `M8 records the finished analysis exactly once and its id reaches the outcome`() = runBlocking {
+        val scena = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = emptyList(),
+            alimenti = listOf(
+                PerceivedFood(
+                    nome = "mela",
+                    occlusione = OcclusionDegree.NESSUNA,
+                    misureGrezze = RawMeasurements(conteggio = 1),
+                    confidenza = Confidence.ALTO,
+                ),
+            ),
+        )
+        var recordCalls = 0
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
+            recordTelemetry = { outcome, recordedModel, recordedMode ->
+                recordCalls++
+                assertEquals(model, recordedModel)
+                assertEquals(SessionMode.RISTORANTE, recordedMode)
+                assertTrue(outcome.stime.isNotEmpty())
+                42L
+            },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.RISTORANTE,
+            model = model,
+        )
+
+        assertEquals(1, recordCalls)
+        assertTrue(outcome is PipelineOutcome.Verificato)
+        assertEquals(42L, (outcome as PipelineOutcome.Verificato).telemetryId)
+    }
 }
