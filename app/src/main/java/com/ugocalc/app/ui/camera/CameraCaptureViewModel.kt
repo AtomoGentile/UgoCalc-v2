@@ -1,5 +1,6 @@
 package com.ugocalc.app.ui.camera
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.repository.BenchmarkRepository
@@ -160,11 +161,16 @@ class CameraCaptureViewModel @Inject constructor(
                 SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
             }
             val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
-            if (outcome !is PipelineOutcome.Verificato) return@runCatching null
+            if (outcome !is PipelineOutcome.Verificato) {
+                Log.w("CameraCaptureVM", "V2 failed or requested fallback: $outcome")
+                return@runCatching null
+            }
             if (outcome.telemetryId >= 0) {
                 benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
             }
             outcome.toModelVisionSuccess(model) to outcome.toAnalysisTotals()
+        }.onFailure { e ->
+            Log.e("CameraCaptureVM", "V2 exception", e)
         }.getOrNull()
     }
 
