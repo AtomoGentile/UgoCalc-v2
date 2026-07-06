@@ -88,6 +88,12 @@ class BenchmarkRepository @Inject constructor(
 
     suspend fun listPendingGroundTruth(): List<BenchmarkMealEntity> = benchmarkDao.getAllWithoutGroundTruth()
 
+    /** Per la scorciatoia "Registra peso vero" a fine analisi (§13 punto 5): true se questa sessione è tracciata dal benchmark e non ha ancora un peso vero. */
+    suspend fun hasPendingGroundTruth(sessionId: String): Boolean {
+        val meal = benchmarkDao.getById(sessionId) ?: return false
+        return meal.groundTruthPesiJson == null
+    }
+
     /** Unione dei nomi alimento noti a V1 e V2 per [entity] (§13 punto 5): i due motori possono identificare lo stesso piatto con nomi leggermente diversi, mostrarli entrambi lascia all'utente la scelta di quali pesare. */
     suspend fun foodNamesFor(entity: BenchmarkMealEntity): List<String> {
         val v1Nomi = entity.v1PesiPerAlimentoJson?.let { json.decodeFromString<Map<String, Double>>(it).keys }.orEmpty()

@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.remote.ai.AiOrchestrator
 import com.ugocalc.app.data.remote.ai.client.AiCallException
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.model.AiProviderType
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
@@ -41,6 +43,10 @@ data class FinalResultUiState(
     val onlineResearch: Map<Int, OnlineResearchUiState> = emptyMap(),
     /** Stellina accanto a "Salva" (§ richiesta utente): se attiva, il salvataggio crea subito anche il preferito. */
     val favoriteRequested: Boolean = false,
+    /** Scorciatoia "Registra peso vero" a fine analisi (§13 punto 3): mostrata solo se questa sessione ha davvero prodotto un record da correggere. */
+    val showGroundTruthCta: Boolean = false,
+    /** Stessa scorciatoia per il benchmark V1/V2 (§13 punto 5), indipendente dalla precedente. */
+    val showBenchmarkGroundTruthCta: Boolean = false,
 )
 
 @HiltViewModel
@@ -50,6 +56,8 @@ class FinalResultViewModel @Inject constructor(
     private val tableRepository: TableRepository,
     private val aiOrchestrator: AiOrchestrator,
     private val favoritesRepository: FavoritesRepository,
+    private val v2TelemetryRepository: V2TelemetryRepository,
+    private val benchmarkRepository: BenchmarkRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(FinalResultUiState())
@@ -65,6 +73,14 @@ class FinalResultViewModel @Inject constructor(
                 modelNames = session.selectedModels.map { it.displayName },
             )
         }.launchIn(viewModelScope)
+
+        // Sessione stabile fino al reset (dopo Salva): il controllo va fatto una sola volta, non ad ogni aggiornamento dei totali.
+        val sessionId = sessionStore.session.value.sessionId
+        viewModelScope.launch {
+            val showGroundTruth = v2TelemetryRepository.hasPendingGroundTruth(sessionId)
+            val showBenchmarkGroundTruth = benchmarkRepository.hasPendingGroundTruth(sessionId)
+            _uiState.update { it.copy(showGroundTruthCta = showGroundTruth, showBenchmarkGroundTruthCta = showBenchmarkGroundTruth) }
+        }
     }
 
     fun setFoodTitle(title: String) {

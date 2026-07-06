@@ -125,6 +125,8 @@ fun UgoCalcNavHost(navController: NavHostController) {
                         popUpTo(Routes.HOME) { inclusive = true }
                     }
                 },
+                onRegisterGroundTruth = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
+                onRegisterBenchmarkGroundTruth = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
             )
         }
 
