@@ -73,6 +73,23 @@ fun BiasEvolutionScreen(onBack: () -> Unit, viewModel: BiasEvolutionViewModel = 
                         }
                         Switch(checked = uiState.consentGiven, onCheckedChange = { viewModel.setConsentGiven(it) })
                     }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Esegui la pipeline V2 in ombra", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Ad ogni analisi fa girare in background anche il nuovo motore V2, solo per " +
+                                    "raccogliere dati di validazione: il risultato che vedi resta sempre quello " +
+                                    "del motore attuale. Attiva 2 chiamate AI aggiuntive per analisi, a " +
+                                    "pagamento con la tua chiave API.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = UgoGrey,
+                            )
+                        }
+                        Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
+                    }
                 }
                 HorizontalDivider()
             }

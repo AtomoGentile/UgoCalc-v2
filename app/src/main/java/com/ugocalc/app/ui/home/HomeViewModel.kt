@@ -14,6 +14,7 @@ import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -50,6 +51,8 @@ data class HomeUiState(
     val favorites: List<FavoriteDisplay> = emptyList(),
     /** Modelli preferiti (§2.2) pronti all'uso (chiave configurata): se non vuoto, "Analizza" salta la scelta modello. */
     val preferredModels: List<AiModel> = emptyList(),
+    /** Scelta esplicita Casa/Ristorante per la prossima analisi (piano V2 §8): mai dedotta, sempre scelta qui prima di "Analizza". */
+    val sessionMode: SessionMode = SessionMode.CASA,
 )
 
 @HiltViewModel
@@ -121,14 +124,21 @@ class HomeViewModel @Inject constructor(
         }.launchIn(viewModelScope)
     }
 
+    /** Casa/Ristorante scelto in Homepage prima di "Analizza" (piano V2 §8): resta locale finché l'analisi non parte davvero. */
+    fun setSessionMode(mode: SessionMode) {
+        _uiState.value = _uiState.value.copy(sessionMode = mode)
+    }
+
     /** Azzera lo stato di una eventuale analisi precedente prima di avviarne una nuova (§2.4 punto 1). */
     fun startNewAnalysis() {
         sessionStore.reset()
+        sessionStore.setSessionMode(_uiState.value.sessionMode)
     }
 
     /** "Analizza" con i modelli preferiti (§ modello preferito esteso): salta del tutto la schermata di scelta modello. */
     fun startAnalysisWithPreferredModels() {
         sessionStore.reset()
+        sessionStore.setSessionMode(_uiState.value.sessionMode)
         sessionStore.setSelectedModels(_uiState.value.preferredModels)
     }
 
