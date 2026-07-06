@@ -7,10 +7,8 @@ import com.ugocalc.app.data.local.prefs.UserSettings
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
-import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.domain.model.AiProviderType
-import com.ugocalc.app.ui.AnalysisSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -22,7 +20,6 @@ import javax.inject.Inject
 data class SettingsScreenState(
     val userSettings: UserSettings = UserSettings(),
     val officialTableCount: Int = 0,
-    val currentSessionMode: SessionMode = SessionMode.CASA,
 )
 
 @HiltViewModel
@@ -30,14 +27,12 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val historyRepository: HistoryRepository,
     tableRepository: TableRepository,
-    private val sessionStore: AnalysisSessionStore,
 ) : ViewModel() {
 
     val state: StateFlow<SettingsScreenState> = combine(
         settingsRepository.settings,
         tableRepository.observeTableCount(),
-        sessionStore.session,
-    ) { settings, tableCount, session -> SettingsScreenState(settings, tableCount, session.sessionMode) }
+    ) { settings, tableCount -> SettingsScreenState(settings, tableCount) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsScreenState())
 
     fun setTheme(theme: AppTheme) = viewModelScope.launch { settingsRepository.setTheme(theme) }

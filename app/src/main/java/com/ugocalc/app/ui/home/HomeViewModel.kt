@@ -120,13 +120,21 @@ class HomeViewModel @Inject constructor(
             settings to if (!isOnline) emptyList()
             else AiModelCatalog.ALL.filter { it.id in settings.preferredModelIds && settingsRepository.getApiKey(it.provider) != null }
         }.onEach { (settings, models) ->
-            _uiState.value = _uiState.value.copy(preferredModels = models, favoritesEnabled = settings.favoritesEnabled)
+            _uiState.value = _uiState.value.copy(
+                preferredModels = models,
+                favoritesEnabled = settings.favoritesEnabled,
+                sessionMode = settings.activeSessionMode,
+            )
         }.launchIn(viewModelScope)
     }
 
-    /** Casa/Ristorante scelto in Homepage prima di "Analizza" (piano V2 §8): resta locale finché l'analisi non parte davvero. */
+    /**
+     * Icona Casa/Ristorante in topAppBar (§ richiesta utente): persistita subito, non solo al
+     * momento di "Analizza", perché pilota anche i colori dell'intera app (vedi MainActivity).
+     */
     fun setSessionMode(mode: SessionMode) {
         _uiState.value = _uiState.value.copy(sessionMode = mode)
+        viewModelScope.launch { settingsRepository.setActiveSessionMode(mode) }
     }
 
     /** Azzera lo stato di una eventuale analisi precedente prima di avviarne una nuova (§2.4 punto 1). */

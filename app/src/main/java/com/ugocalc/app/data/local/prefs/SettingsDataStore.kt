@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.Confidence
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -68,6 +69,14 @@ data class UserSettings(
      * mostrata. Falso di default.
      */
     val v2ShadowModeEnabled: Boolean = false,
+    /**
+     * Modalità Casa/Ristorante attiva a livello di app (§ richiesta utente, icona in topAppBar
+     * Homepage): pilota sia l'icona mostrata sia quale set di colori personalizzati viene applicato
+     * ([primaryColorArgb] ecc. per Casa, [primaryColorRistoranteArgb] ecc. per Ristorante). Separata
+     * da [com.ugocalc.app.ui.AnalysisSessionStore.Session.sessionMode], che resta la scelta per la
+     * singola analisi in corso (piano V2 §8).
+     */
+    val activeSessionMode: SessionMode = SessionMode.CASA,
 )
 
 @Singleton
@@ -98,6 +107,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
         val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
+        val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -126,6 +136,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             lastSeenVersionCode = prefs[Keys.LAST_SEEN_VERSION_CODE] ?: 0,
             biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
+            activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
         )
     }
 
@@ -191,4 +202,6 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.BIAS_DATA_CONSENT_GIVEN] = given }
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
+    suspend fun setActiveSessionMode(mode: SessionMode) =
+        context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
 }

@@ -36,14 +36,16 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.prefs.AppTheme
-import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ColorPickerDialog
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.AppFontFamily
 import com.ugocalc.app.ui.theme.defaultThemeColors
 
-private enum class ColorSlot { PRIMARIO, SECONDARIO, TERZIARIO, SFONDO, ERRORE, TESTO }
+private enum class ColorSlot {
+    PRIMARIO, SECONDARIO, TERZIARIO, SFONDO, ERRORE, TESTO,
+    PRIMARIO_RISTORANTE, SECONDARIO_RISTORANTE, TERZIARIO_RISTORANTE, SFONDO_RISTORANTE, ERRORE_RISTORANTE,
+}
 
 /** Impostazioni > Accessibilità (§2.2): tema chiaro/scuro, dimensione testo, colori personalizzati. */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -100,99 +102,108 @@ fun AccessibilitySettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
 
-            val usesRistoranteColors = state.currentSessionMode == SessionMode.RISTORANTE
-            val colorPrimary = if (usesRistoranteColors) {
-                state.userSettings.primaryColorRistoranteArgb?.let { Color(it) } ?: defaults.primary
-            } else {
-                state.userSettings.primaryColorArgb?.let { Color(it) } ?: defaults.primary
-            }
-            val colorSecondary = if (usesRistoranteColors) {
-                state.userSettings.secondaryColorRistoranteArgb?.let { Color(it) } ?: defaults.secondary
-            } else {
-                state.userSettings.secondaryColorArgb?.let { Color(it) } ?: defaults.secondary
-            }
-            val colorTertiary = if (usesRistoranteColors) {
-                state.userSettings.tertiaryColorRistoranteArgb?.let { Color(it) } ?: defaults.tertiary
-            } else {
-                state.userSettings.tertiaryColorArgb?.let { Color(it) } ?: defaults.tertiary
-            }
-            val colorBackground = if (usesRistoranteColors) {
-                state.userSettings.backgroundColorRistoranteArgb?.let { Color(it) } ?: defaults.background
-            } else {
-                state.userSettings.backgroundColorArgb?.let { Color(it) } ?: defaults.background
-            }
-            val colorError = if (usesRistoranteColors) {
-                state.userSettings.errorColorRistoranteArgb?.let { Color(it) } ?: defaults.error
-            } else {
-                state.userSettings.errorColorArgb?.let { Color(it) } ?: defaults.error
-            }
-
-            Text(
-                "Colori per modalità ${if (state.currentSessionMode == SessionMode.CASA) "casa" else "ristorante"}",
-                style = MaterialTheme.typography.titleMedium,
-                modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)
-            )
+            // Due liste indipendenti e sempre visibili (§ richiesta utente): la prima resta quella
+            // di sempre per la modalità Casa, la seconda è identica nella struttura ma per Ristorante.
+            // Quale delle due sia effettivamente applicata all'app dipende dall'icona casa/ristorante
+            // in Homepage, non dalla visibilità qui: entrambe restano sempre modificabili.
+            Text("Colori per modalità casa", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
             ColorSlotRow(
                 label = "Primario",
-                color = colorPrimary,
+                color = state.userSettings.primaryColorArgb?.let { Color(it) } ?: defaults.primary,
                 onClick = { editingSlot = ColorSlot.PRIMARIO },
             )
             ColorSlotRow(
                 label = "Secondario",
-                color = colorSecondary,
+                color = state.userSettings.secondaryColorArgb?.let { Color(it) } ?: defaults.secondary,
                 onClick = { editingSlot = ColorSlot.SECONDARIO },
             )
             ColorSlotRow(
                 label = "Terziario",
-                color = colorTertiary,
+                color = state.userSettings.tertiaryColorArgb?.let { Color(it) } ?: defaults.tertiary,
                 onClick = { editingSlot = ColorSlot.TERZIARIO },
             )
             ColorSlotRow(
                 label = "Sfondo",
-                color = colorBackground,
+                color = state.userSettings.backgroundColorArgb?.let { Color(it) } ?: defaults.background,
                 onClick = { editingSlot = ColorSlot.SFONDO },
             )
             ColorSlotRow(
                 label = "Errore",
-                color = colorError,
+                color = state.userSettings.errorColorArgb?.let { Color(it) } ?: defaults.error,
                 onClick = { editingSlot = ColorSlot.ERRORE },
+            )
+
+            Text("Colori per modalità ristorante", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            ColorSlotRow(
+                label = "Primario",
+                color = state.userSettings.primaryColorRistoranteArgb?.let { Color(it) } ?: defaults.primary,
+                onClick = { editingSlot = ColorSlot.PRIMARIO_RISTORANTE },
+            )
+            ColorSlotRow(
+                label = "Secondario",
+                color = state.userSettings.secondaryColorRistoranteArgb?.let { Color(it) } ?: defaults.secondary,
+                onClick = { editingSlot = ColorSlot.SECONDARIO_RISTORANTE },
+            )
+            ColorSlotRow(
+                label = "Terziario",
+                color = state.userSettings.tertiaryColorRistoranteArgb?.let { Color(it) } ?: defaults.tertiary,
+                onClick = { editingSlot = ColorSlot.TERZIARIO_RISTORANTE },
+            )
+            ColorSlotRow(
+                label = "Sfondo",
+                color = state.userSettings.backgroundColorRistoranteArgb?.let { Color(it) } ?: defaults.background,
+                onClick = { editingSlot = ColorSlot.SFONDO_RISTORANTE },
+            )
+            ColorSlotRow(
+                label = "Errore",
+                color = state.userSettings.errorColorRistoranteArgb?.let { Color(it) } ?: defaults.error,
+                onClick = { editingSlot = ColorSlot.ERRORE_RISTORANTE },
             )
         }
     }
 
     val slot = editingSlot
     if (slot != null) {
-        val isRistorante = state.currentSessionMode == SessionMode.RISTORANTE
         val currentColorArgb = when (slot) {
-            ColorSlot.PRIMARIO -> if (isRistorante) state.userSettings.primaryColorRistoranteArgb else state.userSettings.primaryColorArgb
-            ColorSlot.SECONDARIO -> if (isRistorante) state.userSettings.secondaryColorRistoranteArgb else state.userSettings.secondaryColorArgb
-            ColorSlot.TERZIARIO -> if (isRistorante) state.userSettings.tertiaryColorRistoranteArgb else state.userSettings.tertiaryColorArgb
-            ColorSlot.SFONDO -> if (isRistorante) state.userSettings.backgroundColorRistoranteArgb else state.userSettings.backgroundColorArgb
-            ColorSlot.ERRORE -> if (isRistorante) state.userSettings.errorColorRistoranteArgb else state.userSettings.errorColorArgb
+            ColorSlot.PRIMARIO -> state.userSettings.primaryColorArgb
+            ColorSlot.SECONDARIO -> state.userSettings.secondaryColorArgb
+            ColorSlot.TERZIARIO -> state.userSettings.tertiaryColorArgb
+            ColorSlot.SFONDO -> state.userSettings.backgroundColorArgb
+            ColorSlot.ERRORE -> state.userSettings.errorColorArgb
             ColorSlot.TESTO -> state.userSettings.fontColorArgb
+            ColorSlot.PRIMARIO_RISTORANTE -> state.userSettings.primaryColorRistoranteArgb
+            ColorSlot.SECONDARIO_RISTORANTE -> state.userSettings.secondaryColorRistoranteArgb
+            ColorSlot.TERZIARIO_RISTORANTE -> state.userSettings.tertiaryColorRistoranteArgb
+            ColorSlot.SFONDO_RISTORANTE -> state.userSettings.backgroundColorRistoranteArgb
+            ColorSlot.ERRORE_RISTORANTE -> state.userSettings.errorColorRistoranteArgb
         }
         val defaultColor = when (slot) {
-            ColorSlot.PRIMARIO -> defaults.primary
-            ColorSlot.SECONDARIO -> defaults.secondary
-            ColorSlot.TERZIARIO -> defaults.tertiary
-            ColorSlot.SFONDO -> defaults.background
-            ColorSlot.ERRORE -> defaults.error
+            ColorSlot.PRIMARIO, ColorSlot.PRIMARIO_RISTORANTE -> defaults.primary
+            ColorSlot.SECONDARIO, ColorSlot.SECONDARIO_RISTORANTE -> defaults.secondary
+            ColorSlot.TERZIARIO, ColorSlot.TERZIARIO_RISTORANTE -> defaults.tertiary
+            ColorSlot.SFONDO, ColorSlot.SFONDO_RISTORANTE -> defaults.background
+            ColorSlot.ERRORE, ColorSlot.ERRORE_RISTORANTE -> defaults.error
             ColorSlot.TESTO -> contentColorFor(state.userSettings.backgroundColorArgb?.let { Color(it) } ?: defaults.background)
         }
         ColorPickerDialog(
-            title = "Colore ${slot.name.lowercase()}",
+            title = "Colore ${slot.name.lowercase().replace("_", " ")}",
             currentColor = currentColorArgb?.let { Color(it) },
             defaultColor = defaultColor,
             onDismiss = { editingSlot = null },
             onColorSelected = { color ->
                 val argb = color?.toArgb()
                 when (slot) {
-                    ColorSlot.PRIMARIO -> if (isRistorante) viewModel.setPrimaryColorRistorante(argb) else viewModel.setPrimaryColor(argb)
-                    ColorSlot.SECONDARIO -> if (isRistorante) viewModel.setSecondaryColorRistorante(argb) else viewModel.setSecondaryColor(argb)
-                    ColorSlot.TERZIARIO -> if (isRistorante) viewModel.setTertiaryColorRistorante(argb) else viewModel.setTertiaryColor(argb)
-                    ColorSlot.SFONDO -> if (isRistorante) viewModel.setBackgroundColorRistorante(argb) else viewModel.setBackgroundColor(argb)
-                    ColorSlot.ERRORE -> if (isRistorante) viewModel.setErrorColorRistorante(argb) else viewModel.setErrorColor(argb)
+                    ColorSlot.PRIMARIO -> viewModel.setPrimaryColor(argb)
+                    ColorSlot.SECONDARIO -> viewModel.setSecondaryColor(argb)
+                    ColorSlot.TERZIARIO -> viewModel.setTertiaryColor(argb)
+                    ColorSlot.SFONDO -> viewModel.setBackgroundColor(argb)
+                    ColorSlot.ERRORE -> viewModel.setErrorColor(argb)
                     ColorSlot.TESTO -> viewModel.setFontColor(argb)
+                    ColorSlot.PRIMARIO_RISTORANTE -> viewModel.setPrimaryColorRistorante(argb)
+                    ColorSlot.SECONDARIO_RISTORANTE -> viewModel.setSecondaryColorRistorante(argb)
+                    ColorSlot.TERZIARIO_RISTORANTE -> viewModel.setTertiaryColorRistorante(argb)
+                    ColorSlot.SFONDO_RISTORANTE -> viewModel.setBackgroundColorRistorante(argb)
+                    ColorSlot.ERRORE_RISTORANTE -> viewModel.setErrorColorRistorante(argb)
                 }
                 editingSlot = null
             },
