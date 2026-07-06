@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-feature android:name="android.hardware.camera.any" android:required="true" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Giroscopio per M0 (piano V2 §16): non required, i device senza sensore restano installabili
+         e degradano in modo esplicito (nessun dato di movimento, vedi GyroscopeMotionTracker). -->
+    <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
 
     <application
         android:name=".UgoCalcApplication"

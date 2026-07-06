@@ -116,8 +116,12 @@ fun CameraCaptureScreen(
             // e PhotoZoomReview. Lettura comunque fuori dal thread UI per file molto grandi.
             coroutineScope.launch(Dispatchers.Default) {
                 val bytes = file.readBytes()
+                // Letto prima della delete (§16): approssima l'istante dello scatto per
+                // interrogare il buffer del giroscopio, dato che la fotocamera di sistema non offre
+                // alcun callback nell'istante esatto.
+                val capturedAtEpochMillis = file.lastModified()
                 file.delete()
-                viewModel.onPhotoCaptured(bytes)
+                viewModel.onPhotoCaptured(bytes, capturedAtEpochMillis)
             }
         } else {
             file?.delete()
@@ -174,7 +178,7 @@ fun CameraCaptureScreen(
             val currentZoomIndex = zoomIndex
             if (currentZoomIndex != null && currentZoomIndex < images.size) {
                 PhotoZoomReview(
-                    imageBytes = images[currentZoomIndex],
+                    imageBytes = images[currentZoomIndex].bytes,
                     onRemove = {
                         viewModel.removePhoto(currentZoomIndex)
                         zoomIndex = null
@@ -183,7 +187,7 @@ fun CameraCaptureScreen(
                 )
             } else {
                 PhotoGallery(
-                    images = images,
+                    images = images.map { it.bytes },
                     onAddAnother = ::ensureCameraPermissionThenLaunch,
                     onSelect = { index -> zoomIndex = index },
                     onConfirm = { viewModel.confirmPhotos(selectedModels) },

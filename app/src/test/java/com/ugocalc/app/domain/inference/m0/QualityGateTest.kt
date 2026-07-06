@@ -62,6 +62,28 @@ class QualityGateTest {
     }
 
     @Test
+    fun `high angular velocity from the gyroscope is rejected as MOSSA_DAL_SENSORE`() {
+        val result = gate.assess(
+            listOf(PhotoQuality("a", sharpness = 200.0, brightness = 128.0, hash = 1L, motionRadPerSec = 5.0)),
+        )
+        assertEquals(PhotoRejectionReason.MOSSA_DAL_SENSORE, result.scartate.single().motivo)
+    }
+
+    @Test
+    fun `angular velocity below the threshold does not affect an otherwise good photo`() {
+        val result = gate.assess(
+            listOf(PhotoQuality("a", sharpness = 200.0, brightness = 128.0, hash = 1L, motionRadPerSec = 0.1)),
+        )
+        assertEquals(listOf("a"), result.fotoValide)
+    }
+
+    @Test
+    fun `a missing motion reading behaves exactly as before this field existed`() {
+        val result = gate.assess(listOf(sharp("a")))
+        assertEquals(listOf("a"), result.fotoValide)
+    }
+
+    @Test
     fun `if every photo is bad the result reports all-bad`() {
         val result = gate.assess(
             listOf(
