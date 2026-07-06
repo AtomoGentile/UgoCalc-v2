@@ -3,7 +3,7 @@
 **Documento tecnico di implementazione**
 
 *Data: 6 luglio 2026*
-*Stato: motore M0–M8 implementato e testato in isolamento (unit test + test end-to-end `V2AnalysisPipelineTest`). Non ancora collegato alla UI di produzione: l'app installata usa oggi la pipeline V1 (`RunVisionForModelsUseCase` → `AiOrchestrator.runVisionAnalysis`). Il collegamento è tracciato come lavoro residuo in §13.*
+*Stato: motore M0–M8 implementato e testato in isolamento (unit test + test end-to-end `V2AnalysisPipelineTest`) e collegato alla UI solo in **modalità ombra opzionale**. L'app installata mostra ancora il risultato V1 (`RunVisionForModelsUseCase` → `AiOrchestrator.runVisionAnalysis`); se abilitata, la V2 gira in background sugli stessi scatti e salva telemetria M8 senza sostituire la V1. Il passaggio a V2 come motore visibile resta lavoro residuo in §13.*
 
 Questo documento descrive l'architettura del motore di inferenza V2, **cosa di questa architettura è stato effettivamente scritto e testato nel codice**, e il ragionamento tecnico dietro ogni scelta. I riferimenti `§n` usati nel codice (`domain/inference/model/*.kt` e nei commenti sorgente) corrispondono alla numerazione dei paragrafi qui sotto.
 
@@ -99,7 +99,7 @@ flowchart TD
     M8 --> OUT[CHO + grassi + intervalli + spiegazione]
 ```
 
-**Stato di collegamento (importante per interpretare correttamente il resto del documento).** `V2AnalysisPipeline` e `V2AnalysisPipelineFactory` orchestrano M0→M8 e hanno un test end-to-end (`V2AnalysisPipelineTest`), ma **non sono ancora iniettati in nessun ViewModel dell'app**. `CameraCaptureViewModel` e `VisionResultsViewModel` chiamano tuttora la pipeline V1 (`AiOrchestrator.runVisionAnalysis`). In altre parole: il motore descritto in questo documento esiste, è testato modulo per modulo, ma **l'utente non lo sta ancora usando**. Il collegamento alla UI è il prossimo passo di sviluppo (§13), non un dettaglio implementativo minore.
+**Stato di collegamento (importante per interpretare correttamente il resto del documento).** `V2AnalysisPipeline` e `V2AnalysisPipelineFactory` orchestrano M0→M8 e hanno un test end-to-end (`V2AnalysisPipelineTest`). `CameraCaptureViewModel` continua a eseguire la V1 come flusso visibile, ma oggi può avviare anche la V2 in **modalità ombra** tramite `runV2ShadowAnalysisIfEnabled()`, se l'utente abilita lo switch in `BiasEvolutionScreen`. La shadow pipeline usa gli stessi scatti, la modalità Casa/Ristorante scelta in Home e il primo modello selezionato; eventuali errori restano confinati al background e non interrompono mai la V1. In altre parole: il motore descritto in questo documento riceve traffico reale solo quando la modalità ombra è attiva, ma **non è ancora il motore mostrato all'utente**. La promozione della V2 a flusso visibile resta lavoro residuo (§13).
 
 Nel caso normale, una volta collegato, l'intero flusso costerà **due** chiamate al modello; la terza (M5) scatterà solo su anomalia rilevata da M4.
 
@@ -108,7 +108,7 @@ Nel caso normale, una volta collegato, l'intero flusso costerà **due** chiamate
 **M0 – Controllo qualità e ingestione** `[DET]` — **implementato (logica di decisione), isolato**
 File: `domain/inference/m0/QualityGate.kt`, test in `m0/QualityGateTest.kt`.
 `QualityGate.assess(List<PhotoQuality>)` riceve metriche già calcolate (nitidezza, luminosità, hash percettivo a 64 bit) e applica soglie fisse (nitidezza minima da varianza Laplaciana, luminosità in un intervallo, distanza di Hamming ≤10 per i duplicati), producendo un `IngestionResult` con foto valide/scartate e motivo. Se tutte le foto sono scadenti, l'esito lo dichiara esplicitamente (zero chiamate consumate).
-**Cosa manca:** il calcolo reale di queste metriche da un Bitmap Android (estrazione nitidezza/luminosità/hash da una foto vera) non è stato scritto: `QualityGate` oggi riceve input già pronti, nei test e nella pipeline. Manca anche il collegamento ai metadati EXIF (§16) per diagnosticare foto mosse tramite tempo di esposizione/ISO, come inizialmente previsto: quella logica non esiste ancora.
+**Stato Android reale:** il calcolo delle metriche da JPEG è stato aggiunto in `util/PhotoQualityMetrics.kt`: luminanza sottocampionata, varianza del Laplaciano, brightness medio e hash percettivo 64 bit. Nella modalità ombra `CameraCaptureViewModel` passa a M0 anche il picco di movimento vicino allo scatto (`GyroscopeMotionTracker`) e i metadati EXIF disponibili (`extractCameraMetadata`: ISO, tempo di esposizione, focale, apertura). Rimane mancante l'uso di `CameraCharacteristics`/dimensione fisica del sensore e M0 non applica ancora soglie su ISO/esposizione: quei metadati sono diagnostici, non criteri di scarto automatico.
 
 **M1 – Percezione unificata** `[IA – chiamata 1]` — **implementato, isolato dall'app**
 File: `domain/inference/m1/UnifiedPerceptionEngine.kt`, `m1/PerceptionPrompt.kt`; contratto in `domain/inference/model/SceneGraph.kt`. Test: `m1/PerceptionPromptTest.kt`, `m1/SceneGraphReferenceCasesTest.kt`.
@@ -142,14 +142,14 @@ File: `domain/inference/m7/NutritionCalculator.kt`; test `m7/NutritionCalculator
 Calcolo puro: CHO = CHO/100g × peso/100 (stesso per grassi), con la spiegazione per alimento presa direttamente dalla catena di calcolo di M3 ("165 g perché: piatto Ø 26 cm × 45% coperto × 2,1 cm altezza × riempimento 0,8 × densità riso 0,72 g/cm³"). Gli alimenti senza abbinamento nutrizionale sono esclusi dai totali, mai stimati a zero in silenzio.
 
 **M8 – Telemetria e archivio di apprendimento** `[DET, Room]` — **parzialmente implementato: la persistenza c'è, il ciclo di auto-miglioramento non è chiuso**
-File: entity `V2AnalysisRecordEntity.kt`, DAO `V2AnalysisRecordDao.kt`, repository `V2TelemetryRepository.kt`; calcolatore `domain/inference/m8/BiasCorrectionCalculator.kt` con entity/DAO/repository `BiasCorrectionEntity/Dao/Repository`; UI di sola lettura `BiasEvolutionScreen.kt`/`BiasEvolutionViewModel.kt`. Test: `BiasCorrectionCalculatorTest.kt`, `BiasCorrectionRepositoryTest.kt`, `V2TelemetryRepositoryTest.kt`.
+File: entity `V2AnalysisRecordEntity.kt`, DAO `V2AnalysisRecordDao.kt`, repository `V2TelemetryRepository.kt`; calcolatore `domain/inference/m8/BiasCorrectionCalculator.kt` con entity/DAO/repository `BiasCorrectionEntity/Dao/Repository`; UI di trasparenza `BiasEvolutionScreen.kt`/`BiasEvolutionViewModel.kt`, che ora mostra anche statistiche d'uso dei fattori appresi. Test: `BiasCorrectionCalculatorTest.kt`, `BiasCorrectionRepositoryTest.kt`, `V2TelemetryRepositoryTest.kt`.
 
-Ciò che funziona: `V2TelemetryRepository.record()` salva l'intero esito di un'analisi (SceneGraph, stime di peso, report di verifica, report nutrizionale) in colonne JSON, con modalità di sessione, modello IA e versione di schema. `BiasCorrectionCalculator.calculate()` implementa l'algoritmo di taratura: richiede almeno 5 osservazioni, verifica che almeno l'80% concordi sul segno dello scarto stimato/reale, e in tal caso restituisce come fattore correttivo la **mediana** dei rapporti (robusta agli outlier) — altrimenti dichiara esplicitamente dati insufficienti o bias instabile, senza mai inventare un fattore. `BiasCorrectionRepository` mantiene la chiave esatta *(modalità, strategia, modello IA)*, mai un'aggregazione cross-modello, dietro un flag di consenso esplicito dell'utente (`SettingsRepository.biasDataConsentGiven`, aggiunto per motivi di privacy, non previsto nella prima stesura del piano).
+Ciò che funziona: `V2TelemetryRepository.record()` salva l'intero esito di un'analisi (SceneGraph, stime di peso, report di verifica, report nutrizionale) in colonne JSON, con modalità di sessione, modello IA e versione di schema. `BiasCorrectionCalculator.calculate()` implementa l'algoritmo di taratura: richiede almeno 5 osservazioni, verifica che almeno l'80% concordi sul segno dello scarto stimato/reale, e in tal caso restituisce come fattore correttivo la **mediana** dei rapporti (robusta agli outlier) — altrimenti dichiara esplicitamente dati insufficienti o bias instabile, senza mai inventare un fattore. `BiasCorrectionRepository` mantiene la chiave esatta *(modalità, strategia, modello IA)*, mai un'aggregazione cross-modello, dietro un flag di consenso esplicito dell'utente (`SettingsRepository.biasDataConsentGiven`, aggiunto per motivi di privacy, non previsto nella prima stesura del piano). Inoltre `getAllCorrectionsWithUsageStats()` ricostruisce dalle osservazioni M8 le statistiche di utilizzo mostrate in UI: peso stimato medio, peso vero medio, peso corretto medio, correzione media stimata, errore medio, MAE, MSE, RMSE e confronto MAE/RMSE dopo applicazione teorica del fattore.
 
 Ciò che manca per chiudere il ciclo:
 1. Non esiste alcuna UI per l'utente per registrare un peso vero o una correzione manuale collegata a un record M8: `recordGroundTruth()` non viene mai chiamato fuori dai test.
 2. Non esiste alcun trigger automatico (job periodico, evento all'apertura dell'app) che richiami `recalculate()`: il ricalcolo del bias è codice raggiungibile solo dai test.
-3. `PhysicsEngine` (M3) non chiama mai `currentFactor()`: anche un fattore calcolato non verrebbe applicato al peso stimato. `BiasEvolutionScreen` è oggi un pannello di sola trasparenza, non un anello di retroazione.
+3. `PhysicsEngine` (M3) non chiama mai `currentFactor()`: anche un fattore calcolato non verrebbe applicato al peso stimato. `BiasEvolutionScreen` è oggi un pannello di trasparenza e diagnostica (fattori + statistiche d'uso), non un anello di retroazione.
 
 Di conseguenza, il meccanismo di "il sistema impara dai propri errori e si corregge nel tempo" ha **l'infrastruttura dati e l'algoritmo pronti e testati**, ma non è ancora un ciclo automatico attivo: manca la raccolta di ground truth in UI, il trigger di ricalcolo, e il consumo del fattore in M3. Sono i tre pezzi mancanti tracciati in §13.
 
@@ -240,13 +240,13 @@ Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affid
 
 ## 8. Modalità Casa/Ristorante e calibrazione — stato reale
 
-`SessionMode.kt` (enum `CASA`/`RISTORANTE`) esiste ed è consumato dal prompt di M1 (ordine delle ancore di scala) e dalla telemetria di M8. **Non esiste però alcuna interfaccia utente per selezionarla**: nessuno switch Casa/Ristorante in nessuna schermata dell'app; ogni chiamata a M1 nei test usa un valore impostato dal chiamante, non da una scelta reale dell'utente.
+`SessionMode.kt` (enum `CASA`/`RISTORANTE`) esiste ed è consumato dal prompt di M1 (ordine delle ancore di scala) e dalla telemetria di M8. **L'interfaccia utente per selezionarla ora esiste**: in `HomeScreen` un pulsante nella top app bar alterna Casa/Ristorante, `HomeViewModel` conserva la scelta per la prossima analisi e `AnalysisSessionStore` la passa alla pipeline V2 in ombra. La V1 visibile continua però a non usare questa modalità: oggi la scelta serve alla V2 shadow e alle impostazioni colore per modalità, non al risultato mostrato all'utente.
 
 **Ancore di scala**, implementate e testate in `ScaleResolver`/`ScaleAnchorType` (ordine di priorità: stoviglia calibrata > riferimento corporeo > oggetto universale > stima generica): il resolver sceglie l'ancora di priorità più alta dichiarata da M1 nella foto corrente. **Non esiste memoria tra una sessione e l'altra**: non ci sono tabelle Room per calibrazione stoviglie personali né per riferimenti corporei personali — ogni analisi riparte da zero sull'ancoraggio, senza poter riusare una calibrazione fatta in precedenza.
 
 **Fattori di correzione appresi** (§5 M8): l'algoritmo di taratura (mediana dei rapporti peso-vero/peso-stimato, soglia minima di campioni, verifica di concordanza del segno) è implementato e testato in isolamento in `BiasCorrectionCalculator`, con chiave sempre esatta *(modalità, strategia, modello IA)* — mai un'aggregazione cross-modello, perché il bias nasce nella percezione (M1) ed è specifico di quel modello: applicare senza distinzione il fattore calcolato su un modello a una lettura fatta da un altro andrebbe nella direzione sbagliata. Ma **il fattore non viene mai consumato da M3** (§5 M3): l'infrastruttura di calcolo esiste, il ciclo di retroazione automatico no.
 
-**In sintesi, delle quattro componenti previste per §8 — switch di modalità in UI, calibrazione stoviglie, riferimenti corporei, applicazione automatica del bias — nessuna è oggi operativa per l'utente finale.** Esiste l'infrastruttura dati e algoritmica sottostante (enum, resolver, calcolatore di bias, DB); mancano l'interfaccia utente e i tre collegamenti che chiuderebbero il ciclo (§13).
+**In sintesi, delle quattro componenti previste per §8, una è operativa in UI e tre restano mancanti.** Lo switch Casa/Ristorante esiste in Home ed è propagato alla V2 in ombra; calibrazione persistente delle stoviglie, riferimenti corporei persistenti e applicazione automatica del bias dentro M3 non sono ancora implementati. Esiste l'infrastruttura dati e algoritmica sottostante (enum, resolver, calcolatore di bias, DB); il ciclo completo richiede ancora ground truth da UI, ricalcolo automatico e consumo del fattore (§13).
 
 ## 9. Rischi e colli di bottiglia
 
@@ -254,7 +254,7 @@ Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affid
 |---|---|---|
 | **Alta** | L'errore si compone tra i moduli e la V2 rende peggio della V1 | Percezione unificata in un'unica chiamata (M1); **il confronto sul benchmark previsto (§10) non è ancora stato eseguito** — nessun dato reale a supporto ancora raccolto |
 | **Alta** | Assenza di scala affidabile, soprattutto al ristorante | Ancore corporee e universali come prima linea in `ScaleResolver`; in assenza totale, confidenza dichiarata bassa (implementato e testato) |
-| **Alta** | Il motore M0–M8 è pronto ma non collegato alla UI: il lavoro rischia di restare inutilizzato | Collegamento a `CameraCaptureViewModel`/`VisionResultsViewModel` è il prossimo passo tracciato in §13, non un dettaglio rimandabile indefinitamente |
+| **Alta** | Il motore M0–M8 gira solo in modalità ombra opzionale: senza promozione a flusso visibile e benchmark resta non validato | Shadow wiring in `CameraCaptureViewModel` già presente; promozione a risultato utente e dashboard benchmark restano il prossimo passo tracciato in §13 |
 | Media | Tabella densità incompleta o imprecisa | File dati versionato (`PhysicalData.kt`), correggibile senza toccare la logica di calcolo |
 | Media | Il modello non rispetta il formato atteso | Validazione rigida dello schema, fallback su stima diretta stile V1 (implementato in M1/M5) |
 | Media | Il bias calcolato non viene mai applicato, quindi il sistema non migliora usandolo | Vedi §5 M8/§8: i tre collegamenti mancanti sono in cima alla lista di §13 |
@@ -265,21 +265,21 @@ Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affid
 
 - **M1 resta il collo di bottiglia dell'accuratezza**: tutto ciò che sta a valle è deterministico, quindi l'errore residuo del sistema è dominato dalla qualità della percezione.
 - **La tabella di densità è il collo di bottiglia di M3**: dati in `PhysicalData.kt`, migliorabili senza toccare il codice di calcolo.
-- **Il collegamento mancante è oggi il collo di bottiglia più concreto**: un motore testato che non riceve traffico reale non genera i dati (ground truth, bias, benchmark) di cui ha bisogno per migliorare.
+- **Il collegamento resta il collo di bottiglia più concreto**: la modalità ombra dà alla V2 un primo traffico reale, ma senza ground truth, benchmark e promozione a flusso visibile il sistema non può ancora dimostrare né sfruttare il miglioramento.
 
 ## 10. Piano di validazione — non ancora eseguito
 
-Il benchmark pesato (30–50 pasti reali con peso vero registrato, in proporzione realistica casa/ristorante) è il prerequisito per qualunque confronto quantitativo V1/V2, ed è tuttora **da costruire**: non esiste nel repository alcun file relativo a un set di benchmark, né una modalità ombra che esegua la V2 in parallelo alla V1 su casi reali.
+Il benchmark pesato (30–50 pasti reali con peso vero registrato, in proporzione realistica casa/ristorante) è il prerequisito per qualunque confronto quantitativo V1/V2, ed è tuttora **da costruire**: non esiste nel repository alcun file relativo a un set di benchmark né una UI per registrare il peso vero dei pasti. La modalità ombra che esegue la V2 in parallelo alla V1 ora esiste, ma è solo un canale di raccolta telemetria: senza ground truth e senza dashboard di confronto non produce ancora una metrica benchmark utilizzabile.
 
 Piano previsto, in ordine:
 
 - **Fase 0** — costruzione del benchmark + raccolta telemetria sulla V1 attuale; nessun cambiamento visibile in app.
 - **Fase 1** — collegamento della pipeline V2 alla UI (§13), con la V1 ancora attiva.
-- **Fase 2** — V2 attiva **in ombra**: l'app mostra ancora la V1 ma registra anche l'esito V2 su M8, per confronto diretto sugli stessi pasti reali.
+- **Fase 2** — V2 attiva **in ombra**: implementata come opzione in `BiasEvolutionScreen`; l'app mostra ancora la V1 ma può registrare anche l'esito V2 su M8. Manca ancora il collegamento al ground truth e a una vista di confronto benchmark.
 - **Fase 3** — passaggio alla V2 **solo se supera la V1 sul benchmark**; la V1 resta disponibile come rete di sicurezza.
 - **Fase 4** — chiusura del ciclo di bias (§5 M8, §8) e raffinamento continuo di tabelle fisiche.
 
-Nessuna di queste fasi è iniziata: il lavoro fatto finora corrisponde alla costruzione del motore che queste fasi dovranno validare.
+La Fase 2 è iniziata tecnicamente con la modalità ombra opzionale, ma il benchmark resta non eseguito: il lavoro fatto finora corrisponde alla costruzione del motore, al primo canale di telemetria reale e alla UI di trasparenza, non ancora a una validazione quantitativa V1/V2.
 
 ## 11. Piano di test — stato attuale
 
@@ -301,19 +301,19 @@ Nessuna di queste fasi è iniziata: il lavoro fatto finora corrisponde alla cost
 - **Diagnostiche**: errore percentuale medio sul peso per alimento, scomposto per strategia e per qualità dell'ancora di scala; percentuale di alimenti non rilevati o inventati.
 - **Di sistema**: calibrazione della confidenza; copertura degli intervalli; frequenza di attivazione di M5; latenza e costo per analisi rispetto alla V1.
 
-Queste metriche sono definite come obiettivo di misurazione per il benchmark di §10, che non è ancora stato costruito: **nessuna di queste metriche ha oggi un valore reale misurato per la V2**. Vanno riportate separatamente per Casa e Ristorante quando il benchmark esisterà.
+Queste metriche sono definite come obiettivo di misurazione per il benchmark di §10, che non è ancora stato costruito: **nessuna metrica globale V1/V2 ha oggi un valore reale validato**. Esiste però una misurazione locale sui segmenti di bias già calcolati: `BiasEvolutionScreen` mostra errore medio, MAE, MSE, RMSE e correzione stimata per ciascun fattore appreso, derivandoli dalle osservazioni M8 con ground truth. Questi numeri spiegano l'uso di un fattore, ma non sostituiscono il benchmark pesato casa/ristorante.
 
 ## 13. Lavoro residuo (ordinato per impatto)
 
 Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sotto ci sono i collegamenti e le implementazioni mancanti già individuati leggendo il codice attuale, necessari perché il motore descritto nei §5–§8 diventi qualcosa che l'utente usa davvero.
 
-1. **Collegare `V2AnalysisPipeline` alla UI** (`CameraCaptureViewModel`/`VisionResultsViewModel`), con uno switch esplicito Casa/Ristorante a inizio sessione. Finché questo non è fatto, tutto il resto del motore è codice testato ma inerte.
+1. **Promuovere `V2AnalysisPipeline` da modalità ombra a flusso visibile** (`CameraCaptureViewModel`/`VisionResultsViewModel`). Il collegamento shadow e lo switch Casa/Ristorante esistono; manca ancora l'uso della V2 come risultato mostrato all'utente, con gestione UI degli errori e fallback V1 esplicito.
 2. **Regola di sicurezza sull'ambiguità residua in M4**: dopo un tentativo di M5, un'identificazione ancora ambigua tra alternative con CHO diverso deve selezionare l'alternativa a CHO più alto e segnalarlo esplicitamente in UI come stima cautelativa da confermare. Priorità alta per un'app che informa dosi di insulina: sottostimare i CHO per eccesso di fiducia è l'errore peggiore possibile.
-3. **Chiudere il ciclo di bias (§5 M8, §8)**: UI per registrare ground truth (peso vero o correzione manuale) collegata a un record M8; trigger automatico di ricalcolo (job periodico o all'apertura dell'app); consumo del fattore calcolato dentro `PhysicsEngine`. Sono tre pezzi separati, ciascuno piccolo, ma nessuno dei tre esiste oggi.
+3. **Chiudere il ciclo di bias (§5 M8, §8)**: UI per registrare ground truth (peso vero o correzione manuale) collegata a un record M8; trigger automatico di ricalcolo (job periodico o all'apertura dell'app); consumo del fattore calcolato dentro `PhysicsEngine`. La trasparenza UI e le statistiche d'uso dei fattori esistono già, ma non applicano ancora alcuna correzione al calcolo successivo.
 4. **Calibrazione persistente delle stoviglie e dei riferimenti corporei** (§8): tabelle Room dedicate, oggi inesistenti, così che una calibrazione fatta una volta non vada persa a ogni sessione.
 5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti.
 6. **Ripartizione da ricetta per la strategia Composto** (§5 M3, §6): oggi è un blocco geometrico rietichettato; una vera ripartizione tra ingredienti occlusi richiede una fonte di ricette (locale o online) non ancora progettata.
-7. **Metadati camera per M0** (§16): oggi M0 non riceve dati EXIF/`CameraCharacteristics`; il collegamento serve a diagnosticare foto mosse o scattate con parametri anomali prima di consumare una chiamata IA.
+7. **Metadati camera per M0** (§16): EXIF e movimento da giroscopio arrivano già alla V2 in ombra; mancano `CameraCharacteristics`, dimensione fisica del sensore e soglie calibrate su ISO/esposizione per usare questi dati in modo più robusto.
 8. **Export/import del record M8** (§17): oggi l'export copre cronologia V1, tabelle nutrizionali e fattori di bias, ma non `v2_analysis_records` — un cambio di telefono perderebbe lo storico di analisi V2 con ground truth.
 9. **Changelog per-versione-modulo nelle release GitHub** (§15): il corpo della release oggi non dichiara quali versioni di motore/prompt/tabella densità sono cambiate.
 
@@ -328,10 +328,10 @@ Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché
 | Tassonomia alimenti | Sei categorie definite dalla strategia di calcolo, non dalla geometria — implementata (M2/M3) |
 | Verifica | Sempre attiva e deterministica; il modello interviene solo sugli alimenti segnalati — implementata (M4/M5), manca solo la regola di sicurezza su ambiguità residua |
 | Motore nutrizionale | Quello della V1, già solido, senza riscritture — implementato (M6) |
-| Collegamento alla UI | **Non ancora fatto** — priorità più alta del lavoro residuo (§13) |
+| Collegamento alla UI | Fatto solo in **modalità ombra opzionale**: V1 resta il flusso visibile; promozione della V2 a risultato utente ancora mancante (§13) |
 | Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa — implementata la logica (M3), manca la persistenza delle calibrazioni |
-| Modalità di sessione | Pensata come selezione esplicita dell'utente, mai dedotta dall'immagine — enum e prompt pronti, UI mancante |
-| Evoluzione del sistema | Algoritmo di taratura bias pronto e testato (M8); il ciclo automatico (raccolta → ricalcolo → applicazione) non è ancora chiuso |
+| Modalità di sessione | Selezione esplicita in Home, mai dedotta dall'immagine — usata dalla V2 in ombra e dai colori per modalità; V1 visibile non la consuma |
+| Evoluzione del sistema | Algoritmo di taratura bias pronto e testato (M8), UI di trasparenza con statistiche d'uso pronta; il ciclo automatico (raccolta → ricalcolo → applicazione) non è ancora chiuso |
 | Prerequisito di validazione | Benchmark pesato (casa + ristorante) — da costruire prima di qualunque decisione su una release in produzione |
 
 ---
@@ -346,11 +346,11 @@ Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché
 
 ## 16. Metadati del dispositivo per il calcolo del volume
 
-**Stato: minimo, molto meno di quanto inizialmente previsto.** File: `ui/camera/CameraCaptureScreen.kt` (funzioni private `exifRotationDegrees`, `decodeUprightBitmap`).
+**Stato: parziale.** File: `ui/camera/CameraCaptureScreen.kt` (rotazione EXIF per anteprima), `util/PhotoQualityMetrics.kt` (metriche immagine + EXIF), `util/GyroscopeMotionTracker.kt`/`MotionSampleBuffer.kt` (movimento vicino allo scatto).
 
-L'unico uso reale di EXIF oggi è la lettura del tag `TAG_ORIENTATION` per ruotare correttamente l'anteprima della foto in galleria/zoom — i byte JPEG inviati all'IA non vengono mai toccati. **Non esiste alcuna classe `FotoMetadata`** nel repository: nessuna estrazione di lunghezza focale, apertura, tempo di esposizione, ISO, o dimensione fisica del sensore tramite `CameraCharacteristics`. Di conseguenza M0 non usa questi dati per abbassare la confidenza su foto mosse o esposte male, e M8 non li ha disponibili per diagnostica di benchmark.
+EXIF è usato in due modi: `TAG_ORIENTATION` ruota correttamente l'anteprima della foto in galleria/zoom, mentre `extractCameraMetadata()` legge ISO, tempo di esposizione, focale e apertura dai byte JPEG passati alla V2 in ombra. Il movimento vicino allo scatto arriva da `GyroscopeMotionTracker`, che registra un buffer circolare di velocità angolare e lo interroga con il timestamp approssimato del file. **Non esiste ancora una classe `FotoMetadata` completa né l'uso di `CameraCharacteristics`** per dimensione fisica sensore/dati ottici più affidabili. Di conseguenza M0 può scartare per nitidezza, luminosità, duplicati e movimento, ma non usa ancora soglie calibrate su ISO/esposizione; quei campi restano diagnostici.
 
-Motivazione per farlo comunque (perché resta un'idea valida, solo non ancora costruita): calcolare una dimensione reale in centimetri da una foto 2D richiede comunque un'ancora nota o una distanza nota — questi metadati da soli non risolvono il problema della scala, ma migliorerebbero la diagnosi di foto inutilizzabili in M0 prima di consumare una chiamata IA. Tracciato in §13.
+Motivazione per completarlo: calcolare una dimensione reale in centimetri da una foto 2D richiede comunque un'ancora nota o una distanza nota — questi metadati da soli non risolvono il problema della scala, ma migliorano la diagnosi di foto inutilizzabili in M0 prima di consumare una chiamata IA. La parte già fatta copre qualità immagine, movimento ed EXIF base; la parte residua è tracciata in §13.
 
 ## 17. Import/export dei dati utente
 
@@ -390,6 +390,27 @@ Interfaccia visiva per la selezione e personalizzazione della modalità Casa/Ris
 - Colori modalità Casa indipendenti da colori modalità Ristorante (nessun vincolo di sincronizzazione)
 - Se l'utente cambia la modalità in HomeScreen mentre è dentro Impostazioni > Accessibilità, la sezione di colori visualizzata si aggiorna immediatamente
 - Default: se nessun colore personalizzato è impostato, usa il default del tema corrente (chiaro/scuro)
+
+
+---
+
+## 19. Changelog bias - statistiche d'uso dei fattori
+
+**Data: 6 luglio 2026 - Implementato in commit `d801c17`**
+
+La schermata `BIAS ed evoluzione del comportamento` non mostra più soltanto il fattore appreso e il numero di correzioni: per ogni segmento *(modalità, strategia, modello IA)* calcolato da `BiasCorrectionRepository` espone anche le statistiche derivate dalle osservazioni M8 con ground truth.
+
+**Repository:**
+- `BiasCorrectionRepository.getAllCorrectionsWithUsageStats()` restituisce `BiasCorrectionWithUsageStats`.
+- Le osservazioni sono ricostruite dai record M8 filtrando esattamente per modalità, strategia e modello IA, senza cambiare schema Room e senza aggregazioni cross-modello.
+- Le metriche calcolate sono peso stimato medio, peso vero medio, peso corretto medio, correzione media stimata, errore medio, errore assoluto medio, errore quadratico medio, RMSE, più errore medio/MAE/RMSE dopo applicazione teorica del fattore.
+
+**UI:**
+- `BiasEvolutionScreen` mostra un blocco `Statistiche d'uso` sotto ogni fattore appreso.
+- La riga `Correzione stimata` mostra quanti grammi medi il fattore aggiungerebbe o toglierebbe alla stima del segmento.
+- La riga `Dopo correzione stimata` rende visibile se il fattore riduce davvero errore medio, MAE e RMSE sulle osservazioni raccolte.
+
+**Limite importante:** queste statistiche sono diagnostica locale del fattore già calcolato, non benchmark globale V1/V2. Non chiudono da sole il ciclo di auto-miglioramento: restano mancanti UI per ground truth, trigger automatico di `recalculate()` e applicazione del fattore in M3.
 
 ---
 
