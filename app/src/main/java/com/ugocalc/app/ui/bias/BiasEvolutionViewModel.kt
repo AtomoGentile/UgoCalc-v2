@@ -2,7 +2,7 @@ package com.ugocalc.app.ui.bias
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
+import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -17,7 +17,7 @@ data class BiasEvolutionUiState(
     val loading: Boolean = true,
     val consentGiven: Boolean = false,
     val v2ShadowModeEnabled: Boolean = false,
-    val corrections: List<BiasCorrectionEntity> = emptyList(),
+    val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
 )
 
 /**
@@ -46,7 +46,7 @@ class BiasEvolutionViewModel @Inject constructor(
 
     private fun refresh() {
         viewModelScope.launch {
-            val corrections = biasCorrectionRepository.getAllCorrections()
+            val corrections = biasCorrectionRepository.getAllCorrectionsWithUsageStats()
             _uiState.value = _uiState.value.copy(corrections = corrections, loading = false)
         }
     }

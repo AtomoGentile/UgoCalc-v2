@@ -24,7 +24,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
+import com.ugocalc.app.data.repository.BiasCorrectionUsageStats
+import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
@@ -120,21 +121,68 @@ fun BiasEvolutionScreen(onBack: () -> Unit, viewModel: BiasEvolutionViewModel = 
 }
 
 @Composable
-private fun BiasCorrectionRow(correction: BiasCorrectionEntity) {
+private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats) {
+    val correction = row.correction
     val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                "${sessionModeLabel(correction.sessionMode)} · ${strategyLabel(correction.strategy)}",
+                "${sessionModeLabel(correction.sessionMode)} - ${strategyLabel(correction.strategy)}",
                 fontWeight = FontWeight.Bold,
             )
             Text("Modello: ${correction.aiModelId}", style = MaterialTheme.typography.bodySmall)
             Text(
-                "Fattore ${"%.2f".format(correction.factor)}× su ${correction.sampleCount} correzioni · aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
+                "Fattore ${formatFactor(correction.factor)}x su ${correction.sampleCount} correzioni - aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
                 style = MaterialTheme.typography.bodySmall,
             )
+            row.usageStats?.let { stats ->
+                BiasUsageStatsBlock(stats)
+            }
         }
     }
+}
+
+@Composable
+private fun BiasUsageStatsBlock(stats: BiasCorrectionUsageStats) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Text(
+            "Statistiche d'uso (${stats.observationCount} osservazioni)",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Text(
+            "Pesi medi: stimato ${formatGrams(stats.meanEstimatedWeightG)} -> corretto ${formatGrams(stats.meanCorrectedWeightG)} (vero ${formatGrams(stats.meanGroundTruthWeightG)})",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            "Correzione stimata: ${formatSignedGrams(stats.meanAppliedCorrectionG)} per alimento",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            "Errore medio: ${formatSignedGrams(stats.meanErrorG)} - MAE ${formatGrams(stats.meanAbsoluteErrorG)}",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            "Errore quadratico medio: ${formatNumber(stats.meanSquaredErrorG2)} g^2 - RMSE ${formatGrams(stats.rootMeanSquaredErrorG)}",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        Text(
+            "Dopo correzione stimata: errore medio ${formatSignedGrams(stats.correctedMeanErrorG)} - MAE ${formatGrams(stats.correctedMeanAbsoluteErrorG)} - RMSE ${formatGrams(stats.correctedRootMeanSquaredErrorG)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = UgoGrey,
+        )
+    }
+}
+
+private fun formatFactor(value: Double) = String.format(Locale.ITALIAN, "%.2f", value)
+
+private fun formatNumber(value: Double) = String.format(Locale.ITALIAN, "%.1f", value)
+
+private fun formatGrams(value: Double) = "${formatNumber(value)} g"
+
+private fun formatSignedGrams(value: Double): String {
+    val prefix = if (value >= 0.0) "+" else ""
+    return "$prefix${formatGrams(value)}"
 }
 
 private fun sessionModeLabel(raw: String) = when (raw) {

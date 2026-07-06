@@ -166,4 +166,32 @@ class BiasCorrectionRepositoryTest {
         assertTrue(biasDao.saved.isEmpty())
         assertNull(repository.currentFactor(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, consentGiven = false))
     }
+
+    @Test
+    fun `usage stats expose raw errors and estimated correction impact`() = runBlocking {
+        val analysisDao = FakeV2AnalysisRecordDao()
+        val biasDao = FakeBiasCorrectionDao()
+        val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
+
+        listOf(120.0, 120.0, 120.0, 120.0, 120.0).forEach { vero ->
+            recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to vero))
+        }
+        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, consentGiven = true)
+
+        val row = repository.getAllCorrectionsWithUsageStats().single()
+        val stats = row.usageStats!!
+
+        assertEquals(5, stats.observationCount)
+        assertEquals(100.0, stats.meanEstimatedWeightG, 1e-9)
+        assertEquals(120.0, stats.meanGroundTruthWeightG, 1e-9)
+        assertEquals(120.0, stats.meanCorrectedWeightG, 1e-9)
+        assertEquals(20.0, stats.meanAppliedCorrectionG, 1e-9)
+        assertEquals(-20.0, stats.meanErrorG, 1e-9)
+        assertEquals(20.0, stats.meanAbsoluteErrorG, 1e-9)
+        assertEquals(400.0, stats.meanSquaredErrorG2, 1e-9)
+        assertEquals(20.0, stats.rootMeanSquaredErrorG, 1e-9)
+        assertEquals(0.0, stats.correctedMeanErrorG, 1e-9)
+        assertEquals(0.0, stats.correctedMeanAbsoluteErrorG, 1e-9)
+        assertEquals(0.0, stats.correctedRootMeanSquaredErrorG, 1e-9)
+    }
 }

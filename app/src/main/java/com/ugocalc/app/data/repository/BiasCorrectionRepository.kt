@@ -11,6 +11,9 @@ import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
+import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.sqrt
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -43,6 +46,14 @@ class BiasCorrectionRepository @Inject constructor(
      */
     suspend fun getAllCorrections(): List<BiasCorrectionEntity> = biasCorrectionDao.getAll()
 
+    suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> =
+        getAllCorrections().map { correction ->
+            BiasCorrectionWithUsageStats(
+                correction = correction,
+                usageStats = usageStatsFor(correction),
+            )
+        }
+
     /** Fattore corrente per il segmento, se esiste (§8: consumato da M3 nella catena di calcolo). Null se il consenso non è dato, dati insufficienti o bias instabile. */
     suspend fun currentFactor(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, consentGiven: Boolean): Double? {
         if (!consentGiven) return null
@@ -52,14 +63,7 @@ class BiasCorrectionRepository @Inject constructor(
     /** Ricalcola il fattore per (sessionMode, strategy, aiModelId) dalle correzioni accumulate in M8. Va chiamato a ogni nuova correzione o come job periodico (§8); no-op se il consenso non è dato. */
     suspend fun recalculate(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, consentGiven: Boolean) {
         if (!consentGiven) return
-        val records = analysisDao.getWithGroundTruth(sessionMode.name, aiModelId)
-        val observations = records.flatMap { record ->
-            val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
-            val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-            estimates.filter { it.strategia == strategy }.mapNotNull { estimate ->
-                groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
-            }
-        }
+        val observations = observationsFor(sessionMode.name, strategy.name, aiModelId)
 
         val result = BiasCorrectionCalculator.calculate(observations)
         if (result is BiasCorrectionResult.Applicabile) {
@@ -76,4 +80,65 @@ class BiasCorrectionRepository @Inject constructor(
         }
         // Dati insufficienti o bias instabile (§8): nessun fattore salvato, M3 resta sulla stima grezza.
     }
+
+    private suspend fun usageStatsFor(correction: BiasCorrectionEntity): BiasCorrectionUsageStats? {
+        val observations = observationsFor(correction.sessionMode, correction.strategy, correction.aiModelId)
+        if (observations.isEmpty()) return null
+
+        val rawErrors = observations.map { it.pesoStimatoG - it.pesoVeroG }
+        val correctedEstimates = observations.map { it.pesoStimatoG * correction.factor }
+        val correctedErrors = correctedEstimates.zip(observations).map { (corrected, observation) ->
+            corrected - observation.pesoVeroG
+        }
+        val squaredErrors = rawErrors.map { it.pow(2) }
+        val correctedSquaredErrors = correctedErrors.map { it.pow(2) }
+
+        return BiasCorrectionUsageStats(
+            observationCount = observations.size,
+            meanEstimatedWeightG = observations.map { it.pesoStimatoG }.average(),
+            meanGroundTruthWeightG = observations.map { it.pesoVeroG }.average(),
+            meanCorrectedWeightG = correctedEstimates.average(),
+            meanAppliedCorrectionG = correctedEstimates.zip(observations).map { (corrected, observation) ->
+                corrected - observation.pesoStimatoG
+            }.average(),
+            meanErrorG = rawErrors.average(),
+            meanAbsoluteErrorG = rawErrors.map { abs(it) }.average(),
+            meanSquaredErrorG2 = squaredErrors.average(),
+            rootMeanSquaredErrorG = sqrt(squaredErrors.average()),
+            correctedMeanErrorG = correctedErrors.average(),
+            correctedMeanAbsoluteErrorG = correctedErrors.map { abs(it) }.average(),
+            correctedRootMeanSquaredErrorG = sqrt(correctedSquaredErrors.average()),
+        )
+    }
+
+    private suspend fun observationsFor(sessionMode: String, strategy: String, aiModelId: String): List<BiasObservation> {
+        val records = analysisDao.getWithGroundTruth(sessionMode, aiModelId)
+        return records.flatMap { record ->
+            val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+            val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
+            estimates.filter { it.strategia.name == strategy }.mapNotNull { estimate ->
+                groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
+            }
+        }
+    }
 }
+
+data class BiasCorrectionWithUsageStats(
+    val correction: BiasCorrectionEntity,
+    val usageStats: BiasCorrectionUsageStats?,
+)
+
+data class BiasCorrectionUsageStats(
+    val observationCount: Int,
+    val meanEstimatedWeightG: Double,
+    val meanGroundTruthWeightG: Double,
+    val meanCorrectedWeightG: Double,
+    val meanAppliedCorrectionG: Double,
+    val meanErrorG: Double,
+    val meanAbsoluteErrorG: Double,
+    val meanSquaredErrorG2: Double,
+    val rootMeanSquaredErrorG: Double,
+    val correctedMeanErrorG: Double,
+    val correctedMeanAbsoluteErrorG: Double,
+    val correctedRootMeanSquaredErrorG: Double,
+)
