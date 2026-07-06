@@ -80,6 +80,35 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/**
+ * Aggiunge la categoria alimentare alla chiave del bias (§8, §14): pasta e riso condividevano la
+ * stessa strategia `DISTESA_SUL_PIATTO`, quindi un fattore tarato solo sulla pasta finiva applicato
+ * anche al riso. La tabella viene ricreata da zero invece di migrata riga per riga: i fattori già
+ * salvati mescolavano categorie diverse (dato mancante prima d'ora), quindi non sono recuperabili
+ * correttamente — vengono ricalcolati da [com.ugocalc.app.data.repository.BiasCorrectionRepository.recalculateAll]
+ * al prossimo avvio in foreground, dalle stesse osservazioni con ground truth già in `v2_analysis_records`,
+ * questa volta segmentate anche per categoria.
+ */
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS bias_corrections")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `bias_corrections` (
+                `sessionMode` TEXT NOT NULL,
+                `strategy` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `foodCategory` TEXT NOT NULL,
+                `factor` REAL NOT NULL,
+                `sampleCount` INTEGER NOT NULL,
+                `updatedAtEpochMillis` INTEGER NOT NULL,
+                PRIMARY KEY(`sessionMode`, `strategy`, `aiModelId`, `foodCategory`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /** Benchmark pesato V1 vs V2 (§10, §13 punto 5): nuova tabella `benchmark_meals` più il collegamento `sessionId` su `v2_analysis_records` (vedi BenchmarkMealEntity). */
 val MIGRATION_6_7 = object : Migration(6, 7) {
     override fun migrate(db: SupportSQLiteDatabase) {
