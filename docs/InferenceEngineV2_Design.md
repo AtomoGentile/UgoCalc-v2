@@ -1,93 +1,52 @@
 # UgoCalc – Inference Engine V2
 
-**Documento di progetto tecnico completo**
+**Documento tecnico di implementazione**
 
-*Proprietà di Simone, owner del progetto — Data: 3 luglio 2026*
-*Stato: progettazione approvata, sviluppo non ancora iniziato*
+*Data: 6 luglio 2026*
+*Stato: motore M0–M8 implementato e testato in isolamento (unit test + test end-to-end `V2AnalysisPipelineTest`). Non ancora collegato alla UI di produzione: l'app installata usa oggi la pipeline V1 (`RunVisionForModelsUseCase` → `AiOrchestrator.runVisionAnalysis`). Il collegamento è tracciato come lavoro residuo in §13.*
 
-Questo documento risponde alla "Technical Design Request – UgoCalc V2" e **sostituisce integralmente il documento "UC-OS – Unified System Design"**, che viene scartato nelle sue parti non fondate (vedi Parte 0). È la versione estesa e spiegata del piano ufficiale `docs/InferenceEngineV2.doc`, di cui **mantiene la numerazione dei paragrafi** (§1–§14): i riferimenti `§n` già presenti nel codice (`domain/inference/model/*.kt`) valgono per entrambi i documenti.
+Questo documento descrive l'architettura del motore di inferenza V2, **cosa di questa architettura è stato effettivamente scritto e testato nel codice**, e il ragionamento tecnico dietro ogni scelta. I riferimenti `§n` usati nel codice (`domain/inference/model/*.kt` e nei commenti sorgente) corrispondono alla numerazione dei paragrafi qui sotto.
 
----
-
-## Parte 0 — Revisione critica delle proposte precedenti
-
-La richiesta impone di criticare ogni scelta, non di confermarla. Qui sotto il verdetto sulle due proposte ricevute: la pipeline a 7 stadi della Design Request e il documento "UC-OS".
-
-### 0.1 Critica della pipeline proposta (Design Request)
-
-La pipeline `Scene Reconstruction → Food Detection → Food Classification → Quantity Estimation → Verification → Nutrition Engine` è concettualmente giusta ma operativamente sbagliata in tre punti, e viene quindi **riprogettata**:
-
-1. **Troppi passaggi IA sequenziali.** Scene Reconstruction, Food Detection e Food Classification condividono lo stesso input (le foto). Separarli in tre chiamate distinte triplica costo e latenza e — peggio — **compone gli errori**: un errore di ricostruzione scena al passo 1 avvelena tutti i passi successivi senza possibilità di recupero, perché i passi a valle non vedono più le foto. Un modello multimodale moderno svolge le tre percezioni meglio *insieme* che separate. La V2 li accorpa in **una sola chiamata di percezione (M1)** che produce un output strutturato a tre sezioni. La modularità richiesta si preserva dove serve davvero: nei **contratti dati**, non nel numero di chiamate.
-
-2. **"Quantity Estimation" come modulo IA.** Un LLM non è affidabile in aritmetica né mantiene coerenza numerica tra stime multiple. Chiedergli i grammi significa chiedergli la cosa che sa fare peggio. Nella V2 la stima della quantità è **codice deterministico Kotlin (M3)**: l'IA fornisce dimensioni, conteggi e frazioni di riempimento; le formule fanno il resto. Questo è il singolo cambiamento con il maggior impatto atteso sull'errore.
-
-3. **Categorie per geometria invece che per metodo di calcolo.** Le sei categorie ipotizzate (solidi regolari, solidi irregolari, granulari, liquidi, stratificati, composti) descrivono *come un alimento appare*. Ma la categoria serve a una cosa sola: scegliere *come calcolarne il peso*. "Granulare" e "solido irregolare" (riso e insalata) si stimano allo stesso modo (superficie × altezza × densità), mentre "solido regolare" mescola cose contabili (una mela) e cose misurabili (una fetta di torta) che richiedono metodi diversi. La tassonomia viene quindi **ridefinita per strategia di stima** (§6).
-
-### 0.2 Verdetto sul documento "UC-OS"
-
-Il documento UC-OS contiene alcune idee giuste sepolte sotto un'inflazione concettuale che lo rende inutilizzabile come piano tecnico. Errori principali:
-
-- **Grandiosità senza contenuto.** "Sistema operativo di inferenza nutrizionale multimodale", "scheduling", "routing", "cost control": è un'app Android a utente singolo che fa 2–3 chiamate API per analisi. Non c'è nulla da schedulare né da orchestrare. Il "UC-OS Core" non ha responsabilità definibili e viene scartato.
-- **Nessun contratto dati.** La Design Request chiedeva esplicitamente il formato dei dati tra i moduli; UC-OS mostra due frammenti JSON di telemetria e nient'altro. I contratti sono il cuore di un sistema modulare: qui sono specificati per intero (§7) e già implementati in Kotlin.
-- **Numeri di confidenza inventati.** "Alta ≈ 90–95% correttezza" dichiarato prima che esista un benchmark è un numero di fantasia. La calibrazione della confidenza è una *metrica da misurare* (§12), non una proprietà da dichiarare.
-- **Multi-model routing confuso.** "Claude Opus → architettura, Claude Fable → sviluppo" mescola gli strumenti di *sviluppo del progetto* con l'architettura *runtime dell'app*. Nel runtime esiste una sola cosa: provider intercambiabili dietro contratti JSON neutrali (§3), come già nella V1.
-- **Evolution Controller come modulo che riscrive l'architettura da solo.** Un sistema che "propone modifiche e promuove solo miglioramenti verificati" al livello di prompt, strategie o modelli è un progetto di ricerca, non una feature per un'app a utente singolo: cambiare un prompt o un modello resta una decisione *umana*, informata dal benchmark (§10).
-
-Ma **l'ambizione di fondo di UC-OS — "il sistema impara dai propri errori e si corregge nel tempo" — è corretta e va tenuta**, non buttata via insieme all'inflazione del resto del documento. Va solo distinta con precisione da cosa NON deve essere automatico:
-
-- **Ciò che il sistema tara da solo, in continuo, senza intervento umano**: i fattori di correzione per bias stabili (§8) e la calibrazione della confidenza si ricalcolano automaticamente ogni volta che arriva nuovo ground truth in M8, e si applicano automaticamente al calcolo successivo — nessuna decisione dell'owner nel loop. Questo È il "self-improvement" reale: l'app diventa più precisa mano a mano che viene usata, senza rilasci di codice.
-- **Ciò che resta segnalato ma non agito in automatico**: il sistema rileva da solo un peggioramento di una metrica benchmark tra due versioni di prompt/motore e lo mostra come avviso (§13); ma cambiare prompt, motore o modello resta sempre una scelta dell'owner.
-
-Il confine non è "automatico vs manuale" in blocco, ma **"tarare parametri esistenti" (automatico) vs "cambiare l'architettura" (manuale)** — la stessa distinzione che un sistema di controllo fa tra un anello di retroazione e un cambio di algoritmo.
-
-Idee di UC-OS **salvate** (ridimensionate al giusto livello): telemetria di ogni inferenza (M8), ground truth a livelli Gold/Silver/Bronze (§9), fattori di correzione e calibrazione che si aggiornano da soli da bias stabili (§8, §13), rilevamento automatico di regressioni tra versioni (§13), shadow mode (§10), versionamento di prompt/tabelle/modello nel record di analisi (§7), benchmark fisso come giudice di ogni versione (§10).
-
-### 0.3 Tabella di mappatura
-
-| Proposta originale | Esito | Motivo |
-|---|---|---|
-| Scene Reconstruction / Detection / Classification separati | **Accorpati in M1** | Stesso input; separarli compone errori e triplica i costi |
-| Quantity Estimation via IA | **Sostituito da M3 deterministico** | L'IA non fa aritmetica affidabile; i grammi si calcolano, non si chiedono |
-| Verification come chiamata IA | **Ridimensionato**: verifica deterministica (M4) + arbitrato IA solo sui flag (M5) | La coerenza fisica si verifica gratis in codice; il modello si paga solo sui dubbi |
-| Categorie geometriche (regolari/irregolari/granulari/…) | **Sostituite da 6 strategie di calcolo** | La categoria serve a scegliere il metodo di stima, non a descrivere la forma |
-| UC-OS Core / scheduling / routing / cost control | **Scartato** | Nessuna responsabilità reale in un'app a utente singolo |
-| Fasce di confidenza dichiarate (90–95%…) | **Scartato**, diventa metrica di calibrazione (§12) | Numeri non misurati sono fantasia |
-| Evolution Controller che riscrive prompt/strategie da solo | **Scartato**: cambio architetturale resta manuale, informato dal benchmark (§10) | Cambiare un prompt o un modello è una decisione umana, non delegabile |
-| "Il sistema impara e si corregge nel tempo" | **Mantenuto e reso concreto**: taratura automatica di bias e calibrazione (§8), rilevamento automatico di regressioni (§13) | L'ambizione era giusta; andava solo separata da "riscrivere l'architettura da solo" |
-| Telemetria, ground truth, bias correction, shadow mode, versioning | **Mantenuti e ridimensionati** (§7–§10, M8) | Sono la parte sana: rendono il sistema misurabile e migliorabile |
+Ogni sezione di modulo riporta esplicitamente lo **stato di implementazione**, i **file coinvolti** e le **deviazioni** rispetto a quanto originariamente pensato, quando presenti: l'obiettivo è che questo documento resti vero leggendo il codice, non che descriva un'intenzione.
 
 ---
 
 ## 1. Visione
 
-UgoCalc esiste per contare i carboidrati dei pasti in modo più accurato e rapido di quanto si possa fare a occhio. La V1 usa un singolo passaggio di visione artificiale (foto → alimenti + pesi stimati) seguito dall'abbinamento con le tabelle nutrizionali locali. Funziona, con un errore medio sui pesi intorno al **12,5%**.
+UgoCalc esiste per contare i carboidrati dei pasti in modo più accurato e rapido di quanto si possa fare a occhio. La V1, oggi in produzione, usa un singolo passaggio di visione artificiale (foto → alimenti + pesi stimati) seguito dall'abbinamento con le tabelle nutrizionali locali. Funziona, con un errore medio sui pesi intorno al **12,5%**.
 
 La V2 non è un aggiustamento di prompt: è un **motore di inferenza** composto da moduli indipendenti, ciascuno con una responsabilità precisa, testabile separatamente e sostituibile senza toccare il resto. Ogni stima deve essere spiegabile: se l'app dice "165 g di riso", deve poter mostrare da dove viene quel numero.
 
-L'app si usa **sia a casa sia al ristorante**, e il sistema deve funzionare bene in entrambi i contesti (§8).
+L'app si usa **sia a casa sia al ristorante**; il motore è progettato per funzionare in entrambi i contesti (§8), anche se — come dettagliato più sotto — la selezione di contesto non ha ancora un'interfaccia utente.
 
-## 2. Principio di progetto
+## 2. Principio di progetto e motivazione
 
 > **I moduli basati su IA percepiscono e propongono; i moduli deterministici decidono e calcolano.**
 
-Un modello multimodale è molto bravo a riconoscere alimenti, leggere una scena, stimare dimensioni relative. Non è affidabile nell'aritmetica né nella coerenza numerica tra più stime. Quindi:
+Un modello multimodale è molto bravo a riconoscere alimenti, leggere una scena, stimare dimensioni relative. Non è affidabile nell'aritmetica né nella coerenza numerica tra più stime: chiedergli direttamente i grammi significa chiedergli la cosa che sa fare peggio. Da qui tre decisioni architetturali di fondo, tutte implementate:
+
+1. **Percezione unificata in un'unica chiamata (M1), non passi separati.** Ricostruzione scena, identificazione alimenti e misure grezze condividono lo stesso input (le foto): separarli in chiamate distinte moltiplicherebbe costo e latenza e comporrebbe gli errori senza possibilità di recupero (un errore al passo 1 avvelena i passi successivi, che non rivedono più le foto). Un modello moderno svolge queste percezioni meglio insieme che separate. La modularità si ottiene nei **contratti dati** tra moduli (§7), non nel numero di chiamate IA.
+
+2. **La stima della quantità è codice deterministico (M3), non un output del modello.** L'IA fornisce dimensioni, conteggi e frazioni di riempimento; le formule fanno il resto. Questo è, per costruzione, il singolo punto con il maggior impatto atteso sulla precisione, perché sposta l'aritmetica dal componente meno affidabile (il modello) al componente più controllabile e testabile (il codice).
+
+3. **La tassonomia degli alimenti è definita per strategia di calcolo, non per geometria.** La categoria di un alimento serve a una cosa sola: scegliere *come calcolarne il peso*. Definire le categorie per come un cibo *appare* (solido, granulare, liquido...) mescola metodi di calcolo diversi sotto la stessa etichetta; definirle per *come si calcolano* (§6) rende ogni categoria coerente con un'unica formula.
+
+Di conseguenza:
 
 - l'IA **non produce mai grammi** per gli alimenti a stima geometrica: produce dimensioni, conteggi, frazioni di riempimento, riferimenti di scala;
-- la **conversione in grammi è codice deterministico**, su tabelle locali di densità e pesi unitari, coperto da test automatici veri;
-- ogni numero finale porta con sé la propria **catena di calcolo** (formula, valori, fonti): è questo che rende ogni decisione verificabile e ogni stima spiegabile, come richiesto.
-
-Questa è la differenza tra "usare un'IA per rispondere" e "usare un'IA come sensore dentro un sistema deterministico" — l'unica frase di UC-OS che merita di sopravvivere alla revisione.
+- la **conversione in grammi è codice deterministico**, su tabelle locali di densità e pesi unitari, coperto da test automatici;
+- ogni numero finale porta con sé la propria **catena di calcolo** (formula, valori, fonti): è questo che rende ogni stima spiegabile e verificabile.
 
 ## 3. Vincoli di progetto
 
 - **Nessun training né hosting di modelli propri**: tutta l'IA passa dai provider già integrati (OpenAI, Anthropic, Google Gemini) con chiave API dell'utente.
 - **Tutta la logica deterministica gira on-device**, in Kotlin, senza backend.
-- **Budget: 2 chiamate al modello per analisi** nel caso normale (M1 percezione, M6 abbinamento nutrizionale); una **terza solo se** la verifica M4 rileva incoerenze.
+- **Budget: 2 chiamate al modello per analisi** nel caso normale (M1 percezione, M6 abbinamento nutrizionale); una **terza solo se** la verifica M4 rileva incoerenze (M5).
 - **Nessuna catena lunga di chiamate sequenziali**: moduli che condividono lo stesso input restano accorpati in un'unica chiamata.
 - **Provider intercambiabili**: contratti dati JSON neutrali rispetto al provider, come nella V1.
-- **La modalità Casa/Ristorante è una scelta esplicita dell'utente** a inizio sessione, mai dedotta dalla foto (§8).
+- **La modalità Casa/Ristorante è pensata come scelta esplicita dell'utente** a inizio sessione, mai dedotta dalla foto (§8) — l'enum e la logica a valle esistono; l'interfaccia per sceglierla non è ancora stata costruita (§13).
 
-## 4. Architettura generale
+## 4. Architettura generale e stato di collegamento
 
 Otto moduli in sequenza logica. Etichette: `[DET]` = deterministico on-device, `[IA]` = chiamata a modello multimodale.
 
@@ -125,8 +84,6 @@ FOTO (1–5) + EXIF + Modalità sessione (Casa/Ristorante)
 OUTPUT: CHO + grassi + intervalli + spiegazione per alimento
 ```
 
-Stesso flusso in Mermaid (si renderizza su GitHub/VSCode):
-
 ```mermaid
 flowchart TD
     A[FOTO 1–5 + EXIF + modalità sessione] --> M0["M0 · Controllo qualità (DET)"]
@@ -142,52 +99,63 @@ flowchart TD
     M8 --> OUT[CHO + grassi + intervalli + spiegazione]
 ```
 
-Nel caso normale l'intero flusso costa **due** chiamate al modello; la terza (M5) scatta solo su anomalia rilevata da M4.
+**Stato di collegamento (importante per interpretare correttamente il resto del documento).** `V2AnalysisPipeline` e `V2AnalysisPipelineFactory` orchestrano M0→M8 e hanno un test end-to-end (`V2AnalysisPipelineTest`), ma **non sono ancora iniettati in nessun ViewModel dell'app**. `CameraCaptureViewModel` e `VisionResultsViewModel` chiamano tuttora la pipeline V1 (`AiOrchestrator.runVisionAnalysis`). In altre parole: il motore descritto in questo documento esiste, è testato modulo per modulo, ma **l'utente non lo sta ancora usando**. Il collegamento alla UI è il prossimo passo di sviluppo (§13), non un dettaglio implementativo minore.
 
-## 5. Moduli e responsabilità
+Nel caso normale, una volta collegato, l'intero flusso costerà **due** chiamate al modello; la terza (M5) scatterà solo su anomalia rilevata da M4.
 
-**M0 – Controllo qualità e ingestione** `[DET]`
-Scarta o segnala foto inutilizzabili (sfocatura, esposizione estrema, duplicati) *prima* di consumare token. Se tutte le foto sono scadenti, l'app lo dice subito invece di produrre una stima inaffidabile. Fallimento gestito: messaggio all'utente, nessuna chiamata effettuata. Include anche la raccolta dei metadati fotocamera per foto (§16), usati qui per diagnosticare la qualità in modo più preciso di un controllo di sfocatura generico.
+## 5. Moduli: stato, implementazione e motivazione
 
-**M1 – Percezione unificata** `[IA – chiamata 1]`
-Un'unica chiamata multimodale con tutte le foto della sessione. Tre output nello stesso passaggio:
-- **ancoraggio di scala**, con priorità dipendente dalla modalità di sessione (§8);
-- **inventario canonico** degli alimenti, con alternative di identificazione e segnalazione delle occlusioni;
-- **misure grezze** per alimento (frazioni di superficie, altezze, conteggi, riempimenti) — **mai grammi**.
+**M0 – Controllo qualità e ingestione** `[DET]` — **implementato (logica di decisione), isolato**
+File: `domain/inference/m0/QualityGate.kt`, test in `m0/QualityGateTest.kt`.
+`QualityGate.assess(List<PhotoQuality>)` riceve metriche già calcolate (nitidezza, luminosità, hash percettivo a 64 bit) e applica soglie fisse (nitidezza minima da varianza Laplaciana, luminosità in un intervallo, distanza di Hamming ≤10 per i duplicati), producendo un `IngestionResult` con foto valide/scartate e motivo. Se tutte le foto sono scadenti, l'esito lo dichiara esplicitamente (zero chiamate consumate).
+**Cosa manca:** il calcolo reale di queste metriche da un Bitmap Android (estrazione nitidezza/luminosità/hash da una foto vera) non è stato scritto: `QualityGate` oggi riceve input già pronti, nei test e nella pipeline. Manca anche il collegamento ai metadati EXIF (§16) per diagnosticare foto mosse tramite tempo di esposizione/ISO, come inizialmente previsto: quella logica non esiste ancora.
 
-Fallimento gestito: validazione rigida dello schema JSON, un tentativo di recupero, poi fallback sulla stima diretta in stile V1 (dichiarata come tale).
+**M1 – Percezione unificata** `[IA – chiamata 1]` — **implementato, isolato dall'app**
+File: `domain/inference/m1/UnifiedPerceptionEngine.kt`, `m1/PerceptionPrompt.kt`; contratto in `domain/inference/model/SceneGraph.kt`. Test: `m1/PerceptionPromptTest.kt`, `m1/SceneGraphReferenceCasesTest.kt`.
+Riusa `AiCallExecutor` (lo stesso executor della V1) per codificare le foto e chiamare il modello con `completeJson<SceneGraph>(...)`. Il prompt chiede esplicitamente ancore di scala + inventario + misure grezze — **mai grammi** — con un ordine di ancore diverso a seconda della modalità di sessione (regola testuale nel prompt). Ogni risposta dichiara `schema_version` (`SceneGraph.SCHEMA_VERSION = 1`); un fallimento di parsing propaga un fallback dichiarato in stile V1 (`PerceptionOutcome.FallbackAV1`), mai spacciato per un risultato V2.
 
-**M2 – Router di strategia** `[DET]`
-Assegna a ogni alimento una delle sei strategie (§6) tramite una **tabella locale nome→strategia**. È il punto di estensione principale del sistema: aggiungere o correggere una strategia non tocca i prompt. Alimento sconosciuto → strategia più prudente compatibile con le misure disponibili + confidenza abbassata.
+**M2 – Router di strategia** `[DET]` — **completo e testato**
+File: `domain/inference/m2/StrategyRouter.kt`, `m2/StrategyRules.kt`; test `m2/StrategyRouterTest.kt`.
+Una tabella dati (`StrategyRules.DEFAULT`) di keyword italiane normalizzate (minuscolo, accenti rimossi, match a parola intera) mappa un nome alimento a una delle 6 strategie (§6). Se nessuna regola combacia, sceglie un **fallback prudente** basato sulle misure disponibili (es. un conteggio presente → Contabile; una frazione di riempimento → Contenitore). Uno `SceneGraph` con `schema_version` non riconosciuta viene **rifiutato esplicitamente**, mai deserializzato parzialmente.
 
-**M3 – Motore fisico** `[DET]`
-Converte misure grezze in grammi con formule deterministiche: geometria × densità per distese e blocchi, conteggio × peso unitario per i contabili, capacità × riempimento per i contenitori, ripartizione da ricetta per i composti. Ogni risultato porta la **catena di calcolo completa** (formula, valori usati, fonte di ogni valore). È il cuore della precisione del sistema e il modulo con la copertura di test più estesa (§11).
+**M3 – Motore fisico** `[DET]` — **completo, il modulo con più codice e test; una semplificazione nota**
+File: `domain/inference/m3/PhysicalData.kt` (tabelle densità/pesi unitari/capacità), `m3/PhysicsEngine.kt` (le 6 formule), `m3/ScaleResolver.kt` (ancore → contesto di scala). Test: `PhysicalDataTest.kt`, `PhysicsEngineTest.kt`, `ScaleResolverTest.kt`.
+Formule per strategia: Contabile = conteggio × peso unitario; Distesa = frazione piatto × area piatto × altezza × riempimento × densità; Contenitore = capacità × riempimento × densità; Blocco = volume secondo forma dichiarata (cilindro/cuneo/parallelepipedo) × densità; Trascurabile = valore fisso dichiarato incerto. Ogni stima produce una `CalculationChain` (formula, valori, fonti) e un intervallo di confidenza la cui ampiezza dipende da occlusione, confidenza IA, qualità della scala e uso di default fisici. `ScaleResolver` sceglie l'ancora di priorità più alta disponibile (§8) e ripiega su un contesto di default (27 cm, qualità bassa) se nessuna ancora è utilizzabile.
+**Semplificazione nota:** la strategia **Composto** riusa oggi la formula di Blocco (volume geometrico × densità media) invece di fare una vera ripartizione da ricetta per gli ingredienti occlusi (lasagne, farciti): funziona come stima del peso *totale*, non separa i CHO tra i componenti nascosti.
+**Punto scollegato più importante del modulo:** `PhysicsEngine.estimate()` non consulta mai i fattori di correzione da bias (§8/M8): la catena di calcolo non applica né dichiara alcun fattore di correzione. Il sistema di bias esiste (calcolato in M8) ma oggi non influenza il peso calcolato.
 
-**M4 – Verifica di coerenza** `[DET]`
-Gratuito e sempre attivo. Controlla:
-- **vincoli fisici**: grammi per cm² di piatto plausibili; peso entro l'intervallo tipico per quell'alimento;
-- **vincoli di scena**: somma delle superfici ≤ superficie del piatto; coerenza tra le foto;
-- **coerenza identificativa**: se un'alternativa di identificazione cambia sensibilmente i CHO, l'alimento resta segnalato come ambiguo.
+**M4 – Verifica di coerenza** `[DET]` — **completo, con un proxy dichiarato nel codice**
+File: `domain/inference/m4/ConsistencyVerifier.kt`; test `m4/ConsistencyVerifierTest.kt`.
+Controlla: peso assoluto entro un range plausibile; densità superficiale del piatto (per alimenti "distesa"); somma delle frazioni di piatto coperte ≤ 1.2 (margine di errore di percezione); ambiguità identificativa quando esistono alternative di identificazione e la confidenza non è alta. Il vincolo di ambiguità usa oggi un **proxy** (presenza di alternative + confidenza non alta) invece di verificare se l'alternativa cambia davvero i CHO, perché richiederebbe di consultare le tabelle di M6 — commentato esplicitamente nel codice come raffinamento da aggiungere quando M6 sarà collegato a M4.
+**Cosa manca rispetto all'idea originale:** una regola di sicurezza per cui, se un'ambiguità resta irrisolta dopo M5, il sistema sceglie automaticamente l'alternativa con CHO più alto e segnala la necessità di conferma manuale (scelta prudente per un'app che informa dosi di insulina — sottostimare i CHO è l'errore peggiore, sovrastimare su un alimento dichiaratamente incerto è recuperabile). Questa regola **non è implementata**: `VerificationReport` non ha un campo di ambiguità residua, e `V2AnalysisPipeline` non sceglie mai esplicitamente l'alternativa più cautelativa. È tracciata come lavoro da fare in §13.
 
-Output: report con l'esito di ogni vincolo e l'elenco degli alimenti flaggati con il motivo.
+**M5 – Arbitrato selettivo** `[IA – eventuale]` — **completo, wiring corretto**
+File: `domain/inference/m5/SelectiveArbitrationEngine.kt`, `m5/ArbitrationPrompt.kt`; contratti in `domain/inference/model/ArbitrationContracts.kt`. Test: `m5/ArbitrationPromptTest.kt`.
+Si attiva solo se M4 produce alimenti flaggati; il prompt porta solo le foto originali e l'elenco dei dubbi, per una rianalisi mirata al costo minimo possibile. Viene invocato **al massimo una volta** per analisi: se l'ambiguità resta dopo il ritorno di M5, la pipeline prosegue con le stime pre-arbitrato dichiarando esplicitamente il motivo mancante, senza rientrare in un loop.
 
-**M5 – Arbitrato selettivo** `[IA – eventuale]`
-Attivo **solo** sugli alimenti flaggati da M4: un'unica chiamata con le foto originali e il solo elenco dei dubbi, per una rianalisi mirata. Nel caso tipico non si attiva. Risponde al requisito "rieseguire solo le parti dubbie" della Design Request, al costo minimo possibile. **M5 viene invocato al massimo una volta per analisi**: se al ritorno l'alimento resta ambiguo, M4 non richiama M5 una seconda volta (nessun loop) — si applica invece la regola di sicurezza sotto.
+**M6 – Nutrition Engine** `[IA – chiamata 2]` — **completo, riuso deliberato della V1**
+File: `domain/inference/m6/NutritionMatchStepAdapter.kt`.
+È un adattatore puro: converte le `WeightEstimate` di M3 nello stesso contratto `RecognizedFood` già usato dalla V1 e chiama `MatchFoodsAcrossTablesUseCase` esistente (tabelle Room + ricerca online OpenFoodFacts di riserva). Nessuna riscrittura, perché quel componente è già solido e collaudato in produzione: riscriverlo non avrebbe aggiunto valore, solo rischio.
 
-**Regola di sicurezza sull'ambiguità residua.** Se dopo M5 un'identificazione resta ambigua tra alternative con CHO diverso (o M5 non è stato in grado di sciogliere il dubbio), il sistema **non sceglie automaticamente l'alternativa più probabile**: seleziona sempre l'alternativa con **CHO più alto** per il calcolo mostrato all'utente, e segnala esplicitamente in UI che si tratta di una stima cautelativa su un alimento ambiguo, invitando alla correzione manuale. In un'app che informa dosi di insulina, sottostimare i CHO per eccesso di fiducia è l'errore peggiore possibile; sovrastimare per un alimento dichiaratamente incerto è l'errore che si può recuperare con un pasto di margine o una correzione manuale immediata.
+**M7 – Calcolo carboidrati e grassi + spiegazione** `[DET]` — **completo**
+File: `domain/inference/m7/NutritionCalculator.kt`; test `m7/NutritionCalculatorTest.kt`.
+Calcolo puro: CHO = CHO/100g × peso/100 (stesso per grassi), con la spiegazione per alimento presa direttamente dalla catena di calcolo di M3 ("165 g perché: piatto Ø 26 cm × 45% coperto × 2,1 cm altezza × riempimento 0,8 × densità riso 0,72 g/cm³"). Gli alimenti senza abbinamento nutrizionale sono esclusi dai totali, mai stimati a zero in silenzio.
 
-**M6 – Nutrition Engine** `[IA – chiamata 2]`
-L'abbinamento con le tabelle nutrizionali e la ricerca online di riserva **restano quelli della V1** (`MatchFoodsAcrossTablesUseCase`, tabelle Room, OpenFoodFacts): già solidi, nessuna riscrittura.
+**M8 – Telemetria e archivio di apprendimento** `[DET, Room]` — **parzialmente implementato: la persistenza c'è, il ciclo di auto-miglioramento non è chiuso**
+File: entity `V2AnalysisRecordEntity.kt`, DAO `V2AnalysisRecordDao.kt`, repository `V2TelemetryRepository.kt`; calcolatore `domain/inference/m8/BiasCorrectionCalculator.kt` con entity/DAO/repository `BiasCorrectionEntity/Dao/Repository`; UI di sola lettura `BiasEvolutionScreen.kt`/`BiasEvolutionViewModel.kt`. Test: `BiasCorrectionCalculatorTest.kt`, `BiasCorrectionRepositoryTest.kt`, `V2TelemetryRepositoryTest.kt`.
 
-**M7 – Calcolo carboidrati e grassi + spiegazione** `[DET]`
-Calcolo finale deterministico sui grammi di M3/M5 e sui valori per 100 g di M6. Assembla il **report di spiegazione per alimento** dalle catene di calcolo di M3: "165 g perché: piatto Ø 26 cm calibrato × 45% coperto × 2,1 cm altezza × riempimento 0,8 × densità riso 0,72 g/cm³".
+Ciò che funziona: `V2TelemetryRepository.record()` salva l'intero esito di un'analisi (SceneGraph, stime di peso, report di verifica, report nutrizionale) in colonne JSON, con modalità di sessione, modello IA e versione di schema. `BiasCorrectionCalculator.calculate()` implementa l'algoritmo di taratura: richiede almeno 5 osservazioni, verifica che almeno l'80% concordi sul segno dello scarto stimato/reale, e in tal caso restituisce come fattore correttivo la **mediana** dei rapporti (robusta agli outlier) — altrimenti dichiara esplicitamente dati insufficienti o bias instabile, senza mai inventare un fattore. `BiasCorrectionRepository` mantiene la chiave esatta *(modalità, strategia, modello IA)*, mai un'aggregazione cross-modello, dietro un flag di consenso esplicito dell'utente (`SettingsRepository.biasDataConsentGiven`, aggiunto per motivi di privacy, non previsto nella prima stesura del piano).
 
-**M8 – Telemetria e archivio di apprendimento** `[DET, Room]`
-Salva l'intero percorso intermedio di ogni analisi (SceneGraph, strategie, catene di calcolo, esiti verifica, versioni di prompt/tabelle/modello, modalità di sessione) più le **correzioni manuali dell'utente**. È la base del benchmark (§10) e dei fattori di correzione (§8).
+Ciò che manca per chiudere il ciclo:
+1. Non esiste alcuna UI per l'utente per registrare un peso vero o una correzione manuale collegata a un record M8: `recordGroundTruth()` non viene mai chiamato fuori dai test.
+2. Non esiste alcun trigger automatico (job periodico, evento all'apertura dell'app) che richiami `recalculate()`: il ricalcolo del bias è codice raggiungibile solo dai test.
+3. `PhysicsEngine` (M3) non chiama mai `currentFactor()`: anche un fattore calcolato non verrebbe applicato al peso stimato. `BiasEvolutionScreen` è oggi un pannello di sola trasparenza, non un anello di retroazione.
+
+Di conseguenza, il meccanismo di "il sistema impara dai propri errori e si corregge nel tempo" ha **l'infrastruttura dati e l'algoritmo pronti e testati**, ma non è ancora un ciclo automatico attivo: manca la raccolta di ground truth in UI, il trigger di ricalcolo, e il consumo del fattore in M3. Sono i tre pezzi mancanti tracciati in §13.
 
 ## 6. Tassonomia degli alimenti per strategia di stima
 
-La categoria serve a un solo scopo: **scegliere come calcolare il peso**. Sei strategie (già in `EstimationStrategy.kt`):
+La categoria serve a un solo scopo: **scegliere come calcolare il peso**. Sei strategie, definite in `EstimationStrategy.kt` e implementate in M2/M3:
 
 | Strategia | Esempi | Metodo di calcolo |
 |---|---|---|
@@ -195,14 +163,14 @@ La categoria serve a un solo scopo: **scegliere come calcolare il peso**. Sei st
 | **Distesa sul piatto** | pasta, riso, insalate, contorni | superficie coperta × altezza × riempimento × densità |
 | **A contenitore** | latte, minestre, yogurt, succhi | capacità × frazione di riempimento × densità |
 | **Blocco misurabile** | carne, pesce, torte, formaggio, pane a fetta | forma geometrica × dimensioni × densità |
-| **Composto / occluso** | lasagne, ripieni, sughi coprenti, panini farciti | peso geometrico totale × ripartizione da ricetta |
+| **Composto / occluso** | lasagne, ripieni, sughi coprenti, panini farciti | volume geometrico totale × densità media (oggi: nessuna ripartizione da ricetta, vedi §5 M3) |
 | **Trascurabile** | olio, spolverate, salse leggere | valore fisso di riferimento, dichiarato incerto |
 
-Confronto con la classificazione geometrica proposta: *granulari*, *solidi irregolari* e parte dei *liquidi densi* convergono in **Distesa**; *liquidi* in contenitore diventano **A contenitore**; *solidi regolari* si dividono tra **Contabile** e **Blocco**; *stratificati* e *composti* convergono in **Composto/occluso**, perché il problema è lo stesso (contenuto non visibile → ricetta). La strategia **Trascurabile** non esisteva ed è necessaria: fingere di stimare 8 g di olio da una foto è falsa precisione.
+Ogni categoria corrisponde a un'unica formula testabile con casi noti calcolati a mano (§11). La strategia **Trascurabile** esiste perché fingere di stimare 8 g di olio da una foto sarebbe falsa precisione, non perché richieda un calcolo complesso.
 
 ## 7. Contratti dati tra moduli
 
-Ogni modulo riceve e restituisce **JSON strutturato** (kotlinx.serialization, pattern V1). Regola generale: **ogni valore numerico viaggia con la propria incertezza e la propria provenienza**. L'IA propone dimensioni/conteggi/riempimenti, mai grammi (§2).
+Ogni modulo riceve e restituisce **JSON strutturato** (kotlinx.serialization). Regola generale: **ogni valore numerico viaggia con la propria incertezza e la propria provenienza**. L'IA propone dimensioni/conteggi/riempimenti, mai grammi (§2).
 
 **M1 → M2: `SceneGraph`** (implementato in `SceneGraph.kt`)
 
@@ -244,22 +212,21 @@ Ogni modulo riceve e restituisce **JSON strutturato** (kotlinx.serialization, pa
 }
 ```
 
+Nota: il campo `fattore_correzione` immaginato in fase di progetto (per tracciare l'applicazione di un bias appreso, §8) **non è ancora popolato**, perché M3 non consulta i fattori di correzione (§5 M3). Quando il collegamento sarà fatto, questo è il punto dove il valore comparirà nella catena.
+
 **M4 → M5/M6: `VerificationReport`** — esito di ciascun vincolo e alimenti flaggati con motivo:
 
 ```json
 {
   "vincoli": [ { "nome": "densita_superficiale_piatto", "esito": "ok" },
                { "nome": "somma_superfici", "esito": "ok" } ],
-  "flag": [ { "alimento": "lasagna", "motivo": "peso fuori intervallo tipico (620 g)" } ],
-  "ambiguita_residua": [
-    { "alimento": "riso in bianco", "alternative_cho": ["riso basmati", "riso venere"],
-      "risolta_da_m5": false, "alternativa_scelta": "riso basmati",
-      "criterio": "cho_piu_alto", "richiede_conferma_utente": true }
-  ]
+  "flag": [ { "alimento": "lasagna", "motivo": "peso fuori intervallo tipico (620 g)" } ]
 }
 ```
 
-**M8: record di analisi** — copia integrale dei documenti precedenti + versioni (prompt, tabelle densità, modello, engine, calibrazione) + modalità di sessione + eventuali correzioni manuali con relativa fonte di ground truth:
+Il campo `ambiguita_residua` (con la regola "CHO più alto in caso di dubbio irrisolto") descritto in fase di progetto **non esiste ancora in questo contratto** — è lavoro non fatto, non una scelta di design cambiata (§5 M4, §13).
+
+**M8: record di analisi** — copia integrale dei documenti precedenti + versioni (schema, modello, engine) + modalità di sessione + eventuale ground truth:
 
 ```json
 {
@@ -267,165 +234,131 @@ Ogni modulo riceve e restituisce **JSON strutturato** (kotlinx.serialization, pa
 }
 ```
 
-Livelli di ground truth (da UC-OS, mantenuti): **Gold** = bilancia; **Silver** = etichetta/fonte affidabile; **Bronze** = stima dell'utente.
+Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affidabile; **Bronze** = stima dell'utente. Il campo esiste nello schema e nel DB (`recordGroundTruth`); manca solo l'interfaccia utente che lo popoli (§5 M8, §13).
 
-**Versionamento dello schema `SceneGraph`.** Il prompt di M1 e le data class Kotlin che deserializzano il suo output (§7) devono evolvere insieme: aggiungere o rinominare un campo nel prompt senza aggiornare `SceneGraph.kt` produce un errore di deserializzazione silenzioso solo a runtime, sul dispositivo dell'utente. Regola: ogni modifica allo schema è un **cambio di `schema_version` numerico**, incrementato nello stesso commit che tocca sia il prompt sia le data class; M2 rifiuta esplicitamente (errore gestito, non crash) un `SceneGraph` con `schema_version` non riconosciuta, invece di tentare una deserializzazione parziale. La suite di casi di riferimento per M1 (§11) include la verifica che l'output dichiari la versione attesa, così un disallineamento si scopre prima del rilascio, non sul benchmark.
+**Versionamento dello schema `SceneGraph`.** Il prompt di M1 e le data class Kotlin che deserializzano il suo output devono evolvere insieme: ogni modifica allo schema è un cambio di `schema_version` numerico. M2 rifiuta esplicitamente (errore gestito, non crash) un `SceneGraph` con `schema_version` non riconosciuta — verificato in `StrategyRouterTest.kt`.
 
-## 8. Modalità Casa/Ristorante e calibrazione
+## 8. Modalità Casa/Ristorante e calibrazione — stato reale
 
-La modalità è selezionata **esplicitamente dall'utente** a inizio sessione, mai dedotta dall'immagine (`SessionMode.kt`). Viene salvata su ogni analisi e determina due cose: l'ordine delle ancore di scala tentate da M1 e quale insieme di fattori di correzione applicare.
+`SessionMode.kt` (enum `CASA`/`RISTORANTE`) esiste ed è consumato dal prompt di M1 (ordine delle ancore di scala) e dalla telemetria di M8. **Non esiste però alcuna interfaccia utente per selezionarla**: nessuno switch Casa/Ristorante in nessuna schermata dell'app; ogni chiamata a M1 nei test usa un valore impostato dal chiamante, non da una scelta reale dell'utente.
 
-**Ancore di scala**, in ordine di affidabilità di principio (`ScaleAnchorType`):
+**Ancore di scala**, implementate e testate in `ScaleResolver`/`ScaleAnchorType` (ordine di priorità: stoviglia calibrata > riferimento corporeo > oggetto universale > stima generica): il resolver sceglie l'ancora di priorità più alta dichiarata da M1 nella foto corrente. **Non esiste memoria tra una sessione e l'altra**: non ci sono tabelle Room per calibrazione stoviglie personali né per riferimenti corporei personali — ogni analisi riparte da zero sull'ancoraggio, senza poter riusare una calibrazione fatta in precedenza.
 
-1. **Stoviglia calibrata** (solo modalità Casa): l'utente conferma una volta diametri dei piatti e capacità di bicchieri/ciotole abituali; quando M1 le riconosce, il valore calibrato è un'ancora certa.
-2. **Riferimento corporeo personale** (condiviso tra le modalità): larghezza del dito, apertura della mano — proprietà della persona, non del luogo. Prima scelta quando le stoviglie non sono calibrabili (cioè sempre, al ristorante).
-3. **Oggetto universale**: moneta, carta di credito, posata standard.
-4. **Stima generica**: in assenza di tutto, la confidenza dichiarata è **bassa** — mai falsa precisione.
+**Fattori di correzione appresi** (§5 M8): l'algoritmo di taratura (mediana dei rapporti peso-vero/peso-stimato, soglia minima di campioni, verifica di concordanza del segno) è implementato e testato in isolamento in `BiasCorrectionCalculator`, con chiave sempre esatta *(modalità, strategia, modello IA)* — mai un'aggregazione cross-modello, perché il bias nasce nella percezione (M1) ed è specifico di quel modello: applicare senza distinzione il fattore calcolato su un modello a una lettura fatta da un altro andrebbe nella direzione sbagliata. Ma **il fattore non viene mai consumato da M3** (§5 M3): l'infrastruttura di calcolo esiste, il ciclo di retroazione automatico no.
 
-**Fattori di correzione appresi** — distinti **per modalità, per strategia e per modello IA usato in M1**. Le correzioni manuali accumulate in M8 rivelano bias sistematici (es. sottostima costante del riso); il fattore correttivo si applica **solo su pattern stabili** (numerosità minima e segno del bias costante), mai su fluttuazioni. Casa e Ristorante hanno insiemi separati perché i bias non coincidono necessariamente.
-
-**Perché anche per modello, e non solo modalità/strategia.** Il bias non nasce nel calcolo (M3 è deterministico, stessa formula per tutti) ma nella **percezione** (M1): quanto un modello legge generosa la frazione di piatto coperta, quanto stima alta un'altezza, sono comportamenti specifici di quel modello IA, non della fisica del piatto. Un fattore di correzione calcolato sui dati di GPT-5.5 e applicato senza distinzione a una lettura di Gemini o Claude non è "meno preciso": è **nella direzione sbagliata**, perché corregge un bias che quel modello potrebbe non avere (o avere all'opposto).
-
-**Nessuna mescolanza tra modelli, mai — nemmeno come fallback.** Il segmento è sempre esattamente (modalità, strategia, modello M1) usato per quell'analisi: niente aggregazione con altri modelli, nemmeno temporanea o "in attesa di dati migliori". Se quel segmento specifico non ha ancora numerosità sufficiente (bias stabile su un numero minimo di correzioni), **non si applica alcun fattore di correzione**: M3 restituisce la stima grezza, non corretta, e la catena di calcolo lo dichiara esplicitamente ("fattore_correzione: nessuno — dati insufficienti per gpt-5.5/casa/distesa"). Una stima non corretta ma dichiarata tale è più sicura di una corretta con il bias di un modello diverso: la prima è onesta sui propri limiti, la seconda introduce con sicurezza apparente un errore che potrebbe andare nella direzione opposta a quella intesa. Chi cambia modello di percezione — nelle impostazioni, o perché un provider è temporaneamente non disponibile — riparte semplicemente da zero sulle correzioni per quel modello, esattamente come un utente nuovo.
-
-**Questo è il meccanismo di auto-miglioramento del sistema, ed è interamente automatico**: non serve alcuna decisione dell'owner né un rilascio di codice. Il ricalcolo gira on-device a ogni nuova correzione salvata in M8 (o come job periodico, es. all'apertura dell'app se sono passate 24h): aggrega gli errori recenti per (modalità, strategia, modello) — solo quel segmento, mai altri — verifica che il bias sia stabile, aggiorna il fattore. La riga sottostante nel calcolo di M3 lo consuma senza saperlo — è solo un moltiplicatore in più nella catena di calcolo, tracciato come qualunque altro valore con la propria fonte ("fattore_correzione: casa/distesa/gpt-5.5 v12"). Più il sistema viene usato **con quel modello specifico**, più le sue stime si avvicinano ai pesi reali di quell'utente — è la parte "impara nel tempo" della visione originale, realizzata senza bisogno di un componente che "propone modifiche" e senza mai scambiare il bias di un modello per quello di un altro.
-
-Impatto sul database: tre nuove tabelle Room (calibrazione stoviglie, riferimenti corporei, fattori di correzione con chiave **esatta** `modalita + strategia + modello_m1`, senza righe di aggregazione cross-modello) + campo `modalita` sullo storico analisi (il campo `modello` è già previsto in M8, §7).
+**In sintesi, delle quattro componenti previste per §8 — switch di modalità in UI, calibrazione stoviglie, riferimenti corporei, applicazione automatica del bias — nessuna è oggi operativa per l'utente finale.** Esiste l'infrastruttura dati e algoritmica sottostante (enum, resolver, calcolatore di bias, DB); mancano l'interfaccia utente e i tre collegamenti che chiuderebbero il ciclo (§13).
 
 ## 9. Rischi e colli di bottiglia
 
-| Gravità | Rischio | Mitigazione |
+| Gravità | Rischio | Mitigazione / stato |
 |---|---|---|
-| **Alta** | L'errore si compone tra i moduli e la V2 rende peggio della V1 | Benchmark come prerequisito; percezione in un'unica chiamata (M1); confronto in ombra con la V1 finché la V2 non vince sul benchmark |
-| **Alta** | Assenza di scala affidabile, soprattutto al ristorante | Ancore corporee e universali come prima linea; in assenza totale, confidenza dichiarata bassa |
-| **Alta** | Il benchmark pesato (30–50 pasti reali, §10) è lavoro manuale ripetuto — pesare, fotografare, registrare — non compressibile con più tempo di sviluppo: rischia di bloccare l'inizio di M3 per settimane | Raccolta del benchmark iniziata in parallelo alla Fase 0 (telemetria sulla V1), non dopo; pasti di casa (pesatura in cucina) raccolti per primi perché più veloci da ottenere dei pasti al ristorante |
-| Media | Tabella densità incompleta o imprecisa | Errore sistematico visibile nel benchmark; correggibile in un file dati senza toccare codice |
-| Media | Il modello non rispetta il formato atteso | Validazione rigida dello schema, un retry, fallback su stima diretta stile V1 |
-| Media | Latenza e costo raddoppiati rispetto alla V1 | Budget fisso: 2 chiamate nel caso normale, terza solo su flag |
-| Media | Composti/occlusi restano difficili | Intervalli di confidenza ampi mostrati esplicitamente, mai nascosti |
-| Media | Le fasce di confidenza non riflettono l'errore reale | Metrica di calibrazione dedicata sul benchmark (§12) |
-| Media | Un import (§17) sostituisce dati validi con un archivio corrotto, di una versione incompatibile o della persona sbagliata | `schema_version` validata prima di applicare qualunque modifica; anteprima del contenuto con conferma esplicita; nessun merge silenzioso |
-| **Sempre presente** | Una stima errata influenza una decisione clinica (dose di insulina) | Intervalli sempre visibili; verifica più severa sugli alimenti ad alto impatto CHO; invito esplicito alla correzione manuale quando la scala non è affidabile |
+| **Alta** | L'errore si compone tra i moduli e la V2 rende peggio della V1 | Percezione unificata in un'unica chiamata (M1); **il confronto sul benchmark previsto (§10) non è ancora stato eseguito** — nessun dato reale a supporto ancora raccolto |
+| **Alta** | Assenza di scala affidabile, soprattutto al ristorante | Ancore corporee e universali come prima linea in `ScaleResolver`; in assenza totale, confidenza dichiarata bassa (implementato e testato) |
+| **Alta** | Il motore M0–M8 è pronto ma non collegato alla UI: il lavoro rischia di restare inutilizzato | Collegamento a `CameraCaptureViewModel`/`VisionResultsViewModel` è il prossimo passo tracciato in §13, non un dettaglio rimandabile indefinitamente |
+| Media | Tabella densità incompleta o imprecisa | File dati versionato (`PhysicalData.kt`), correggibile senza toccare la logica di calcolo |
+| Media | Il modello non rispetta il formato atteso | Validazione rigida dello schema, fallback su stima diretta stile V1 (implementato in M1/M5) |
+| Media | Il bias calcolato non viene mai applicato, quindi il sistema non migliora usandolo | Vedi §5 M8/§8: i tre collegamenti mancanti sono in cima alla lista di §13 |
+| Media | Composti/occlusi restano difficili (nessuna ripartizione da ricetta) | Intervalli di confidenza ampi mostrati esplicitamente; ripartizione da ricetta non implementata (§5 M3) |
+| **Sempre presente** | Una stima errata influenza una decisione clinica (dose di insulina) | Intervalli sempre visibili nella catena di calcolo; la regola di sicurezza "CHO più alto su ambiguità irrisolta" **non è ancora implementata** (§5 M4) — priorità alta in §13 |
 
 **Colli di bottiglia identificati:**
 
-- **M1 è il collo di bottiglia dell'accuratezza**: tutto ciò che sta a valle è deterministico, quindi l'errore residuo del sistema è dominato dalla qualità della percezione (misure grezze e ancoraggio di scala). Per questo M1 riceve tutte le foto in un colpo solo e per questo l'ancoraggio di scala ha un'intera sezione di progetto (§8).
-- **La tabella di densità è il collo di bottiglia di M3**: la precisione delle formule non può superare quella dei dati. È un file dati versionato, migliorabile dal benchmark senza rilasci di codice.
-- **Latenza percepita**: due chiamate sequenziali (M1, M6) sono il minimo incomprimibile; M6 lavora su testo (niente immagini), quindi è la chiamata economica e veloce delle due.
-- **Composti/occlusi (lasagne, farciti)**: limite strutturale della stima da foto; si gestisce con onestà (intervalli larghi), non si "risolve".
+- **M1 resta il collo di bottiglia dell'accuratezza**: tutto ciò che sta a valle è deterministico, quindi l'errore residuo del sistema è dominato dalla qualità della percezione.
+- **La tabella di densità è il collo di bottiglia di M3**: dati in `PhysicalData.kt`, migliorabili senza toccare il codice di calcolo.
+- **Il collegamento mancante è oggi il collo di bottiglia più concreto**: un motore testato che non riceve traffico reale non genera i dati (ground truth, bias, benchmark) di cui ha bisogno per migliorare.
 
-## 10. Piano di validazione
+## 10. Piano di validazione — non ancora eseguito
 
-**Prerequisito assoluto: benchmark pesato.** Prima di sviluppare qualunque modulo si costruisce un insieme di **30–50 pasti reali**, in proporzione realistica tra casa e ristorante, con peso vero registrato (pesatura in cucina; fuori casa: porzione dichiarata o pesatura degli avanzi). Da lì in avanti **ogni modifica si valuta solo sul benchmark, mai a sensazione**. Il benchmark è fisso: ogni versione del motore ci gira sopra e i risultati sono confrontabili nel tempo.
+Il benchmark pesato (30–50 pasti reali con peso vero registrato, in proporzione realistica casa/ristorante) è il prerequisito per qualunque confronto quantitativo V1/V2, ed è tuttora **da costruire**: non esiste nel repository alcun file relativo a un set di benchmark, né una modalità ombra che esegua la V2 in parallelo alla V1 su casi reali.
 
-**Sviluppo incrementale in modalità ombra:**
+Piano previsto, in ordine:
 
-- **Fase 0** — benchmark + raccolta telemetria sulla V1 attuale; nessun cambiamento visibile.
-- **Fase 1** — calibrazione domestica (stoviglie, riferimenti corporei) iniettata nella V1 esistente; misurata sul benchmark.
-- **Fase 2** — nuova percezione + motore fisico attivi **in ombra**: l'app mostra ancora la V1 ma registra anche l'esito V2, per confronto diretto sugli stessi pasti reali.
-- **Fase 3** — passaggio alla V2 **solo se supera la V1 sul benchmark**; la V1 resta disponibile come rete di sicurezza (questo è il "rollback": una decisione manuale informata, non un automatismo).
-- **Fase 4** — raffinamento continuo di tabelle fisiche e fattori di correzione con le correzioni manuali.
+- **Fase 0** — costruzione del benchmark + raccolta telemetria sulla V1 attuale; nessun cambiamento visibile in app.
+- **Fase 1** — collegamento della pipeline V2 alla UI (§13), con la V1 ancora attiva.
+- **Fase 2** — V2 attiva **in ombra**: l'app mostra ancora la V1 ma registra anche l'esito V2 su M8, per confronto diretto sugli stessi pasti reali.
+- **Fase 3** — passaggio alla V2 **solo se supera la V1 sul benchmark**; la V1 resta disponibile come rete di sicurezza.
+- **Fase 4** — chiusura del ciclo di bias (§5 M8, §8) e raffinamento continuo di tabelle fisiche.
 
-Ogni fase è un pezzo di lavoro autonomo, completabile e verificabile separatamente.
+Nessuna di queste fasi è iniziata: il lavoro fatto finora corrisponde alla costruzione del motore che queste fasi dovranno validare.
 
-## 11. Piano di test
+## 11. Piano di test — stato attuale
 
-**Moduli deterministici** (M0, M2, M3, M4, M7): test automatici classici. Esempi concreti per modulo:
+**Moduli deterministici** (M0, M2, M3, M4, M7): coperti da test automatici classici, esistenti nel repository:
 
-- **M0**: foto nitida accettata, foto sfocata nota rifiutata; duplicato esatto scartato; tutte-scadenti → errore utente, zero chiamate.
-- **M2**: ogni alimento della tabella nome→strategia va alla strategia attesa; alimento sconosciuto → strategia prudente + confidenza abbassata; la tabella non contiene duplicati.
-- **M3** (copertura più estesa, è il cuore): casi con valori noti calcolati a mano per ciascuna delle 6 strategie; casi limite (frazioni 0 e 1, misure mancanti richieste dalla strategia → errore esplicito, non zero silenzioso); **proprietà di monotonia** (più altezza ⇒ più grammi, a parità del resto); la catena di calcolo riprodotta a mano dà lo stesso risultato; intervallo di confidenza sempre contenente la stima puntuale.
-- **M4**: scena costruita per violare ciascun vincolo → flag col motivo giusto; scena coerente → nessun flag; somma superfici > piatto rilevata.
-- **M7**: CHO = Σ(peso × CHO/100 g) su casi noti; il report di spiegazione contiene tutti i valori della catena di M3.
+- `QualityGateTest.kt` — soglie di nitidezza/luminosità/duplicati, caso "tutte scadenti".
+- `StrategyRouterTest.kt` — ogni alimento della tabella va alla strategia attesa; fallback prudente su alimento sconosciuto; rifiuto di schema non riconosciuto.
+- `PhysicalDataTest.kt`, `PhysicsEngineTest.kt`, `ScaleResolverTest.kt` — casi con valori noti calcolati a mano per ciascuna delle 6 strategie, casi limite, proprietà di monotonia.
+- `ConsistencyVerifierTest.kt` — scena costruita per violare ciascun vincolo → flag col motivo giusto; scena coerente → nessun flag.
+- `NutritionCalculatorTest.kt` — CHO = Σ(peso × CHO/100 g) su casi noti.
 
-**Moduli IA** (M1, M5, M6): non si prestano a unit test classici. Valutazione con **casi di riferimento fissi**: per ogni caso si verifica che l'output rispetti lo schema (deserializzazione rigida) e resti entro una **tolleranza numerica definita** rispetto all'atteso. La suite si riesegue **a ogni cambio di prompt o di modello**, e il risultato si confronta con la versione precedente.
+**Moduli IA** (M1, M5, M6): `PerceptionPromptTest.kt`, `SceneGraphReferenceCasesTest.kt`, `ArbitrationPromptTest.kt` verificano che l'output rispetti lo schema (deserializzazione rigida) e che il prompt costruito sia quello atteso. La suite va rieseguita a ogni cambio di prompt o modello — questa disciplina è rispettata nei test esistenti, ma **non esiste ancora la tolleranza numerica su un benchmark reale** (§10), perché il benchmark non esiste.
 
-## 12. Metriche di valutazione
+**Test end-to-end**: `V2AnalysisPipelineTest.kt` copre l'intera sequenza M0→M8 con dati sintetici, incluso il percorso di fallback e l'attivazione condizionale di M5.
 
-- **Primarie** (quelle che contano clinicamente): errore assoluto di **CHO per pasto in grammi**; percentuale di pasti con errore **entro 10 g** ed **entro 20 g** di CHO.
-- **Diagnostiche**: errore percentuale medio sul peso per alimento, scomposto **per strategia** e **per qualità dell'ancora di scala**; percentuale di alimenti **non rilevati** (l'errore più grave: vale il 100% di errore su quell'alimento) e di alimenti **inventati**.
-- **Di sistema**: **calibrazione della confidenza** (le analisi dichiarate "alta" sbagliano davvero meno di quelle "media"?); **copertura degli intervalli** (il peso vero cade nell'intervallo dichiarato con la frequenza promessa?); frequenza di attivazione di M5 e suo beneficio netto; **latenza e costo per analisi** rispetto alla V1.
+## 12. Metriche di valutazione — definite, non ancora misurate
 
-Tutte le metriche sono riportate **separatamente per Casa e Ristorante**, mai aggregate in un'unica media: un sistema ottimo a casa e pessimo fuori è un sistema pessimo.
+- **Primarie**: errore assoluto di CHO per pasto in grammi; percentuale di pasti con errore entro 10 g ed entro 20 g di CHO.
+- **Diagnostiche**: errore percentuale medio sul peso per alimento, scomposto per strategia e per qualità dell'ancora di scala; percentuale di alimenti non rilevati o inventati.
+- **Di sistema**: calibrazione della confidenza; copertura degli intervalli; frequenza di attivazione di M5; latenza e costo per analisi rispetto alla V1.
 
-## 13. Sviluppi futuri, fuori dal perimetro della V2
+Queste metriche sono definite come obiettivo di misurazione per il benchmark di §10, che non è ancora stato costruito: **nessuna di queste metriche ha oggi un valore reale misurato per la V2**. Vanno riportate separatamente per Casa e Ristorante quando il benchmark esisterà.
 
-### 13.1 Percezione e dati
+## 13. Lavoro residuo (ordinato per impatto)
 
-- Foto **prima e dopo** il pasto, per stimare il consumato reale dagli avanzi.
-- Oggetto di riferimento esplicito nelle foto, quando manca qualunque altra ancora.
-- **Mappa di profondità** dei dispositivi che la supportano, come ancora di scala aggiuntiva.
-- Uso prudente della **storia dei pasti** come indizio debole sull'inventario, mai prevalente sull'evidenza visiva.
-- **Modelli multimodali on-device**, quando saranno abbastanza affidabili: i contratti dati restano gli stessi, cambia solo il provider dietro M1.
+Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sotto ci sono i collegamenti e le implementazioni mancanti già individuati leggendo il codice attuale, necessari perché il motore descritto nei §5–§8 diventi qualcosa che l'utente usa davvero.
 
-### 13.2 Auto-evoluzione controllata
+1. **Collegare `V2AnalysisPipeline` alla UI** (`CameraCaptureViewModel`/`VisionResultsViewModel`), con uno switch esplicito Casa/Ristorante a inizio sessione. Finché questo non è fatto, tutto il resto del motore è codice testato ma inerte.
+2. **Regola di sicurezza sull'ambiguità residua in M4**: dopo un tentativo di M5, un'identificazione ancora ambigua tra alternative con CHO diverso deve selezionare l'alternativa a CHO più alto e segnalarlo esplicitamente in UI come stima cautelativa da confermare. Priorità alta per un'app che informa dosi di insulina: sottostimare i CHO per eccesso di fiducia è l'errore peggiore possibile.
+3. **Chiudere il ciclo di bias (§5 M8, §8)**: UI per registrare ground truth (peso vero o correzione manuale) collegata a un record M8; trigger automatico di ricalcolo (job periodico o all'apertura dell'app); consumo del fattore calcolato dentro `PhysicsEngine`. Sono tre pezzi separati, ciascuno piccolo, ma nessuno dei tre esiste oggi.
+4. **Calibrazione persistente delle stoviglie e dei riferimenti corporei** (§8): tabelle Room dedicate, oggi inesistenti, così che una calibrazione fatta una volta non vada persa a ogni sessione.
+5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti.
+6. **Ripartizione da ricetta per la strategia Composto** (§5 M3, §6): oggi è un blocco geometrico rietichettato; una vera ripartizione tra ingredienti occlusi richiede una fonte di ricette (locale o online) non ancora progettata.
+7. **Metadati camera per M0** (§16): oggi M0 non riceve dati EXIF/`CameraCharacteristics`; il collegamento serve a diagnosticare foto mosse o scattate con parametri anomali prima di consumare una chiamata IA.
+8. **Export/import del record M8** (§17): oggi l'export copre cronologia V1, tabelle nutrizionali e fattori di bias, ma non `v2_analysis_records` — un cambio di telefono perderebbe lo storico di analisi V2 con ground truth.
+9. **Changelog per-versione-modulo nelle release GitHub** (§15): il corpo della release oggi non dichiara quali versioni di motore/prompt/tabella densità sono cambiate.
 
-Questa è la parte della visione originale di UC-OS che vale la pena costruire, ma solo **dopo** che la V2 base è in produzione e M8 ha accumulato abbastanza analisi da rendere le sue statistiche affidabili (indicativamente qualche centinaio di analisi con ground truth). Prematura in Fase 1–3 di §10, ha senso come evoluzione naturale della Fase 4.
-
-- **Dashboard di calibrazione automatica.** M8 già registra confidenza dichiarata ed errore reale per ogni alimento (§12); una vista che aggrega questi dati per fascia di confidenza e li aggiorna a ogni analisi rende visibile, senza calcolo manuale, se "confidenza alta" continua a corrispondere a un errore basso man mano che cambiano modello, stagione dei pasti o abitudini dell'utente.
-- **Rilevamento automatico di regressioni.** Ogni volta che si aggiunge un nuovo pasto al benchmark, o si cambia prompt/modello/tabella densità, un job ricalcola le metriche di §12 per la versione corrente e le confronta con lo storico versionato (§7). Se una metrica peggiora oltre una soglia, il sistema lo **segnala** (notifica o badge nell'app di sviluppo/debug) — non prende alcuna azione. È il "rileva regressioni" di UC-OS, spogliato della parte "propone modifiche e promuove da solo".
-- **Espansione dei fattori di correzione oltre (modalità × strategia).** Con più dati si può segmentare ulteriormente (es. per singolo alimento frequente, o per fascia oraria del pasto) mantenendo la stessa regola di attivazione solo su pattern stabili di §8 — più dati abilitano più granularità, non un meccanismo diverso.
-- **Suggerimenti di calibrazione stoviglie/riferimenti corporei.** Se il sistema nota che un'ancora calibrata produce sistematicamente un bias, può proporre (mai applicare da solo) una ricalibrazione — es. "il piatto grande sembra dare pesi 8% più bassi del reale da 15 pasti, vuoi ricalibrarlo?".
-
-Ciò che **resta fuori anche da questa fase**, per scelta e non per limite tecnico: nessun componente cambia da solo un prompt, una strategia o il modello in produzione. La promozione di un cambiamento architetturale passa sempre dal confronto in ombra sul benchmark (§10) e da una decisione esplicita dell'owner — l'automazione qui descritta accorcia il tempo per *scoprire* che serve un cambiamento, non decide *quale* cambiamento fare.
+Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché hanno senso solo dopo che i punti 1–5 sono chiusi e M8 ha accumulato dati reali: dashboard di calibrazione automatica che segnala regressioni tra versioni, foto prima/dopo pasto per stimare il consumato dagli avanzi, mappa di profondità come ancora di scala aggiuntiva su dispositivi che la supportano, modelli multimodali on-device quando saranno affidabili (i contratti dati restano gli stessi, cambia solo il provider dietro M1). In tutti i casi, il cambio di prompt, strategia o modello in produzione resta una decisione dell'owner informata dal benchmark — nessun componente proposto qui deciderebbe da solo di cambiare l'architettura.
 
 ## 14. Decisioni chiave
 
 | Ambito | Decisione |
 |---|---|
-| Percezione visiva | Una sola chiamata unificata per scala, inventario e misure grezze |
-| Peso in grammi | Sempre calcolato dal motore fisico deterministico, mai dichiarato dal modello |
-| Tassonomia alimenti | Sei categorie definite dalla **strategia di calcolo**, non dalla geometria |
-| Verifica | Sempre attiva e deterministica; il modello interviene solo sugli alimenti segnalati |
-| Motore nutrizionale | Quello della V1, già solido, senza riscritture |
-| Prerequisito di sviluppo | Benchmark pesato (casa + ristorante) prima di scrivere qualunque modulo |
-| Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa |
-| Modalità di sessione | Selezione esplicita dell'utente a inizio sessione, mai dedotta dall'immagine |
-| Calibrazione | Due meccanismi distinti: stoviglie di casa e riferimenti corporei condivisi |
-| Evoluzione del sistema | Taratura di bias e calibrazione **automatica e continua** (§8, §13.2); cambio di prompt/strategia/modello sempre **manuale**, informato dal benchmark — il sistema segnala le regressioni, non le risolve da solo |
+| Percezione visiva | Una sola chiamata unificata per scala, inventario e misure grezze — implementata (M1) |
+| Peso in grammi | Sempre calcolato dal motore fisico deterministico, mai dichiarato dal modello — implementato (M3) |
+| Tassonomia alimenti | Sei categorie definite dalla strategia di calcolo, non dalla geometria — implementata (M2/M3) |
+| Verifica | Sempre attiva e deterministica; il modello interviene solo sugli alimenti segnalati — implementata (M4/M5), manca solo la regola di sicurezza su ambiguità residua |
+| Motore nutrizionale | Quello della V1, già solido, senza riscritture — implementato (M6) |
+| Collegamento alla UI | **Non ancora fatto** — priorità più alta del lavoro residuo (§13) |
+| Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa — implementata la logica (M3), manca la persistenza delle calibrazioni |
+| Modalità di sessione | Pensata come selezione esplicita dell'utente, mai dedotta dall'immagine — enum e prompt pronti, UI mancante |
+| Evoluzione del sistema | Algoritmo di taratura bias pronto e testato (M8); il ciclo automatico (raccolta → ricalcolo → applicazione) non è ancora chiuso |
+| Prerequisito di validazione | Benchmark pesato (casa + ristorante) — da costruire prima di qualunque decisione su una release in produzione |
 
 ---
 
 ## 15. Distribuzione delle versioni tramite GitHub Releases
 
-Non è un modulo della pipeline di analisi: è il meccanismo con cui una nuova versione del motore (§7: engine/prompt/strategie/tabella densità/calibrazione) arriva davvero sul telefono dell'utente. Parzialmente già implementato (`GitHubReleaseClient.kt`, `UpdateRepository.kt`, controllo manuale in Impostazioni > Software e aggiornamenti, changelog in `Changelog.kt`/`ChangelogScreen.kt`): questa sezione lo lega esplicitamente al sistema di versionamento del piano.
+**Stato: implementato, con una lacuna specifica.** File: `data/remote/github/GitHubReleaseClient.kt`, `data/repository/UpdateRepository.kt`, `ui/settings/ChangelogScreen.kt`/`ChangelogViewModel.kt`, `domain/model/Changelog.kt`.
 
-**Decisione: ogni release GitHub è un incremento di almeno una versione tracciata in §7.** Le tabelle di densità, i fattori di correzione di default, i prompt e le strategie vivono nel codice o negli asset dell'app: non esiste un modo di aggiornarli se non pubblicando una nuova build. Una release GitHub *è* quindi, per costruzione, l'unità con cui il sistema evolve nel mondo reale — non serve un meccanismo di distribuzione separato per l'"engine version" rispetto all'"app version".
+`GitHubReleaseClient.fetchLatestRelease()` chiama l'API pubblica REST di GitHub (`GET /repos/{owner}/{repo}/releases/latest`) senza token, estraendo tag, URL della pagina, corpo e l'asset `.apk`. `UpdateRepository.checkForUpdate()` confronta la versione installata con il tag remoto tramite confronto numerico segmento-per-segmento. Il controllo è **sempre manuale** (Impostazioni > Software e aggiornamenti), mai in background; il download resta delegato al browser di sistema. `Changelog.ENTRIES` è oggi una lista statica hardcoded in Kotlin (una sola voce, `2.0.0`), non letta dal corpo della release.
 
-**Cosa cambia rispetto a quanto già implementato:**
-- Il corpo della release (già mostrato come changelog in `ChangelogScreen`) deve dichiarare esplicitamente **quali versioni sono cambiate** (es. "motore v3, tabella densità v5, nessun cambio di prompt M1") — non solo le novità visibili all'utente. Questo rende un'analisi salvata in M8 con una certa combinazione di versioni sempre riconducibile a un changelog pubblico leggibile, chiudendo il cerchio aperto dal versionamento di §7.
-- La **promozione della V2 in produzione** (§10, Fase 3: "la V2 vince sul benchmark") avviene tramite una release taggata che lo dichiara esplicitamente nel changelog — non è un flag remoto o un rollout percentuale, è una release come le altre, letta e accettata dall'utente come già accade oggi.
-
-**Cosa resta invariato, perché già corretto:** il controllo è **sempre manuale**, mai automatico in background (coerente con "nessuna azione presa senza che l'utente la veda" ripetuto in tutto il documento — §0.2, §8); il download/installazione dell'APK resta delegato al browser di sistema, non gestito in-app.
+**Lacuna:** il corpo della release non dichiara quali versioni di motore/prompt/tabella densità sono cambiate (§7), quindi un record M8 con una certa combinazione di versioni non è ancora riconducibile a un changelog pubblico leggibile. Tracciato in §13.
 
 ## 16. Metadati del dispositivo per il calcolo del volume
 
-**Cosa si raccoglie, e da dove.** Per ogni foto scattata (già gestita in `CameraCaptureScreen.kt` con `ExifInterface`), oltre ai byte dell'immagine si estrae e si allega un piccolo record `FotoMetadata`: dati EXIF (lunghezza focale, lunghezza focale equivalente 35 mm, apertura, tempo di esposizione, ISO, risoluzione) e, se disponibili tramite le Camera2 `CameraCharacteristics` del dispositivo, la dimensione fisica del sensore.
+**Stato: minimo, molto meno di quanto inizialmente previsto.** File: `ui/camera/CameraCaptureScreen.kt` (funzioni private `exifRotationDegrees`, `decodeUprightBitmap`).
 
-**Cosa questi dati NON fanno, per essere onesti sul limite reale.** Non risolvono da soli il problema della scala. Calcolare una dimensione reale in centimetri da una singola foto 2D richiede comunque o un'ancora di dimensione nota (§8) o una distanza nota tra fotocamera e piatto, che questi metadati non forniscono: focale e dimensione del sensore, senza una distanza, dicono solo "quanto stringe l'inquadratura", non "quanto è grande l'oggetto". Dichiarare il contrario userebbe metadati veri per produrre falsa precisione — esattamente ciò che il documento rifiuta altrove (§8, regola di sicurezza in §5 M5).
+L'unico uso reale di EXIF oggi è la lettura del tag `TAG_ORIENTATION` per ruotare correttamente l'anteprima della foto in galleria/zoom — i byte JPEG inviati all'IA non vengono mai toccati. **Non esiste alcuna classe `FotoMetadata`** nel repository: nessuna estrazione di lunghezza focale, apertura, tempo di esposizione, ISO, o dimensione fisica del sensore tramite `CameraCharacteristics`. Di conseguenza M0 non usa questi dati per abbassare la confidenza su foto mosse o esposte male, e M8 non li ha disponibili per diagnostica di benchmark.
 
-**Cosa fanno davvero, ed è comunque valore reale:**
-- **Migliorano M0.** Un tempo di esposizione lungo combinato con ISO alto è un indicatore molto più affidabile di "probabile foto mossa" di un controllo di nitidezza generico basato solo sui pixel; una focale estrema (molto grandangolare) segnala distorsione ai bordi che può falsare le proporzioni lette da M1 — M0 può abbassare la confidenza o chiedere di riscattare invece di procedere alla cieca.
-- **Preparano il terreno per §13.1 (mappa di profondità).** Ogni foto salvata in M8 porta già con sé i metadati camera necessari; quando l'implementazione della Depth API (ARCore o dual-camera) verrà aggiunta come ancora di scala aggiuntiva, non serve ricostruire nulla a ritroso — i dati storici sono già nel formato giusto per essere riletti.
-- **Diagnostica nel benchmark.** Se un sottoinsieme di analisi con un certo profilo di metadati (es. foto scattate con focale molto corta, tipico di selfie-camera usata per errore) mostra errore sistematicamente più alto nel benchmark (§10), è un segnale diagnostico concreto su *quale* categoria di scatto istruire l'utente a evitare.
-
-**Contratto dati.** `FotoMetadata` viaggia insieme a ciascuna immagine da M0 in avanti e finisce nel record di analisi di M8, con la stessa disciplina di provenienza del resto del sistema (§7): ogni campo è opzionale (non tutti i dispositivi espongono tutte le `CameraCharacteristics`), mai inventato se assente.
+Motivazione per farlo comunque (perché resta un'idea valida, solo non ancora costruita): calcolare una dimensione reale in centimetri da una foto 2D richiede comunque un'ancora nota o una distanza nota — questi metadati da soli non risolvono il problema della scala, ma migliorerebbero la diagnosi di foto inutilizzabili in M0 prima di consumare una chiamata IA. Tracciato in §13.
 
 ## 17. Import/export dei dati utente
 
-**Perché serve.** L'app non ha backend (§3): storico analisi, calibrazioni personali (stoviglie, riferimenti corporei), fattori di correzione appresi (§8) e tabelle nutrizionali personalizzate vivono solo nel database Room del telefono. Senza un modo di esportarli, un cambio di telefono o un ripristino di fabbrica cancella mesi di calibrazione e di correzioni apprese — proprio il meccanismo di auto-miglioramento di §8 diventa un punto di fragilità se non è portabile.
+**Stato: implementato quasi per intero, con un'omissione specifica su M8.** File: `data/backup/BackupDtos.kt` (`UgoCalcBackupArchive`, `schema_version = 1`), `data/repository/BackupRepository.kt`, `ui/settings/BackupScreen.kt`/`BackupViewModel.kt`.
 
-**Cosa esporta.** Un singolo archivio JSON versionato, scritto dall'utente in una posizione a sua scelta tramite Storage Access Framework (nessun permesso di storage esteso richiesto): storico analisi e ground truth (M8), calibrazioni stoviglie e riferimenti corporei, fattori di correzione appresi (§8), tabelle nutrizionali personalizzate e preferiti (già presenti in V1: `OfficialTableEntity`, `NormalizedFoodEntryEntity`, `FavoriteShortcutEntity`).
+`exportAll()` serializza in un unico archivio JSON: cronologia analisi V1, tabelle nutrizionali normalizzate, fattori di correzione bias, preferiti (collegati per indice di posizione, non per id, perché l'id cambia al reinserimento). Le chiavi API non entrano mai nell'archivio, per scelta di sicurezza esplicita. `previewImport()` valida `schema_version` (rifiuta versioni più recenti di quella supportata) e mostra un riepilogo di cosa verrà sostituito prima della conferma; `applyImport()` esegue **sostituzione totale**, mai merge silenzioso — le stesse ragioni di §5 M8 sulla difficoltà di arbitrare conflitti tra fattori di bias duplicati si applicano qui. Uso confermato di Storage Access Framework, nessun permesso di storage esteso.
 
-**Cosa NON esporta mai, per scelta esplicita di sicurezza.** Le chiavi API (`SecureApiKeyStore`) non entrano mai nell'archivio: un file di backup che finisse nelle mani sbagliate (cloud personale non cifrato, condivisione accidentale) non deve poter esporre credenziali con costo reale associato. Ogni provider va riconfigurato manualmente sul nuovo dispositivo — costo minimo, rischio evitato.
-
-**Import — stessa disciplina di versionamento di §7.** L'archivio dichiara un `schema_version`. Al momento dell'import:
-- se `schema_version` è **più recente** di quella supportata dalla versione installata, l'import viene **rifiutato esplicitamente** ("questo backup viene da una versione più recente dell'app, aggiorna prima di importare") — mai un tentativo di lettura parziale che potrebbe corrompere silenziosamente i dati;
-- se è **più vecchia**, si applicano le migrazioni note (stesso meccanismo già usato per il database Room, `Migrations.kt`) prima di procedere.
-
-**Politica sui conflitti: sostituzione totale con conferma esplicita, mai merge silenzioso.** Prima di applicare l'import, l'app mostra un riepilogo di cosa verrà sostituito ("verranno sostituiti 340 analisi, 4 calibrazioni stoviglie, 12 fattori di correzione") e richiede conferma esplicita. Una fusione automatica tra dati esistenti e importati creerebbe stati ambigui (due fattori di correzione per lo stesso segmento modalità/strategia/modello, §8, con quale priorità?) difficili da diagnosticare a posteriori — meglio un'operazione netta e reversibile solo rifacendo l'ultimo export, che una fusione silenziosa che nessuno saprebbe più spiegare.
-
-**Uso reale oltre al backup personale:** durante lo sviluppo in ombra (§10, Fase 2), permette di portare lo stesso storico di benchmark tra un dispositivo di test e l'altro senza dover ripetere la raccolta pesata da zero.
+**Omissione:** `v2_analysis_records` (lo storico M8 con ground truth) **non viene mai esportato né importato** — solo la cronologia V1 lo è. Un cambio di telefono perderebbe lo storico di analisi V2, pur mantenendo i fattori di bias già calcolati (quelli sì sono esportati). Tracciato in §13. Non esistono ancora tabelle di calibrazione stoviglie/riferimenti corporei da esportare, perché — come detto in §8 — quelle tabelle non esistono nel DB.
 
 ---
 
