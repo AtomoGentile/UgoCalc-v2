@@ -127,7 +127,8 @@ Formule per strategia: Contabile = conteggio × peso unitario; Distesa = frazion
 **M4 – Verifica di coerenza** `[DET]` — **completo, con un proxy dichiarato nel codice**
 File: `domain/inference/m4/ConsistencyVerifier.kt`; test `m4/ConsistencyVerifierTest.kt`.
 Controlla: peso assoluto entro un range plausibile; densità superficiale del piatto (per alimenti "distesa"); somma delle frazioni di piatto coperte ≤ 1.2 (margine di errore di percezione); ambiguità identificativa quando esistono alternative di identificazione e la confidenza non è alta. Il vincolo di ambiguità usa oggi un **proxy** (presenza di alternative + confidenza non alta) invece di verificare se l'alternativa cambia davvero i CHO, perché richiederebbe di consultare le tabelle di M6 — commentato esplicitamente nel codice come raffinamento da aggiungere quando M6 sarà collegato a M4.
-**Cosa manca rispetto all'idea originale:** una regola di sicurezza per cui, se un'ambiguità resta irrisolta dopo M5, il sistema sceglie automaticamente l'alternativa con CHO più alto e segnala la necessità di conferma manuale (scelta prudente per un'app che informa dosi di insulina — sottostimare i CHO è l'errore peggiore, sovrastimare su un alimento dichiaratamente incerto è recuperabile). Questa regola **non è implementata**: `VerificationReport` non ha un campo di ambiguità residua, e `V2AnalysisPipeline` non sceglie mai esplicitamente l'alternativa più cautelativa. È tracciata come lavoro da fare in §13.
+**Regola di sicurezza sull'ambiguità residua — implementata (§13 punto 2).** Se dopo un tentativo di M5 un alimento ha ancora alternative di identificazione aperte, `V2AnalysisPipeline.risolviAmbiguitaResidua()` (chiamata da `finalizza()`, quindi su ogni percorso: nessun flag, M5 riuscito, M5 non disponibile) cerca il CHO/100g di ciascun candidato (nome originale + alternative) tramite lo step iniettabile `AmbiguityResolutionStep` e sceglie quello con CHO più alto — mai sottostimare i carboidrati su un'identificazione incerta, sovrastimare su un alimento dichiaratamente incerto resta l'errore recuperabile. La scelta rinomina l'alimento nello `SceneGraph` finale e nella `WeightEstimate` corrispondente (così M6 abbina la nutrizione al nome scelto) e viene dichiarata in `VerificationReport.ambiguitaRisolta` (§7), pronta per la UI quando la V2 sarà un flusso visibile (§13 punto 1). Se nessun candidato è riconosciuto, l'alimento resta invariato: l'ambiguità resta comunque segnalata da `flaggati`, semplicemente non "risolta" per difetto.
+`V2AnalysisPipelineFactory` collega oggi questo step a una ricerca **locale e deterministica** (`TableRepository.searchEntries`, la stessa ricerca manuale delle tabelle utente): nessuna terza chiamata al modello, quindi resta nel budget di due chiamate (§4).
 
 **M5 – Arbitrato selettivo** `[IA – eventuale]` — **completo, wiring corretto**
 File: `domain/inference/m5/SelectiveArbitrationEngine.kt`, `m5/ArbitrationPrompt.kt`; contratti in `domain/inference/model/ArbitrationContracts.kt`. Test: `m5/ArbitrationPromptTest.kt`.
@@ -212,7 +213,7 @@ Ogni modulo riceve e restituisce **JSON strutturato** (kotlinx.serialization). R
 }
 ```
 
-Nota: il campo `fattore_correzione` immaginato in fase di progetto (per tracciare l'applicazione di un bias appreso, §8) **non è ancora popolato**, perché M3 non consulta i fattori di correzione (§5 M3). Quando il collegamento sarà fatto, questo è il punto dove il valore comparirà nella catena.
+Nota: il campo `fattore_correzione` immaginato in fase di progetto (per tracciare l'applicazione di un bias appreso, §8) **è ora popolato** (§20): quando `PhysicsEngine.estimate()` riceve un `biasFactor` non nullo, la `CalculationChain` lo dichiara qui insieme alla sua `CalculationSource` dedicata.
 
 **M4 → M5/M6: `VerificationReport`** — esito di ciascun vincolo e alimenti flaggati con motivo:
 
@@ -224,7 +225,7 @@ Nota: il campo `fattore_correzione` immaginato in fase di progetto (per tracciar
 }
 ```
 
-Il campo `ambiguita_residua` (con la regola "CHO più alto in caso di dubbio irrisolto") descritto in fase di progetto **non esiste ancora in questo contratto** — è lavoro non fatto, non una scelta di design cambiata (§5 M4, §13).
+Il campo `ambiguita_risolta` (con la regola "CHO più alto in caso di dubbio irrisolto") **esiste ora in questo contratto**: `VerificationReport.ambiguitaRisolta` elenca, per ogni alimento rinominato dalla regola di sicurezza (§5 M4), il nome originale, il nome scelto e il suo CHO/100g (§5 M4, §13 punto 2).
 
 **M8: record di analisi** — copia integrale dei documenti precedenti + versioni (schema, modello, engine) + modalità di sessione + eventuale ground truth:
 
@@ -257,9 +258,9 @@ Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affid
 | **Alta** | Il motore M0–M8 gira solo in modalità ombra opzionale: senza promozione a flusso visibile e benchmark resta non validato | Shadow wiring in `CameraCaptureViewModel` già presente; promozione a risultato utente e dashboard benchmark restano il prossimo passo tracciato in §13 |
 | Media | Tabella densità incompleta o imprecisa | File dati versionato (`PhysicalData.kt`), correggibile senza toccare la logica di calcolo |
 | Media | Il modello non rispetta il formato atteso | Validazione rigida dello schema, fallback su stima diretta stile V1 (implementato in M1/M5) |
-| Media | Il bias calcolato non viene mai applicato, quindi il sistema non migliora usandolo | Vedi §5 M8/§8: i tre collegamenti mancanti sono in cima alla lista di §13 |
+| Media | Il bias calcolato non viene mai applicato, quindi il sistema non migliora usandolo | Risolto (§20): PhysicsEngine consuma ora il fattore tramite BiasFactorStep |
 | Media | Composti/occlusi restano difficili (nessuna ripartizione da ricetta) | Intervalli di confidenza ampi mostrati esplicitamente; ripartizione da ricetta non implementata (§5 M3) |
-| **Sempre presente** | Una stima errata influenza una decisione clinica (dose di insulina) | Intervalli sempre visibili nella catena di calcolo; la regola di sicurezza "CHO più alto su ambiguità irrisolta" **non è ancora implementata** (§5 M4) — priorità alta in §13 |
+| **Sempre presente** | Una stima errata influenza una decisione clinica (dose di insulina) | Intervalli sempre visibili nella catena di calcolo; la regola di sicurezza "CHO più alto su ambiguità irrisolta" **implementata** (§5 M4) — resta da collegarla alla UI quando la V2 sarà flusso visibile (§13 punto 1) |
 
 **Colli di bottiglia identificati:**
 
@@ -308,7 +309,7 @@ Queste metriche sono definite come obiettivo di misurazione per il benchmark di 
 Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sotto ci sono i collegamenti e le implementazioni mancanti già individuati leggendo il codice attuale, necessari perché il motore descritto nei §5–§8 diventi qualcosa che l'utente usa davvero.
 
 1. **Promuovere `V2AnalysisPipeline` da modalità ombra a flusso visibile** (`CameraCaptureViewModel`/`VisionResultsViewModel`). Il collegamento shadow e lo switch Casa/Ristorante esistono; manca ancora l'uso della V2 come risultato mostrato all'utente, con gestione UI degli errori e fallback V1 esplicito.
-2. **Regola di sicurezza sull'ambiguità residua in M4**: dopo un tentativo di M5, un'identificazione ancora ambigua tra alternative con CHO diverso deve selezionare l'alternativa a CHO più alto e segnalarlo esplicitamente in UI come stima cautelativa da confermare. Priorità alta per un'app che informa dosi di insulina: sottostimare i CHO per eccesso di fiducia è l'errore peggiore possibile.
+2. ~~Regola di sicurezza sull'ambiguità residua in M4~~ — **fatto**: dopo un tentativo di M5, `V2AnalysisPipeline` seleziona ora automaticamente, tra il nome originale e le alternative rimaste aperte, quello con il CHO/100g più alto (ricerca locale in `TableRepository`, nessuna chiamata IA aggiuntiva) e lo dichiara in `VerificationReport.ambiguitaRisolta` (§5 M4, §7). Resta da collegare alla UI (mostrarlo come stima cautelativa da confermare), il che dipende dal punto 1 — oggi la V2 non è ancora il flusso visibile.
 3. ~~Chiudere il ciclo di bias (§5 M8, §8)~~ — **fatto (§20, 6 luglio 2026)**: `GroundTruthEntryScreen` per registrare ground truth collegata a un record M8; `AppForegroundObserver` come trigger di ricalcolo all'apertura dell'app; `PhysicsEngine` consuma ora il fattore calcolato. Resta da valutare, quando ci saranno abbastanza dati reali, se il trigger all'apertura app è sufficiente o serve un vero job periodico (`WorkManager`, dipendenza già presente ma non ancora usata altrove).
 4. **Calibrazione persistente delle stoviglie e dei riferimenti corporei** (§8): tabelle Room dedicate, oggi inesistenti, così che una calibrazione fatta una volta non vada persa a ogni sessione.
 5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti.
@@ -327,7 +328,7 @@ Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché
 | Percezione visiva | Una sola chiamata unificata per scala, inventario e misure grezze — implementata (M1) |
 | Peso in grammi | Sempre calcolato dal motore fisico deterministico, mai dichiarato dal modello — implementato (M3) |
 | Tassonomia alimenti | Sei categorie definite dalla strategia di calcolo, non dalla geometria — implementata (M2/M3) |
-| Verifica | Sempre attiva e deterministica; il modello interviene solo sugli alimenti segnalati — implementata (M4/M5), manca solo la regola di sicurezza su ambiguità residua |
+| Verifica | Sempre attiva e deterministica; il modello interviene solo sugli alimenti segnalati — implementata (M4/M5), inclusa la regola di sicurezza su ambiguità residua (CHO più alto in caso di dubbio irrisolto) |
 | Motore nutrizionale | Quello della V1, già solido, senza riscritture — implementato (M6) |
 | Collegamento alla UI | Fatto solo in **modalità ombra opzionale**: V1 resta il flusso visibile; promozione della V2 a risultato utente ancora mancante (§13) |
 | Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa — implementata la logica (M3), manca la persistenza delle calibrazioni |
