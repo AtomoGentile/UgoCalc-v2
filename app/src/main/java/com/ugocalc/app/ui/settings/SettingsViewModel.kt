@@ -7,8 +7,10 @@ import com.ugocalc.app.data.local.prefs.UserSettings
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.domain.model.AiProviderType
+import com.ugocalc.app.ui.AnalysisSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,7 @@ import javax.inject.Inject
 data class SettingsScreenState(
     val userSettings: UserSettings = UserSettings(),
     val officialTableCount: Int = 0,
+    val currentSessionMode: SessionMode = SessionMode.CASA,
 )
 
 @HiltViewModel
@@ -27,12 +30,14 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val historyRepository: HistoryRepository,
     tableRepository: TableRepository,
+    private val sessionStore: AnalysisSessionStore,
 ) : ViewModel() {
 
     val state: StateFlow<SettingsScreenState> = combine(
         settingsRepository.settings,
         tableRepository.observeTableCount(),
-    ) { settings, tableCount -> SettingsScreenState(settings, tableCount) }
+        sessionStore.session,
+    ) { settings, tableCount, session -> SettingsScreenState(settings, tableCount, session.sessionMode) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsScreenState())
 
     fun setTheme(theme: AppTheme) = viewModelScope.launch { settingsRepository.setTheme(theme) }
@@ -44,6 +49,11 @@ class SettingsViewModel @Inject constructor(
     fun setTertiaryColor(argb: Int?) = viewModelScope.launch { settingsRepository.setTertiaryColor(argb) }
     fun setBackgroundColor(argb: Int?) = viewModelScope.launch { settingsRepository.setBackgroundColor(argb) }
     fun setErrorColor(argb: Int?) = viewModelScope.launch { settingsRepository.setErrorColor(argb) }
+    fun setPrimaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setPrimaryColorRistorante(argb) }
+    fun setSecondaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setSecondaryColorRistorante(argb) }
+    fun setTertiaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setTertiaryColorRistorante(argb) }
+    fun setBackgroundColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setBackgroundColorRistorante(argb) }
+    fun setErrorColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setErrorColorRistorante(argb) }
     fun setHistoryChartEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setHistoryChartEnabled(enabled) }
     fun setFontFamily(name: String?) = viewModelScope.launch { settingsRepository.setFontFamily(name) }
     fun setFontColor(argb: Int?) = viewModelScope.launch { settingsRepository.setFontColor(argb) }
