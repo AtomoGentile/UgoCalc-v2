@@ -17,7 +17,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Menu
@@ -135,12 +134,10 @@ fun HomeScreen(
                         IconButton(onClick = onNavigateToHistory) {
                             Icon(Icons.Default.History, contentDescription = "Cronologia")
                         }
-                        SessionModeSelector(
-                            currentMode = uiState.sessionMode,
-                            onModeChange = viewModel::setSessionMode,
-                        )
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Impostazioni")
+                        IconButton(
+                            onClick = { viewModel.setSessionMode(if (uiState.sessionMode == SessionMode.CASA) SessionMode.RISTORANTE else SessionMode.CASA) }
+                        ) {
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Cambia modalità")
                         }
                     },
                 )
@@ -155,16 +152,20 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.Top,
             ) {
                 Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
-                    AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
-                        val preferred = uiState.preferredModels
-                        if (preferred.isNotEmpty()) {
-                            viewModel.startAnalysisWithPreferredModels()
-                            onNavigateDirectlyToCamera(preferred.map { it.id })
-                        } else {
-                            viewModel.startNewAnalysis()
-                            onNavigateToModelSelection()
+                    AnalyzeButton(
+                        state = uiState.analyzeButtonState,
+                        sessionMode = uiState.sessionMode,
+                        onClick = {
+                            val preferred = uiState.preferredModels
+                            if (preferred.isNotEmpty()) {
+                                viewModel.startAnalysisWithPreferredModels()
+                                onNavigateDirectlyToCamera(preferred.map { it.id })
+                            } else {
+                                viewModel.startNewAnalysis()
+                                onNavigateToModelSelection()
+                            }
                         }
-                    })
+                    )
                 }
 
                 OutlinedButton(
@@ -201,13 +202,6 @@ fun HomeScreen(
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
                     Text("Scansiona codice a barre")
                 }
-
-                Text(
-                    text = if (uiState.sessionMode == SessionMode.CASA) "Casa" else "Ristorante",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                )
 
                 if (uiState.favoritesEnabled) {
                     IconButton(
@@ -277,28 +271,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun SessionModeSelector(currentMode: SessionMode, onModeChange: (SessionMode) -> Unit) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.padding(horizontal = 4.dp),
-    ) {
-        IconButton(
-            onClick = { if (currentMode == SessionMode.RISTORANTE) onModeChange(SessionMode.CASA) },
-            modifier = Modifier.size(40.dp),
-        ) {
-            Icon(Icons.Default.ChevronLeft, contentDescription = "Modalità precedente", modifier = Modifier.size(24.dp))
-        }
-        IconButton(
-            onClick = { if (currentMode == SessionMode.CASA) onModeChange(SessionMode.RISTORANTE) },
-            modifier = Modifier.size(40.dp),
-        ) {
-            Icon(Icons.Default.ChevronRight, contentDescription = "Modalità successiva", modifier = Modifier.size(24.dp))
-        }
-    }
-}
-
-@Composable
-private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit) {
+private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit, sessionMode: SessionMode = SessionMode.CASA) {
     val color = when (state) {
         AnalyzeButtonState.ENABLED_ONLINE -> androidx.compose.material3.MaterialTheme.colorScheme.primary
         AnalyzeButtonState.ENABLED_OFFLINE -> androidx.compose.material3.MaterialTheme.colorScheme.error
@@ -311,6 +284,16 @@ private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit) {
             .clickable(enabled = state != AnalyzeButtonState.DISABLED_NO_TABLE) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Text("Analizza", color = androidx.compose.ui.graphics.Color.White, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            Text("Analizza", color = androidx.compose.ui.graphics.Color.White, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+            Text(
+                "(${if (sessionMode == SessionMode.CASA) "Casa" else "Ristorante"})",
+                color = androidx.compose.ui.graphics.Color.White,
+                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            )
+        }
     }
 }
