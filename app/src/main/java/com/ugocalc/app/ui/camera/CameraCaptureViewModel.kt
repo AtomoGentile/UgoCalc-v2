@@ -76,7 +76,9 @@ class CameraCaptureViewModel @Inject constructor(
         viewModelScope.launch {
             val settings = settingsRepository.settings.first()
             val model = models.firstOrNull()
-            val v2VisibleEnabled = settings.v2VisibleModeEnabled && model != null
+            // Non più uno switch manuale (§13 punto 1, §20): il benchmark pesato decide se la V2 ha
+            // già superato la V1 sul CHO, su un numero sufficiente di pasti pesati.
+            val v2VisibleEnabled = benchmarkRepository.evaluatePromotion().promoteV2 && model != null
             val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
             if (v2Result != null) {
                 val (outcome, totals) = v2Result

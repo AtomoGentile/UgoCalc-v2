@@ -98,21 +98,24 @@ fun BiasEvolutionScreen(
                         }
                         Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
                     }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("Usa la V2 come motore visibile", fontWeight = FontWeight.Bold)
-                            Text(
-                                "Il risultato che vedi dopo lo scatto è calcolato dal nuovo motore V2, non più " +
-                                    "dalla V1. Se la V2 non riesce (foto scadenti, errore di rete o di formato), " +
-                                    "l'analisi ricade automaticamente sulla V1 nella stessa sessione.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = UgoGrey,
-                            )
-                        }
-                        Switch(checked = uiState.v2VisibleModeEnabled, onCheckedChange = { viewModel.setV2VisibleModeEnabled(it) })
+                    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                        Text("Motore visibile: decisione automatica", fontWeight = FontWeight.Bold)
+                        Text(
+                            "Non è più uno switch manuale: il risultato che vedi dopo lo scatto passa da solo " +
+                                "alla V2 quando il benchmark (\"Benchmark V1 vs V2\" sotto) mostra che supera la " +
+                                "V1 sul CHO, su un numero sufficiente di pasti pesati. Finché non succede, resti " +
+                                "sulla V1. Se la V2 non riesce comunque (foto scadenti, errore di rete o di " +
+                                "formato), l'analisi ricade sulla V1 nella stessa sessione.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = UgoGrey,
+                        )
+                        Text(
+                            if (uiState.v2Promoted) "Oggi in uso: V2" else "Oggi in uso: V1",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,
+                            modifier = Modifier.padding(top = 6.dp),
+                        )
                     }
                     Button(onClick = onOpenGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                         Text("Registra peso vero di un'analisi")

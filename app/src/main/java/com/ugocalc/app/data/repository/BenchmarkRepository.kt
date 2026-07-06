@@ -15,6 +15,28 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.abs
+
+/** Metriche aggregate per un motore (V1 o V2), calcolate sui pasti con peso vero registrato (§12: metriche già definite, non nuove). */
+data class EngineStats(
+    val weightMaeG: Double?,
+    val weightSampleCount: Int,
+    val choWithin10gPercent: Double?,
+    val choWithin20gPercent: Double?,
+    val choMealCount: Int,
+)
+
+/**
+ * Esito della valutazione automatica V1 vs V2 (§13 punto 1, §20: "deve basarsi sul benchmark
+ * pesato, nessuna logica automatica sceglie V1 o V2 al posto dell'owner" — questa è quella logica).
+ */
+data class PromotionDecision(
+    val promoteV2: Boolean,
+    val mealCount: Int,
+    val recommendedMinMeals: Int,
+    val v1: EngineStats,
+    val v2: EngineStats,
+)
 
 /** Coefficienti nutrizionali per 100g trovati dal matching V1, per un alimento. */
 @Serializable
@@ -115,6 +137,61 @@ class BenchmarkRepository @Inject constructor(
     /** Pasti con peso vero registrato, con le stime V1/V2 già decodificate: la base della dashboard di confronto (§10, §13 punto 5). */
     suspend fun listMealsWithGroundTruth(): List<BenchmarkMeal> =
         benchmarkDao.getAllWithGroundTruth().map { entity -> toBenchmarkMeal(entity) }
+
+    /**
+     * Decisione automatica V1 vs V2 (§13 punto 1, §20): promuove la V2 a motore visibile solo se,
+     * su almeno [minMeals] pasti raccolti, la sua percentuale di pasti con errore CHO entro 10g è
+     * migliore o pari a quella della V1 — il CHO è l'unità che conta davvero per l'utente, più
+     * significativa del solo errore di peso per alimento. Sotto la soglia minima, o se manca la
+     * metrica per uno dei due motori, resta su V1 per prudenza (dati insufficienti per decidere).
+     */
+    suspend fun evaluatePromotion(minMeals: Int = 30): PromotionDecision {
+        val meals = listMealsWithGroundTruth()
+        val v1 = computeEngineStats(meals, v1 = true)
+        val v2 = computeEngineStats(meals, v1 = false)
+        val v1Percent = v1.choWithin10gPercent
+        val v2Percent = v2.choWithin10gPercent
+        val promoteV2 = meals.size >= minMeals && v1Percent != null && v2Percent != null && v2Percent >= v1Percent
+        return PromotionDecision(promoteV2, meals.size, minMeals, v1, v2)
+    }
+
+    private fun computeEngineStats(meals: List<BenchmarkMeal>, v1: Boolean): EngineStats {
+        val weightErrors = mutableListOf<Double>()
+        var within10 = 0
+        var within20 = 0
+        var mealsWithCho = 0
+        for (meal in meals) {
+            val stimePerNome = if (v1) meal.v1PesiPerAlimento else meal.v2Stime.associate { it.nome to it.pesoG }
+            for ((nome, veroG) in meal.groundTruthPesi) {
+                stimePerNome[nome]?.let { stimaG -> weightErrors += abs(stimaG - veroG) }
+            }
+            val coeffPerNome = if (v1) {
+                meal.v1NutrizionePerAlimento.mapValues { it.value.choPer100g }
+            } else {
+                meal.v2Nutrizione?.righe.orEmpty().filterNot { it.escluso }
+                    .mapNotNull { riga -> if (riga.pesoG <= 0.0 || riga.choG == null) null else riga.nome to riga.choG / riga.pesoG * 100.0 }
+                    .toMap()
+            }
+            if (coeffPerNome.isEmpty()) continue
+            val choVero = meal.groundTruthPesi.entries.sumOf { (nome, veroG) -> (coeffPerNome[nome] ?: 0.0) * veroG / 100.0 }
+            val choStimato = if (v1) {
+                meal.v1PesiPerAlimento.entries.sumOf { (nome, stimaG) -> (coeffPerNome[nome] ?: 0.0) * stimaG / 100.0 }
+            } else {
+                meal.v2Nutrizione?.righe.orEmpty().filterNot { it.escluso }.sumOf { it.choG ?: 0.0 }
+            }
+            mealsWithCho++
+            val errore = abs(choStimato - choVero)
+            if (errore <= 10.0) within10++
+            if (errore <= 20.0) within20++
+        }
+        return EngineStats(
+            weightMaeG = weightErrors.takeIf { it.isNotEmpty() }?.average(),
+            weightSampleCount = weightErrors.size,
+            choWithin10gPercent = mealsWithCho.takeIf { it > 0 }?.let { within10 * 100.0 / it },
+            choWithin20gPercent = mealsWithCho.takeIf { it > 0 }?.let { within20 * 100.0 / it },
+            choMealCount = mealsWithCho,
+        )
+    }
 
     private suspend fun toBenchmarkMeal(entity: BenchmarkMealEntity): BenchmarkMeal {
         val v2Record = entity.v2RecordId?.let { v2Dao.getById(it) }
