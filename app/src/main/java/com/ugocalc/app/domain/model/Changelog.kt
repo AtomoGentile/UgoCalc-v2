@@ -11,6 +11,15 @@ data class ChangelogEntry(val version: String, val highlights: List<String>)
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "2.1.0",
+            highlights = listOf(
+                "Nuova guida in tempo reale durante lo scatto: un suggeritore d'angolazione indica se il telefono è troppo inclinato rispetto al piatto, per foto più affidabili.",
+                "Nuova schermata \"Ground truth\": puoi indicare il peso reale di un piatto già analizzato, per aiutare l'app a correggere il proprio bias di stima.",
+                "Il fattore di correzione del bias viene ora ricalcolato automaticamente ogni volta che riapri l'app, così da usare sempre i dati più recenti.",
+                "Bug fix: in presenza di forte ambiguità residua nella stima, l'app ora segnala il problema invece di applicare comunque una correzione di bias potenzialmente fuorviante.",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.0.0",
             highlights = listOf(
                 "Bug fix: la fotocamera poteva mandare in crash l'app al primo scatto se il permesso non era mai stato concesso da Impostazioni.",
