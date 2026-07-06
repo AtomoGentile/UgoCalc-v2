@@ -1,5 +1,6 @@
 package com.ugocalc.app.ui.camera
 
+import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -18,10 +19,12 @@ import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
+import com.ugocalc.app.util.CameraMetadataHelper
 import com.ugocalc.app.util.GyroscopeMotionTracker
 import com.ugocalc.app.util.computePhotoQuality
 import com.ugocalc.app.util.extractCameraMetadata
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -68,6 +71,7 @@ class CameraCaptureViewModel @Inject constructor(
     private val v2PipelineFactory: V2AnalysisPipelineFactory,
     private val benchmarkRepository: BenchmarkRepository,
     private val gyroscopeTracker: GyroscopeMotionTracker,
+    @ApplicationContext private val context: Context,
     @ShadowAnalysisScope private val shadowScope: CoroutineScope,
 ) : ViewModel() {
 
@@ -101,7 +105,10 @@ class CameraCaptureViewModel @Inject constructor(
             // inaffidabile con V1 (che non applica questo gate).
             val qualityPhotos = capturedPhotos.mapIndexed { index, photo ->
                 val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
-                val cameraMetadata = extractCameraMetadata(photo.bytes)
+                val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
+                    extractCameraMetadata(photo.bytes),
+                    context
+                )
                 computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo))
             }
             if (QualityGate().assess(qualityPhotos).tutteScadenti) {
@@ -157,7 +164,10 @@ class CameraCaptureViewModel @Inject constructor(
         return runCatching {
             val photos = capturedPhotos.mapIndexed { index, photo ->
                 val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
-                val cameraMetadata = extractCameraMetadata(photo.bytes)
+                val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
+                    extractCameraMetadata(photo.bytes),
+                    context
+                )
                 SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
             }
             val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
@@ -213,7 +223,10 @@ class CameraCaptureViewModel @Inject constructor(
             runCatching {
                 val photos = capturedPhotos.mapIndexed { index, photo ->
                     val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
-                    val cameraMetadata = extractCameraMetadata(photo.bytes)
+                    val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
+                        extractCameraMetadata(photo.bytes),
+                        context
+                    )
                     SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
                 }
                 val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)

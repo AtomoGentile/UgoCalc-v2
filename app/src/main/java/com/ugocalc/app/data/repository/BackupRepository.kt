@@ -6,20 +6,27 @@ import com.ugocalc.app.data.backup.FavoriteDto
 import com.ugocalc.app.data.backup.FoodEntryDto
 import com.ugocalc.app.data.backup.HistoryEntryDto
 import com.ugocalc.app.data.backup.ImportValidation
+import com.ugocalc.app.data.backup.ScaleCalibrationDto
 import com.ugocalc.app.data.backup.TableDto
 import com.ugocalc.app.data.backup.UgoCalcBackupArchive
+import com.ugocalc.app.data.backup.V2AnalysisRecordDto
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
+import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
+import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.model.OfficialFileType
+import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -48,11 +55,39 @@ class BackupRepository @Inject constructor(
     private val normalizedFoodEntryDao: NormalizedFoodEntryDao,
     private val biasCorrectionDao: BiasCorrectionDao,
     private val favoriteShortcutDao: FavoriteShortcutDao,
+    private val v2AnalysisRecordDao: V2AnalysisRecordDao,
+    private val scaleCalibrationDao: ScaleCalibrationDao,
     private val json: Json,
 ) {
     suspend fun exportAll(): String {
         val history = historyDao.getAllOnce()
         val historyIndexById = history.withIndex().associate { (index, entity) -> entity.id to index }
+
+        val v2Records = v2AnalysisRecordDao.getAll().map {
+            V2AnalysisRecordDto(
+                analyzedAtEpochMillis = it.analyzedAtEpochMillis,
+                sessionMode = it.sessionMode,
+                aiModelId = it.aiModelId,
+                schemaVersion = it.schemaVersion,
+                sceneGraphJson = it.sceneGraphJson,
+                weightEstimatesJson = it.weightEstimatesJson,
+                verificationReportJson = it.verificationReportJson,
+                nutritionReportJson = it.nutritionReportJson,
+                arbitratoMotivoMancato = it.arbitratoMotivoMancato,
+                groundTruthPesiJson = it.groundTruthPesiJson,
+                groundTruthLivello = it.groundTruthLivello,
+                sessionId = it.sessionId,
+            )
+        }
+
+        val scaleCalibrations = scaleCalibrationDao.getAll().first().map {
+            ScaleCalibrationDto(
+                type = it.type,
+                name = it.name,
+                valueCm = it.valueCm,
+                capacityMl = it.capacityMl,
+            )
+        }
 
         val tables = officialTableDao.getAllOrderedByPriority().map { table ->
             val entries = normalizedFoodEntryDao.getForTable(table.id).map {
@@ -114,6 +149,8 @@ class BackupRepository @Inject constructor(
                     detailsJson = it.detailsJson,
                 )
             },
+            v2Records = v2Records,
+            scaleCalibrations = scaleCalibrations,
             tables = tables,
             biasCorrections = biasCorrections,
             favorites = favorites,
@@ -140,6 +177,8 @@ class BackupRepository @Inject constructor(
         return ImportValidation.Ok(
             BackupSummary(
                 historyCount = archive.history.size,
+                v2RecordsCount = archive.v2Records.size,
+                scaleCalibrationsCount = archive.scaleCalibrations.size,
                 tablesCount = archive.tables.size,
                 biasCorrectionsCount = archive.biasCorrections.size,
                 favoritesCount = archive.favorites.size,
@@ -166,6 +205,38 @@ class BackupRepository @Inject constructor(
                     totalGrassiG = entry.totalGrassiG,
                     modelDisplayNamesJson = entry.modelDisplayNamesJson,
                     detailsJson = entry.detailsJson,
+                ),
+            )
+        }
+
+        v2AnalysisRecordDao.deleteAll()
+        archive.v2Records.forEach {
+            v2AnalysisRecordDao.insert(
+                V2AnalysisRecordEntity(
+                    analyzedAtEpochMillis = it.analyzedAtEpochMillis,
+                    sessionMode = it.sessionMode,
+                    aiModelId = it.aiModelId,
+                    schemaVersion = it.schemaVersion,
+                    sceneGraphJson = it.sceneGraphJson,
+                    weightEstimatesJson = it.weightEstimatesJson,
+                    verificationReportJson = it.verificationReportJson,
+                    nutritionReportJson = it.nutritionReportJson,
+                    arbitratoMotivoMancato = it.arbitratoMotivoMancato,
+                    groundTruthPesiJson = it.groundTruthPesiJson,
+                    groundTruthLivello = it.groundTruthLivello,
+                    sessionId = it.sessionId,
+                ),
+            )
+        }
+
+        scaleCalibrationDao.deleteAll()
+        archive.scaleCalibrations.forEach {
+            scaleCalibrationDao.insert(
+                ScaleCalibrationEntity(
+                    type = it.type,
+                    name = it.name,
+                    valueCm = it.valueCm,
+                    capacityMl = it.capacityMl,
                 ),
             )
         }

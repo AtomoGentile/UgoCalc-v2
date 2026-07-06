@@ -15,13 +15,15 @@ data class UgoCalcBackupArchive(
     val schemaVersion: Int = SCHEMA_VERSION,
     val exportedAtEpochMillis: Long,
     val history: List<HistoryEntryDto>,
+    val v2Records: List<V2AnalysisRecordDto>,
+    val scaleCalibrations: List<ScaleCalibrationDto>,
     val tables: List<TableDto>,
     val biasCorrections: List<BiasCorrectionDto>,
     val favorites: List<FavoriteDto>,
 ) {
     companion object {
         /** Versione corrente del formato di backup (§17), indipendente dallo schema del database Room. */
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 4
     }
 }
 
@@ -33,6 +35,30 @@ data class HistoryEntryDto(
     val totalGrassiG: Double,
     val modelDisplayNamesJson: String,
     val detailsJson: String,
+)
+
+@Serializable
+data class V2AnalysisRecordDto(
+    val analyzedAtEpochMillis: Long,
+    val sessionMode: String,
+    val aiModelId: String,
+    val schemaVersion: Int,
+    val sceneGraphJson: String,
+    val weightEstimatesJson: String,
+    val verificationReportJson: String,
+    val nutritionReportJson: String,
+    val arbitratoMotivoMancato: String?,
+    val groundTruthPesiJson: String?,
+    val groundTruthLivello: String?,
+    val sessionId: String?,
+)
+
+@Serializable
+data class ScaleCalibrationDto(
+    val type: String,
+    val name: String,
+    val valueCm: Double,
+    val capacityMl: Double?,
 )
 
 /** [entries] sono le sole righe già normalizzate: il documento originale caricato dall'utente non viene esportato (§17, §7 nota su storedFilePath). */
@@ -90,6 +116,8 @@ data class FavoriteDto(
 /** Conteggi da mostrare all'utente prima di confermare l'import (§17 "sostituzione totale con conferma esplicita"). */
 data class BackupSummary(
     val historyCount: Int,
+    val v2RecordsCount: Int,
+    val scaleCalibrationsCount: Int,
     val tablesCount: Int,
     val biasCorrectionsCount: Int,
     val favoritesCount: Int,

@@ -36,6 +36,9 @@ interface V2AnalysisRecordDao {
     /** Coppie (modalità, modello) per cui esiste almeno un ground truth: base per il ricalcolo periodico di tutti i segmenti (§8, §13). */
     @Query("SELECT DISTINCT sessionMode, aiModelId FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
     suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair>
+
+    @Query("DELETE FROM v2_analysis_records")
+    suspend fun deleteAll()
 }
 
 /** Proiezione minima per [V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth]. */

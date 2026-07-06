@@ -1,6 +1,7 @@
 package com.ugocalc.app.domain.inference
 
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
+import com.ugocalc.app.data.repository.ScaleCalibrationRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
@@ -23,6 +24,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val nutritionMatchStepAdapter: NutritionMatchStepAdapter,
     private val telemetryRepository: V2TelemetryRepository,
     private val biasCorrectionRepository: BiasCorrectionRepository,
+    private val scaleCalibrationRepository: ScaleCalibrationRepository,
     private val settingsRepository: SettingsRepository,
     private val tableRepository: TableRepository,
 ) {
@@ -40,6 +42,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
         },
+        getCalibrations = { scaleCalibrationRepository.observeAll().first() },
         resolveAmbiguity = { candidati ->
             // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni
             // candidato prende il CHO/100g della prima voce trovata nelle tabelle dell'utente.

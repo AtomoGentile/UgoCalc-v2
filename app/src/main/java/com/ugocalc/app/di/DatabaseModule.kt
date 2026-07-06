@@ -10,12 +10,14 @@ import com.ugocalc.app.data.local.db.MIGRATION_4_5
 import com.ugocalc.app.data.local.db.MIGRATION_5_6
 import com.ugocalc.app.data.local.db.MIGRATION_6_7
 import com.ugocalc.app.data.local.db.MIGRATION_7_8
+import com.ugocalc.app.data.local.db.MIGRATION_8_9
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.dao.BenchmarkMealDao
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import dagger.Module
@@ -33,7 +35,7 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
             .build()
 
     @Provides
@@ -59,4 +61,7 @@ object DatabaseModule {
 
     @Provides
     fun provideBenchmarkMealDao(db: AppDatabase): BenchmarkMealDao = db.benchmarkMealDao()
+
+    @Provides
+    fun provideScaleCalibrationDao(db: AppDatabase): ScaleCalibrationDao = db.scaleCalibrationDao()
 }

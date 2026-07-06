@@ -38,7 +38,7 @@ class AnalysisNotificationHelper @Inject constructor(
         val intent = Intent(context, MainActivity::class.java)
         val pendingIntent = TaskStackBuilder.create(context).run {
             addNextIntentWithParentStack(intent)
-            getPendingIntent(0, android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
+            getPendingIntent(System.currentTimeMillis().toInt(), android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE)
         }
 
         val notification = NotificationCompat.Builder(context, UgoCalcApplication.ANALYSIS_NOTIFICATION_CHANNEL_ID)

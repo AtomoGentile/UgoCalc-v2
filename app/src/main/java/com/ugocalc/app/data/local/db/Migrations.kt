@@ -80,6 +80,28 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
     }
 }
 
+/** Benchmark pesato V1 vs V2 (§10, §13 punto 5): nuova tabella `benchmark_meals` più il collegamento `sessionId` su `v2_analysis_records` (vedi BenchmarkMealEntity). */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE v2_analysis_records ADD COLUMN sessionId TEXT")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `benchmark_meals` (
+                `sessionId` TEXT PRIMARY KEY NOT NULL,
+                `capturedAtEpochMillis` INTEGER NOT NULL,
+                `sessionMode` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `v1PesiPerAlimentoJson` TEXT,
+                `v1NutrizionePerAlimentoJson` TEXT,
+                `v2RecordId` INTEGER,
+                `groundTruthPesiJson` TEXT,
+                `groundTruthLivello` TEXT
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /**
  * Aggiunge la categoria alimentare alla chiave del bias (§8, §14): pasta e riso condividevano la
  * stessa strategia `DISTESA_SUL_PIATTO`, quindi un fattore tarato solo sulla pasta finiva applicato
@@ -109,22 +131,17 @@ val MIGRATION_7_8 = object : Migration(7, 8) {
     }
 }
 
-/** Benchmark pesato V1 vs V2 (§10, §13 punto 5): nuova tabella `benchmark_meals` più il collegamento `sessionId` su `v2_analysis_records` (vedi BenchmarkMealEntity). */
-val MIGRATION_6_7 = object : Migration(6, 7) {
+/** §13 punto 4: calibrazione persistente di stoviglie e riferimenti corporei (vedi ScaleCalibrationEntity). */
+val MIGRATION_8_9 = object : Migration(8, 9) {
     override fun migrate(db: SupportSQLiteDatabase) {
-        db.execSQL("ALTER TABLE v2_analysis_records ADD COLUMN sessionId TEXT")
         db.execSQL(
             """
-            CREATE TABLE IF NOT EXISTS `benchmark_meals` (
-                `sessionId` TEXT PRIMARY KEY NOT NULL,
-                `capturedAtEpochMillis` INTEGER NOT NULL,
-                `sessionMode` TEXT NOT NULL,
-                `aiModelId` TEXT NOT NULL,
-                `v1PesiPerAlimentoJson` TEXT,
-                `v1NutrizionePerAlimentoJson` TEXT,
-                `v2RecordId` INTEGER,
-                `groundTruthPesiJson` TEXT,
-                `groundTruthLivello` TEXT
+            CREATE TABLE IF NOT EXISTS `scale_calibrations` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `type` TEXT NOT NULL,
+                `name` TEXT NOT NULL,
+                `valueCm` REAL NOT NULL,
+                `capacityMl` REAL
             )
             """.trimIndent()
         )
