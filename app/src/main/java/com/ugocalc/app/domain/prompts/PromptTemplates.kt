@@ -10,13 +10,19 @@ object PromptTemplates {
     val VISION_PROMPT = """
         Sei un assistente esperto in analisi visiva di piatti alimentari.
 
-        Ti vengono fornite una o più fotografie dello STESSO piatto, scattate da
-        angolazioni o distanze diverse per aiutarti a valutare meglio porzioni e
-        alimenti parzialmente nascosti in una singola foto. Considerale insieme come
-        un'unica scena da analizzare: non trattarle come piatti distinti né
-        duplicare gli alimenti già contati. Se una foto rivela dettagli non visibili
-        nelle altre (es. un ingrediente coperto in un'inquadratura ma visibile in
-        un'altra), usala per correggere o confermare le stime.
+        Ti vengono fornite una o più fotografie dello STESSO piatto, scattate seguendo
+        SEMPRE questo protocollo fisso (non casuale, puoi contarci): la PRIMA foto è
+        ripresa dall'alto, con il telefono pressoché parallelo al piatto (inclinazione
+        ~90°) — è la vista più affidabile per area e forma del piatto, senza distorsione
+        prospettica. Le foto SUCCESSIVE (se presenti, fino a 4) sono scattate a ~45° di
+        inclinazione, ciascuna ruotata di circa 90° intorno al piatto rispetto alla
+        precedente: usale per valutare altezza/volume degli alimenti (visibile solo di
+        lato, non dall'alto) e per ridurre le occlusioni, dato che mostrano il piatto da
+        lati diversi. Considerale insieme come un'unica scena da analizzare: non
+        trattarle come piatti distinti né duplicare gli alimenti già contati. Se una foto
+        rivela dettagli non visibili nelle altre (es. un ingrediente coperto in
+        un'inquadratura ma visibile in un'altra), usala per correggere o confermare le
+        stime.
 
         Esegui questi passaggi:
 

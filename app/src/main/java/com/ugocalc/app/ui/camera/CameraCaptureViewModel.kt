@@ -30,8 +30,22 @@ import javax.inject.Inject
 
 private const val CAPTURED_IMAGE_MIME_TYPE = "image/jpeg"
 
-/** [capturedAtEpochMillis] approssima l'istante dello scatto (§16): la fotocamera di sistema non offre alcun callback nell'istante esatto, si usa il timestamp del file scritto su disco. */
-data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long)
+/** Testo pronto per il prompt di M1 con l'angolazione REALMENTE misurata per questa foto, `null` se non disponibile (§13 punto 7). */
+private fun buildAngleDescription(photo: CapturedPhoto): String? {
+    val angle = photo.measuredAngle ?: return null
+    val rotationLine = if (angle.target.turnDeg > 0f) ", rotazione misurata ${"%.0f".format(angle.turnDeg)}°" else ""
+    return "inclinazione misurata ${"%.0f".format(angle.pitchDeg)}°$rotationLine (target: ${angle.target.label})"
+}
+
+/**
+ * [capturedAtEpochMillis] approssima l'istante dello scatto (§16): la fotocamera di sistema non
+ * offre alcun callback nell'istante esatto, si usa il timestamp del file scritto su disco.
+ * [measuredAngle] è l'angolazione REALMENTE letta dai sensori durante questo scatto (non solo il
+ * target suggerito), `null` se il permesso overlay non era concesso o se non è arrivato nessun
+ * campione sensore prima dello scatto — in quel caso M1 riceve solo il protocollo generico, senza
+ * il valore misurato per questa foto specifica.
+ */
+data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long, val measuredAngle: MeasuredAngle? = null)
 
 data class CameraUiState(
     val capturedImages: List<CapturedPhoto> = emptyList(),
@@ -55,8 +69,8 @@ class CameraCaptureViewModel @Inject constructor(
     val uiState: StateFlow<CameraUiState> = _uiState
 
     /** Scatto avvenuto: si aggiunge alla galleria di foto di questa sessione (più scatti per un'analisi più efficace). */
-    fun onPhotoCaptured(imageBytes: ByteArray, capturedAtEpochMillis: Long) {
-        _uiState.update { it.copy(capturedImages = it.capturedImages + CapturedPhoto(imageBytes, capturedAtEpochMillis)) }
+    fun onPhotoCaptured(imageBytes: ByteArray, capturedAtEpochMillis: Long, measuredAngle: MeasuredAngle? = null) {
+        _uiState.update { it.copy(capturedImages = it.capturedImages + CapturedPhoto(imageBytes, capturedAtEpochMillis, measuredAngle)) }
     }
 
     /** L'utente scarta una foto già scattata dalla galleria della sessione corrente. */
@@ -117,7 +131,7 @@ class CameraCaptureViewModel @Inject constructor(
             val photos = capturedPhotos.mapIndexed { index, photo ->
                 val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
                 val cameraMetadata = extractCameraMetadata(photo.bytes)
-                SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata), photo.bytes)
+                SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
             }
             val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
             if (outcome !is PipelineOutcome.Verificato) return@runCatching null
@@ -168,7 +182,7 @@ class CameraCaptureViewModel @Inject constructor(
                 val photos = capturedPhotos.mapIndexed { index, photo ->
                     val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
                     val cameraMetadata = extractCameraMetadata(photo.bytes)
-                    SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata), photo.bytes)
+                    SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
                 }
                 val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
                 if (outcome is PipelineOutcome.Verificato && outcome.telemetryId >= 0) {

@@ -128,6 +128,10 @@ fun CameraCaptureScreen(
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        // Letta PRIMA di fermare il service (che comunque non la cancella, vedi
+        // CameraAngleOverlayService.LastReading): è l'angolazione realmente misurata per questo
+        // scatto, non solo il target che era stato suggerito.
+        val measuredAngle = CameraAngleOverlayService.LastReading.value
         stopAngleOverlay()
         val file = pendingCapturePath?.let(::File)
         pendingCapturePath = null
@@ -143,7 +147,7 @@ fun CameraCaptureScreen(
                 // alcun callback nell'istante esatto.
                 val capturedAtEpochMillis = file.lastModified()
                 file.delete()
-                viewModel.onPhotoCaptured(bytes, capturedAtEpochMillis)
+                viewModel.onPhotoCaptured(bytes, capturedAtEpochMillis, measuredAngle)
             }
         } else {
             file?.delete()

@@ -71,6 +71,14 @@ data class PhotoQuality(
     val motionRadPerSec: Double? = null,
     /** Metadati camera diagnostici (§16): mai letti da [QualityGate.assess], solo trasportati per un uso futuro (es. telemetria M8). */
     val cameraMetadata: CameraMetadata? = null,
+    /**
+     * Descrizione testuale pronta dell'angolazione REALMENTE misurata dai sensori durante questo
+     * scatto (es. "inclinazione 88°, rotazione 3°"), `null` se non disponibile. Mai letta da
+     * [QualityGate.assess] (come [cameraMetadata]): solo trasportata fino al prompt di M1
+     * ([com.ugocalc.app.domain.inference.m1.PerceptionPrompt]), che la accosta al protocollo di
+     * scatto fisso (§13 punto 7) per ciascuna foto nell'ordine in cui vengono inviate.
+     */
+    val angleDescription: String? = null,
 )
 
 /** Metadati EXIF della fotocamera (§16): tutti nullable, i tag sono spesso assenti su foto elaborate. Solo diagnostica, nessuno scarto oggi si basa su questi valori. */

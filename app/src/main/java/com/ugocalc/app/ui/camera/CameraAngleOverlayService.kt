@@ -14,8 +14,8 @@ import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
-import android.widget.LinearLayout
 import android.widget.TextView
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.abs
 import kotlin.math.acos
 import kotlin.math.sqrt
@@ -65,6 +65,11 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             )
             Log.d(TAG, "onStartCommand: target=$target")
         }
+        // Azzerata qui, non in onDestroy: il chiamante legge LastReading subito dopo lo scatto,
+        // prima che il service precedente sia stato fermato — se non la azzerassimo all'avvio,
+        // uno scatto scattato prima che arrivi il primo campione sensore erediterebbe per errore
+        // la lettura dello scatto PRECEDENTE.
+        LastReading.value = null
         addOverlayIfNeeded()
         startSensors()
         return START_NOT_STICKY
@@ -160,6 +165,11 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             else -> return
         }
         updateOverlayText()
+        publishReading()
+    }
+
+    private fun publishReading() {
+        LastReading.value = MeasuredAngle(pitchDeg = pitchDeg, turnDeg = turnedDeg, target = target)
     }
 
     private fun updateOverlayText() {
@@ -210,6 +220,15 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
     }
 
     companion object {
+        /**
+         * Ultima lettura sensori pubblicata dal service in esecuzione (`null` se non ancora
+         * partito, o se non è ancora arrivato il primo campione dell'accelerometro/giroscopio).
+         * Letta da [CameraCaptureScreen] subito dopo il ritorno dalla fotocamera di sistema, per
+         * sapere l'angolazione REALMENTE ottenuta in quello scatto (non solo il target suggerito)
+         * da passare al prompt M1 ([com.ugocalc.app.domain.inference.m1.PerceptionPrompt]).
+         */
+        val LastReading = MutableStateFlow<MeasuredAngle?>(null)
+
         fun buildStartIntent(context: Context, target: PhotoAngleTarget): Intent =
             Intent(context, CameraAngleOverlayService::class.java).apply {
                 putExtra(EXTRA_PITCH_DEG, target.pitchDeg)
@@ -218,3 +237,6 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             }
     }
 }
+
+/** Angolazione realmente misurata dai sensori al momento (approssimato) dello scatto, con il target che era stato suggerito. */
+data class MeasuredAngle(val pitchDeg: Float, val turnDeg: Float, val target: PhotoAngleTarget)
