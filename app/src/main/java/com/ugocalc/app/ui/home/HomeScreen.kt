@@ -17,10 +17,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.QrCodeScanner
+import androidx.compose.material.icons.filled.RestaurantMenu
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Card
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -137,7 +138,13 @@ fun HomeScreen(
                         IconButton(
                             onClick = { viewModel.setSessionMode(if (uiState.sessionMode == SessionMode.CASA) SessionMode.RISTORANTE else SessionMode.CASA) }
                         ) {
-                            Icon(Icons.Default.ChevronRight, contentDescription = "Cambia modalità")
+                            Icon(
+                                if (uiState.sessionMode == SessionMode.CASA) Icons.Default.Home else Icons.Default.RestaurantMenu,
+                                contentDescription = if (uiState.sessionMode == SessionMode.CASA) "Modalità Casa" else "Modalità Ristorante"
+                            )
+                        }
+                        IconButton(onClick = onNavigateToSettings) {
+                            Icon(Icons.Default.Settings, contentDescription = "Impostazioni")
                         }
                     },
                 )
@@ -152,20 +159,16 @@ fun HomeScreen(
                 verticalArrangement = Arrangement.Top,
             ) {
                 Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
-                    AnalyzeButton(
-                        state = uiState.analyzeButtonState,
-                        sessionMode = uiState.sessionMode,
-                        onClick = {
-                            val preferred = uiState.preferredModels
-                            if (preferred.isNotEmpty()) {
-                                viewModel.startAnalysisWithPreferredModels()
-                                onNavigateDirectlyToCamera(preferred.map { it.id })
-                            } else {
-                                viewModel.startNewAnalysis()
-                                onNavigateToModelSelection()
-                            }
+                    AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
+                        val preferred = uiState.preferredModels
+                        if (preferred.isNotEmpty()) {
+                            viewModel.startAnalysisWithPreferredModels()
+                            onNavigateDirectlyToCamera(preferred.map { it.id })
+                        } else {
+                            viewModel.startNewAnalysis()
+                            onNavigateToModelSelection()
                         }
-                    )
+                    })
                 }
 
                 OutlinedButton(
@@ -271,7 +274,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit, sessionMode: SessionMode = SessionMode.CASA) {
+private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit) {
     val color = when (state) {
         AnalyzeButtonState.ENABLED_ONLINE -> androidx.compose.material3.MaterialTheme.colorScheme.primary
         AnalyzeButtonState.ENABLED_OFFLINE -> androidx.compose.material3.MaterialTheme.colorScheme.error
@@ -284,16 +287,6 @@ private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit, sessio
             .clickable(enabled = state != AnalyzeButtonState.DISABLED_NO_TABLE) { onClick() },
         contentAlignment = Alignment.Center,
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Text("Analizza", color = androidx.compose.ui.graphics.Color.White, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
-            Text(
-                "(${if (sessionMode == SessionMode.CASA) "Casa" else "Ristorante"})",
-                color = androidx.compose.ui.graphics.Color.White,
-                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-            )
-        }
+        Text("Analizza", color = androidx.compose.ui.graphics.Color.White, style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
     }
 }

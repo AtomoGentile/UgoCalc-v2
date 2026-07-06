@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.prefs.AppTheme
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ColorPickerDialog
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
@@ -99,30 +100,61 @@ fun AccessibilitySettingsScreen(
                 modifier = Modifier.padding(top = 8.dp),
             )
 
-            Text("Colori", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 24.dp, bottom = 4.dp))
+            val usesRistoranteColors = state.currentSessionMode == SessionMode.RISTORANTE
+            val colorPrimary = if (usesRistoranteColors) {
+                state.userSettings.primaryColorRistoranteArgb?.let { Color(it) } ?: defaults.primary
+            } else {
+                state.userSettings.primaryColorArgb?.let { Color(it) } ?: defaults.primary
+            }
+            val colorSecondary = if (usesRistoranteColors) {
+                state.userSettings.secondaryColorRistoranteArgb?.let { Color(it) } ?: defaults.secondary
+            } else {
+                state.userSettings.secondaryColorArgb?.let { Color(it) } ?: defaults.secondary
+            }
+            val colorTertiary = if (usesRistoranteColors) {
+                state.userSettings.tertiaryColorRistoranteArgb?.let { Color(it) } ?: defaults.tertiary
+            } else {
+                state.userSettings.tertiaryColorArgb?.let { Color(it) } ?: defaults.tertiary
+            }
+            val colorBackground = if (usesRistoranteColors) {
+                state.userSettings.backgroundColorRistoranteArgb?.let { Color(it) } ?: defaults.background
+            } else {
+                state.userSettings.backgroundColorArgb?.let { Color(it) } ?: defaults.background
+            }
+            val colorError = if (usesRistoranteColors) {
+                state.userSettings.errorColorRistoranteArgb?.let { Color(it) } ?: defaults.error
+            } else {
+                state.userSettings.errorColorArgb?.let { Color(it) } ?: defaults.error
+            }
+
+            Text(
+                "Colori per modalità ${if (state.currentSessionMode == SessionMode.CASA) "casa" else "ristorante"}",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 24.dp, bottom = 4.dp)
+            )
             ColorSlotRow(
                 label = "Primario",
-                color = state.userSettings.primaryColorArgb?.let { Color(it) } ?: defaults.primary,
+                color = colorPrimary,
                 onClick = { editingSlot = ColorSlot.PRIMARIO },
             )
             ColorSlotRow(
                 label = "Secondario",
-                color = state.userSettings.secondaryColorArgb?.let { Color(it) } ?: defaults.secondary,
+                color = colorSecondary,
                 onClick = { editingSlot = ColorSlot.SECONDARIO },
             )
             ColorSlotRow(
                 label = "Terziario",
-                color = state.userSettings.tertiaryColorArgb?.let { Color(it) } ?: defaults.tertiary,
+                color = colorTertiary,
                 onClick = { editingSlot = ColorSlot.TERZIARIO },
             )
             ColorSlotRow(
                 label = "Sfondo",
-                color = state.userSettings.backgroundColorArgb?.let { Color(it) } ?: defaults.background,
+                color = colorBackground,
                 onClick = { editingSlot = ColorSlot.SFONDO },
             )
             ColorSlotRow(
                 label = "Errore",
-                color = state.userSettings.errorColorArgb?.let { Color(it) } ?: defaults.error,
+                color = colorError,
                 onClick = { editingSlot = ColorSlot.ERRORE },
             )
         }
@@ -130,12 +162,13 @@ fun AccessibilitySettingsScreen(
 
     val slot = editingSlot
     if (slot != null) {
+        val isRistorante = state.currentSessionMode == SessionMode.RISTORANTE
         val currentColorArgb = when (slot) {
-            ColorSlot.PRIMARIO -> state.userSettings.primaryColorArgb
-            ColorSlot.SECONDARIO -> state.userSettings.secondaryColorArgb
-            ColorSlot.TERZIARIO -> state.userSettings.tertiaryColorArgb
-            ColorSlot.SFONDO -> state.userSettings.backgroundColorArgb
-            ColorSlot.ERRORE -> state.userSettings.errorColorArgb
+            ColorSlot.PRIMARIO -> if (isRistorante) state.userSettings.primaryColorRistoranteArgb else state.userSettings.primaryColorArgb
+            ColorSlot.SECONDARIO -> if (isRistorante) state.userSettings.secondaryColorRistoranteArgb else state.userSettings.secondaryColorArgb
+            ColorSlot.TERZIARIO -> if (isRistorante) state.userSettings.tertiaryColorRistoranteArgb else state.userSettings.tertiaryColorArgb
+            ColorSlot.SFONDO -> if (isRistorante) state.userSettings.backgroundColorRistoranteArgb else state.userSettings.backgroundColorArgb
+            ColorSlot.ERRORE -> if (isRistorante) state.userSettings.errorColorRistoranteArgb else state.userSettings.errorColorArgb
             ColorSlot.TESTO -> state.userSettings.fontColorArgb
         }
         val defaultColor = when (slot) {
@@ -154,11 +187,11 @@ fun AccessibilitySettingsScreen(
             onColorSelected = { color ->
                 val argb = color?.toArgb()
                 when (slot) {
-                    ColorSlot.PRIMARIO -> viewModel.setPrimaryColor(argb)
-                    ColorSlot.SECONDARIO -> viewModel.setSecondaryColor(argb)
-                    ColorSlot.TERZIARIO -> viewModel.setTertiaryColor(argb)
-                    ColorSlot.SFONDO -> viewModel.setBackgroundColor(argb)
-                    ColorSlot.ERRORE -> viewModel.setErrorColor(argb)
+                    ColorSlot.PRIMARIO -> if (isRistorante) viewModel.setPrimaryColorRistorante(argb) else viewModel.setPrimaryColor(argb)
+                    ColorSlot.SECONDARIO -> if (isRistorante) viewModel.setSecondaryColorRistorante(argb) else viewModel.setSecondaryColor(argb)
+                    ColorSlot.TERZIARIO -> if (isRistorante) viewModel.setTertiaryColorRistorante(argb) else viewModel.setTertiaryColor(argb)
+                    ColorSlot.SFONDO -> if (isRistorante) viewModel.setBackgroundColorRistorante(argb) else viewModel.setBackgroundColor(argb)
+                    ColorSlot.ERRORE -> if (isRistorante) viewModel.setErrorColorRistorante(argb) else viewModel.setErrorColor(argb)
                     ColorSlot.TESTO -> viewModel.setFontColor(argb)
                 }
                 editingSlot = null

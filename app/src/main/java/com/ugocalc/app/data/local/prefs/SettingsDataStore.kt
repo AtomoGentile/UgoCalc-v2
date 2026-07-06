@@ -29,13 +29,19 @@ data class UserSettings(
     val notificationsEnabled: Boolean = true,
     /** Mostra la sezione "Preferiti" in Homepage (§2.2, voce di attivazione richiesta dall'utente). */
     val favoritesEnabled: Boolean = true,
-    /** Colori personalizzati (§ richiesta utente): null = usa il colore predefinito del tema. Valori ARGB. */
+    /** Colori personalizzati per modalità Casa (§ richiesta utente): null = usa il colore predefinito del tema. Valori ARGB. */
     val primaryColorArgb: Int? = null,
     val secondaryColorArgb: Int? = null,
     val tertiaryColorArgb: Int? = null,
     val backgroundColorArgb: Int? = null,
     /** "Colore di errore" (§ richiesta utente, es. pulsante Analizza rosso intenso se offline). */
     val errorColorArgb: Int? = null,
+    /** Colori personalizzati per modalità Ristorante: null = usa il colore predefinito del tema. Valori ARGB. */
+    val primaryColorRistoranteArgb: Int? = null,
+    val secondaryColorRistoranteArgb: Int? = null,
+    val tertiaryColorRistoranteArgb: Int? = null,
+    val backgroundColorRistoranteArgb: Int? = null,
+    val errorColorRistoranteArgb: Int? = null,
     /** Grafico a colonne CHO/grassi per pasto nella Cronologia (§ richiesta utente). */
     val historyChartEnabled: Boolean = true,
     /** Famiglia di carattere personalizzata (§ richiesta utente "colore, carattere se riesci"): null = predefinito di sistema. */
@@ -80,6 +86,11 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val TERTIARY_COLOR = intPreferencesKey("tertiary_color_argb")
         val BACKGROUND_COLOR = intPreferencesKey("background_color_argb")
         val ERROR_COLOR = intPreferencesKey("error_color_argb")
+        val PRIMARY_COLOR_RISTORANTE = intPreferencesKey("primary_color_ristorante_argb")
+        val SECONDARY_COLOR_RISTORANTE = intPreferencesKey("secondary_color_ristorante_argb")
+        val TERTIARY_COLOR_RISTORANTE = intPreferencesKey("tertiary_color_ristorante_argb")
+        val BACKGROUND_COLOR_RISTORANTE = intPreferencesKey("background_color_ristorante_argb")
+        val ERROR_COLOR_RISTORANTE = intPreferencesKey("error_color_ristorante_argb")
         val HISTORY_CHART_ENABLED = booleanPreferencesKey("history_chart_enabled")
         val FONT_FAMILY = stringPreferencesKey("font_family_name")
         val FONT_COLOR = intPreferencesKey("font_color_argb")
@@ -103,6 +114,11 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             tertiaryColorArgb = prefs[Keys.TERTIARY_COLOR],
             backgroundColorArgb = prefs[Keys.BACKGROUND_COLOR],
             errorColorArgb = prefs[Keys.ERROR_COLOR],
+            primaryColorRistoranteArgb = prefs[Keys.PRIMARY_COLOR_RISTORANTE],
+            secondaryColorRistoranteArgb = prefs[Keys.SECONDARY_COLOR_RISTORANTE],
+            tertiaryColorRistoranteArgb = prefs[Keys.TERTIARY_COLOR_RISTORANTE],
+            backgroundColorRistoranteArgb = prefs[Keys.BACKGROUND_COLOR_RISTORANTE],
+            errorColorRistoranteArgb = prefs[Keys.ERROR_COLOR_RISTORANTE],
             historyChartEnabled = prefs[Keys.HISTORY_CHART_ENABLED] ?: true,
             fontFamilyName = prefs[Keys.FONT_FAMILY],
             fontColorArgb = prefs[Keys.FONT_COLOR],
@@ -141,6 +157,23 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
     suspend fun setErrorColor(argb: Int?) = context.dataStore.edit {
         if (argb == null) it.remove(Keys.ERROR_COLOR) else it[Keys.ERROR_COLOR] = argb
     }
+
+    suspend fun setPrimaryColorRistorante(argb: Int?) = context.dataStore.edit {
+        if (argb == null) it.remove(Keys.PRIMARY_COLOR_RISTORANTE) else it[Keys.PRIMARY_COLOR_RISTORANTE] = argb
+    }
+    suspend fun setSecondaryColorRistorante(argb: Int?) = context.dataStore.edit {
+        if (argb == null) it.remove(Keys.SECONDARY_COLOR_RISTORANTE) else it[Keys.SECONDARY_COLOR_RISTORANTE] = argb
+    }
+    suspend fun setTertiaryColorRistorante(argb: Int?) = context.dataStore.edit {
+        if (argb == null) it.remove(Keys.TERTIARY_COLOR_RISTORANTE) else it[Keys.TERTIARY_COLOR_RISTORANTE] = argb
+    }
+    suspend fun setBackgroundColorRistorante(argb: Int?) = context.dataStore.edit {
+        if (argb == null) it.remove(Keys.BACKGROUND_COLOR_RISTORANTE) else it[Keys.BACKGROUND_COLOR_RISTORANTE] = argb
+    }
+    suspend fun setErrorColorRistorante(argb: Int?) = context.dataStore.edit {
+        if (argb == null) it.remove(Keys.ERROR_COLOR_RISTORANTE) else it[Keys.ERROR_COLOR_RISTORANTE] = argb
+    }
+
     suspend fun setHistoryChartEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.HISTORY_CHART_ENABLED] = enabled }
 
