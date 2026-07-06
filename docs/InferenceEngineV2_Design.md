@@ -147,7 +147,7 @@ Nel caso normale l'intero flusso costa **due** chiamate al modello; la terza (M5
 ## 5. Moduli e responsabilità
 
 **M0 – Controllo qualità e ingestione** `[DET]`
-Scarta o segnala foto inutilizzabili (sfocatura, esposizione estrema, duplicati) *prima* di consumare token. Se tutte le foto sono scadenti, l'app lo dice subito invece di produrre una stima inaffidabile. Fallimento gestito: messaggio all'utente, nessuna chiamata effettuata.
+Scarta o segnala foto inutilizzabili (sfocatura, esposizione estrema, duplicati) *prima* di consumare token. Se tutte le foto sono scadenti, l'app lo dice subito invece di produrre una stima inaffidabile. Fallimento gestito: messaggio all'utente, nessuna chiamata effettuata. Include anche la raccolta dei metadati fotocamera per foto (§16), usati qui per diagnosticare la qualità in modo più preciso di un controllo di sfocatura generico.
 
 **M1 – Percezione unificata** `[IA – chiamata 1]`
 Un'unica chiamata multimodale con tutte le foto della sessione. Tre output nello stesso passaggio:
@@ -304,6 +304,7 @@ Impatto sul database: tre nuove tabelle Room (calibrazione stoviglie, riferiment
 | Media | Latenza e costo raddoppiati rispetto alla V1 | Budget fisso: 2 chiamate nel caso normale, terza solo su flag |
 | Media | Composti/occlusi restano difficili | Intervalli di confidenza ampi mostrati esplicitamente, mai nascosti |
 | Media | Le fasce di confidenza non riflettono l'errore reale | Metrica di calibrazione dedicata sul benchmark (§12) |
+| Media | Un import (§17) sostituisce dati validi con un archivio corrotto, di una versione incompatibile o della persona sbagliata | `schema_version` validata prima di applicare qualunque modifica; anteprima del contenuto con conferma esplicita; nessun merge silenzioso |
 | **Sempre presente** | Una stima errata influenza una decisione clinica (dose di insulina) | Intervalli sempre visibili; verifica più severa sugli alimenti ad alto impatto CHO; invito esplicito alla correzione manuale quando la scala non è affidabile |
 
 **Colli di bottiglia identificati:**
@@ -382,6 +383,49 @@ Ciò che **resta fuori anche da questa fase**, per scelta e non per limite tecni
 | Modalità di sessione | Selezione esplicita dell'utente a inizio sessione, mai dedotta dall'immagine |
 | Calibrazione | Due meccanismi distinti: stoviglie di casa e riferimenti corporei condivisi |
 | Evoluzione del sistema | Taratura di bias e calibrazione **automatica e continua** (§8, §13.2); cambio di prompt/strategia/modello sempre **manuale**, informato dal benchmark — il sistema segnala le regressioni, non le risolve da solo |
+
+---
+
+## 15. Distribuzione delle versioni tramite GitHub Releases
+
+Non è un modulo della pipeline di analisi: è il meccanismo con cui una nuova versione del motore (§7: engine/prompt/strategie/tabella densità/calibrazione) arriva davvero sul telefono dell'utente. Parzialmente già implementato (`GitHubReleaseClient.kt`, `UpdateRepository.kt`, controllo manuale in Impostazioni > Software e aggiornamenti, changelog in `Changelog.kt`/`ChangelogScreen.kt`): questa sezione lo lega esplicitamente al sistema di versionamento del piano.
+
+**Decisione: ogni release GitHub è un incremento di almeno una versione tracciata in §7.** Le tabelle di densità, i fattori di correzione di default, i prompt e le strategie vivono nel codice o negli asset dell'app: non esiste un modo di aggiornarli se non pubblicando una nuova build. Una release GitHub *è* quindi, per costruzione, l'unità con cui il sistema evolve nel mondo reale — non serve un meccanismo di distribuzione separato per l'"engine version" rispetto all'"app version".
+
+**Cosa cambia rispetto a quanto già implementato:**
+- Il corpo della release (già mostrato come changelog in `ChangelogScreen`) deve dichiarare esplicitamente **quali versioni sono cambiate** (es. "motore v3, tabella densità v5, nessun cambio di prompt M1") — non solo le novità visibili all'utente. Questo rende un'analisi salvata in M8 con una certa combinazione di versioni sempre riconducibile a un changelog pubblico leggibile, chiudendo il cerchio aperto dal versionamento di §7.
+- La **promozione della V2 in produzione** (§10, Fase 3: "la V2 vince sul benchmark") avviene tramite una release taggata che lo dichiara esplicitamente nel changelog — non è un flag remoto o un rollout percentuale, è una release come le altre, letta e accettata dall'utente come già accade oggi.
+
+**Cosa resta invariato, perché già corretto:** il controllo è **sempre manuale**, mai automatico in background (coerente con "nessuna azione presa senza che l'utente la veda" ripetuto in tutto il documento — §0.2, §8); il download/installazione dell'APK resta delegato al browser di sistema, non gestito in-app.
+
+## 16. Metadati del dispositivo per il calcolo del volume
+
+**Cosa si raccoglie, e da dove.** Per ogni foto scattata (già gestita in `CameraCaptureScreen.kt` con `ExifInterface`), oltre ai byte dell'immagine si estrae e si allega un piccolo record `FotoMetadata`: dati EXIF (lunghezza focale, lunghezza focale equivalente 35 mm, apertura, tempo di esposizione, ISO, risoluzione) e, se disponibili tramite le Camera2 `CameraCharacteristics` del dispositivo, la dimensione fisica del sensore.
+
+**Cosa questi dati NON fanno, per essere onesti sul limite reale.** Non risolvono da soli il problema della scala. Calcolare una dimensione reale in centimetri da una singola foto 2D richiede comunque o un'ancora di dimensione nota (§8) o una distanza nota tra fotocamera e piatto, che questi metadati non forniscono: focale e dimensione del sensore, senza una distanza, dicono solo "quanto stringe l'inquadratura", non "quanto è grande l'oggetto". Dichiarare il contrario userebbe metadati veri per produrre falsa precisione — esattamente ciò che il documento rifiuta altrove (§8, regola di sicurezza in §5 M5).
+
+**Cosa fanno davvero, ed è comunque valore reale:**
+- **Migliorano M0.** Un tempo di esposizione lungo combinato con ISO alto è un indicatore molto più affidabile di "probabile foto mossa" di un controllo di nitidezza generico basato solo sui pixel; una focale estrema (molto grandangolare) segnala distorsione ai bordi che può falsare le proporzioni lette da M1 — M0 può abbassare la confidenza o chiedere di riscattare invece di procedere alla cieca.
+- **Preparano il terreno per §13.1 (mappa di profondità).** Ogni foto salvata in M8 porta già con sé i metadati camera necessari; quando l'implementazione della Depth API (ARCore o dual-camera) verrà aggiunta come ancora di scala aggiuntiva, non serve ricostruire nulla a ritroso — i dati storici sono già nel formato giusto per essere riletti.
+- **Diagnostica nel benchmark.** Se un sottoinsieme di analisi con un certo profilo di metadati (es. foto scattate con focale molto corta, tipico di selfie-camera usata per errore) mostra errore sistematicamente più alto nel benchmark (§10), è un segnale diagnostico concreto su *quale* categoria di scatto istruire l'utente a evitare.
+
+**Contratto dati.** `FotoMetadata` viaggia insieme a ciascuna immagine da M0 in avanti e finisce nel record di analisi di M8, con la stessa disciplina di provenienza del resto del sistema (§7): ogni campo è opzionale (non tutti i dispositivi espongono tutte le `CameraCharacteristics`), mai inventato se assente.
+
+## 17. Import/export dei dati utente
+
+**Perché serve.** L'app non ha backend (§3): storico analisi, calibrazioni personali (stoviglie, riferimenti corporei), fattori di correzione appresi (§8) e tabelle nutrizionali personalizzate vivono solo nel database Room del telefono. Senza un modo di esportarli, un cambio di telefono o un ripristino di fabbrica cancella mesi di calibrazione e di correzioni apprese — proprio il meccanismo di auto-miglioramento di §8 diventa un punto di fragilità se non è portabile.
+
+**Cosa esporta.** Un singolo archivio JSON versionato, scritto dall'utente in una posizione a sua scelta tramite Storage Access Framework (nessun permesso di storage esteso richiesto): storico analisi e ground truth (M8), calibrazioni stoviglie e riferimenti corporei, fattori di correzione appresi (§8), tabelle nutrizionali personalizzate e preferiti (già presenti in V1: `OfficialTableEntity`, `NormalizedFoodEntryEntity`, `FavoriteShortcutEntity`).
+
+**Cosa NON esporta mai, per scelta esplicita di sicurezza.** Le chiavi API (`SecureApiKeyStore`) non entrano mai nell'archivio: un file di backup che finisse nelle mani sbagliate (cloud personale non cifrato, condivisione accidentale) non deve poter esporre credenziali con costo reale associato. Ogni provider va riconfigurato manualmente sul nuovo dispositivo — costo minimo, rischio evitato.
+
+**Import — stessa disciplina di versionamento di §7.** L'archivio dichiara un `schema_version`. Al momento dell'import:
+- se `schema_version` è **più recente** di quella supportata dalla versione installata, l'import viene **rifiutato esplicitamente** ("questo backup viene da una versione più recente dell'app, aggiorna prima di importare") — mai un tentativo di lettura parziale che potrebbe corrompere silenziosamente i dati;
+- se è **più vecchia**, si applicano le migrazioni note (stesso meccanismo già usato per il database Room, `Migrations.kt`) prima di procedere.
+
+**Politica sui conflitti: sostituzione totale con conferma esplicita, mai merge silenzioso.** Prima di applicare l'import, l'app mostra un riepilogo di cosa verrà sostituito ("verranno sostituiti 340 analisi, 4 calibrazioni stoviglie, 12 fattori di correzione") e richiede conferma esplicita. Una fusione automatica tra dati esistenti e importati creerebbe stati ambigui (due fattori di correzione per lo stesso segmento modalità/strategia/modello, §8, con quale priorità?) difficili da diagnosticare a posteriori — meglio un'operazione netta e reversibile solo rifacendo l'ultimo export, che una fusione silenziosa che nessuno saprebbe più spiegare.
+
+**Uso reale oltre al backup personale:** durante lo sviluppo in ombra (§10, Fase 2), permette di portare lo stesso storico di benchmark tra un dispositivo di test e l'altro senza dover ripetere la raccolta pesata da zero.
 
 ---
 
