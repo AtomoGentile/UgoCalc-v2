@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.data.repository.EngineStats
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
@@ -26,9 +27,9 @@ import java.util.Locale
 
 /**
  * Dashboard di confronto V1 vs V2 (piano V2 §10, §12, §13 punto 5): cresce man mano che si
- * registrano pasti pesati con [BenchmarkGroundTruthEntryScreen]. Diagnostica soltanto — non
- * decide mai automaticamente quale motore usare, la decisione resta dell'owner una volta
- * raccolti abbastanza dati (§13 punto 1, sospeso in attesa di questo benchmark).
+ * registrano pasti pesati con [BenchmarkGroundTruthEntryScreen]. Mostra anche l'esito della
+ * decisione automatica ([com.ugocalc.app.data.repository.BenchmarkRepository.evaluatePromotion])
+ * che sceglie davvero il motore in produzione — qui è solo trasparenza, il calcolo avviene altrove.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -40,8 +41,8 @@ fun BenchmarkDashboardScreen(onBack: () -> Unit, viewModel: BenchmarkDashboardVi
             item {
                 Text(
                     "Confronto diagnostico tra il motore attuale (V1) e il nuovo motore V2, sugli stessi " +
-                        "pasti a cui hai registrato un peso vero. Non decide da solo quale motore usare: " +
-                        "serve solo a capire, con dati reali, se e quando conviene passare a V2.",
+                        "pasti a cui hai registrato un peso vero. Il motore mostrato in produzione passa a " +
+                        "V2 automaticamente quando questa dashboard lo indica: nessuno switch manuale.",
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 12.dp),
                 )
@@ -49,7 +50,13 @@ fun BenchmarkDashboardScreen(onBack: () -> Unit, viewModel: BenchmarkDashboardVi
                     "Pasti raccolti: ${uiState.mealCount} (consigliati ${uiState.recommendedMinMeals}-${uiState.recommendedMaxMeals})",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                Text(
+                    if (uiState.v2Promoted) "Motore in produzione: V2 (ha superato V1 sul CHO entro 10 g)" else "Motore in produzione: V1 (V2 non ancora migliore, o dati insufficienti)",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
                 )
                 HorizontalDivider()
             }

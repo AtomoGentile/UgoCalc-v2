@@ -2,6 +2,7 @@ package com.ugocalc.app.ui.bias
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.SettingsRepository
@@ -17,7 +18,8 @@ data class BiasEvolutionUiState(
     val loading: Boolean = true,
     val consentGiven: Boolean = false,
     val v2ShadowModeEnabled: Boolean = false,
-    val v2VisibleModeEnabled: Boolean = false,
+    /** Esito della decisione automatica (§13 punto 1, §20): il motore visibile in produzione, non più uno switch manuale. */
+    val v2Promoted: Boolean = false,
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
 )
 
@@ -31,6 +33,7 @@ data class BiasEvolutionUiState(
 class BiasEvolutionViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val biasCorrectionRepository: BiasCorrectionRepository,
+    private val benchmarkRepository: BenchmarkRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(BiasEvolutionUiState())
     val uiState: StateFlow<BiasEvolutionUiState> = _uiState
@@ -40,7 +43,6 @@ class BiasEvolutionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 consentGiven = settings.biasDataConsentGiven,
                 v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
-                v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
             )
         }.launchIn(viewModelScope)
         refresh()
@@ -49,7 +51,8 @@ class BiasEvolutionViewModel @Inject constructor(
     private fun refresh() {
         viewModelScope.launch {
             val corrections = biasCorrectionRepository.getAllCorrectionsWithUsageStats()
-            _uiState.value = _uiState.value.copy(corrections = corrections, loading = false)
+            val v2Promoted = benchmarkRepository.evaluatePromotion().promoteV2
+            _uiState.value = _uiState.value.copy(corrections = corrections, v2Promoted = v2Promoted, loading = false)
         }
     }
 
@@ -59,9 +62,5 @@ class BiasEvolutionViewModel @Inject constructor(
 
     fun setV2ShadowModeEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setV2ShadowModeEnabled(enabled) }
-    }
-
-    fun setV2VisibleModeEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setV2VisibleModeEnabled(enabled) }
     }
 }
