@@ -162,7 +162,7 @@ private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats) {
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                "${sessionModeLabel(correction.sessionMode)} - ${strategyLabel(correction.strategy)}",
+                "${sessionModeLabel(correction.sessionMode)} - ${foodCategoryLabel(correction.foodCategory)} (${strategyLabel(correction.strategy)})",
                 fontWeight = FontWeight.Bold,
             )
             Text("Modello: ${correction.aiModelId}", style = MaterialTheme.typography.bodySmall)
@@ -170,6 +170,16 @@ private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats) {
                 "Fattore ${formatFactor(correction.factor)}x su ${correction.sampleCount} correzioni - aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
                 style = MaterialTheme.typography.bodySmall,
             )
+            // Sotto questa soglia il fattore è comunque "Applicabile" per il calcolatore (§8), ma un
+            // campione così piccolo per una categoria specifica può anche segnalare che il
+            // riconoscimento AI la incontra raramente — un avviso utile, non solo una statistica.
+            if (correction.sampleCount < LOW_SAMPLE_WARNING_THRESHOLD) {
+                Text(
+                    "Campione ridotto per questa categoria (${correction.sampleCount} osservazioni): il fattore potrebbe non essere ancora affidabile.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
             row.usageStats?.let { stats ->
                 BiasUsageStatsBlock(stats)
             }
@@ -209,6 +219,9 @@ private fun BiasUsageStatsBlock(stats: BiasCorrectionUsageStats) {
     }
 }
 
+/** Soglia puramente informativa in UI (§14): ben sopra il minimo di [com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SAMPLE_COUNT] richiesto per calcolare un fattore, per segnalare quando una categoria resta comunque poco osservata. */
+private const val LOW_SAMPLE_WARNING_THRESHOLD = 10
+
 private fun formatFactor(value: Double) = String.format(Locale.ITALIAN, "%.2f", value)
 
 private fun formatNumber(value: Double) = String.format(Locale.ITALIAN, "%.1f", value)
@@ -232,6 +245,19 @@ private fun strategyLabel(raw: String) = when (raw) {
     "A_CONTENITORE" -> "A contenitore"
     "BLOCCO_MISURABILE" -> "Blocco misurabile"
     "COMPOSTO_OCCLUSO" -> "Composto/occluso"
+    "TRASCURABILE" -> "Trascurabile"
+    else -> raw
+}
+
+private fun foodCategoryLabel(raw: String) = when (raw) {
+    "PIATTI_COMPOSTI" -> "Piatti composti"
+    "BEVANDE_E_LIQUIDI" -> "Bevande e liquidi"
+    "CONTABILE" -> "Contabile"
+    "BLOCCO_MISURABILE" -> "Blocco misurabile"
+    "PASTA" -> "Pasta"
+    "RISO_E_CEREALI" -> "Riso e cereali"
+    "PATATE" -> "Patate"
+    "VERDURE_E_LEGUMI" -> "Verdure e legumi"
     "TRASCURABILE" -> "Trascurabile"
     else -> raw
 }
