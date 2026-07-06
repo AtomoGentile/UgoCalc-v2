@@ -1,5 +1,6 @@
 package com.ugocalc.app.domain.inference.m1
 
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 
@@ -11,12 +12,19 @@ import com.ugocalc.app.domain.inference.model.SessionMode
  * L'ordine delle ancore di scala suggerito dipende dalla [SessionMode] (§8): le stoviglie calibrate
  * hanno senso solo in modalità Casa; fuori casa si parte dai riferimenti corporei/universali.
  *
+ * Se l'utente ha calibrazioni persistenti (§13 punto 4), queste vengono iniettate nel prompt per
+ * permettere a M1 di riconoscerle e restituire la dimensione reale corretta.
+ *
  * Non modificare la struttura JSON richiesta senza aggiornare in parallelo [SceneGraph] e senza
  * incrementare [SceneGraph.SCHEMA_VERSION] nello stesso commit (§7 "Versionamento dello schema").
  */
 object PerceptionPrompt {
 
-    fun build(sessionMode: SessionMode, angleDescriptions: List<String?> = emptyList()): String = """
+    fun build(
+        sessionMode: SessionMode,
+        angleDescriptions: List<String?> = emptyList(),
+        calibrations: List<ScaleCalibrationEntity> = emptyList(),
+    ): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
         PERCEZIONE UNIFICATA della scena: ancoraggio di scala, inventario degli alimenti e misure
         grezze nello stesso passaggio. NON stimare mai un peso in grammi: quello è compito esclusivo
@@ -38,6 +46,7 @@ object PerceptionPrompt {
         Considerale insieme come un'unica scena da analizzare: non trattarle come pasti distinti né
         duplicare gli alimenti già contati.
         ${angleReadingsBlock(angleDescriptions)}
+        ${calibrationsBlock(calibrations)}
 
         Il pasto è stato dichiarato dall'utente come "${modeLabel(sessionMode)}" (${modeDescription(sessionMode)}).
         Questo determina l'ordine in cui cercare un'ancora di scala affidabile:
@@ -148,6 +157,19 @@ object PerceptionPrompt {
     private fun modeDescription(mode: SessionMode): String = when (mode) {
         SessionMode.CASA -> "le stoviglie potrebbero essere quelle abituali dell'utente"
         SessionMode.RISTORANTE -> "le stoviglie non sono note né standard"
+    }
+
+    /**
+     * Calibrazioni persistenti dell'utente (§13 punto 4): se M1 riconosce uno di questi oggetti,
+     * deve usare il nome esatto in "descrizione" e la dimensione reale fornita qui.
+     */
+    private fun calibrationsBlock(calibrations: List<ScaleCalibrationEntity>): String {
+        if (calibrations.isEmpty()) return ""
+        val righe = calibrations.map {
+            "- '${it.name}' (${it.type}): dimensione reale ${it.valueCm} cm" + (it.capacityMl?.let { ml -> ", capacità $ml ml" } ?: "")
+        }
+        return "\nL'utente ha già calibrato i seguenti oggetti di riferimento. Se ne riconosci uno, usa il suo nome esatto nel campo 'descrizione' e riporta il valore di centimetri indicato:\n" +
+            righe.joinToString("\n")
     }
 
     private fun anchorOrder(mode: SessionMode): String = when (mode) {

@@ -1,5 +1,6 @@
 package com.ugocalc.app.domain.inference
 
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.inference.m0.PhotoAssessment
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.QualityGate
@@ -38,6 +39,7 @@ typealias PerceptionStep = suspend (
     imageMimeType: String,
     sessionMode: SessionMode,
     angleDescriptions: List<String?>,
+    calibrations: List<ScaleCalibrationEntity>,
 ) -> PerceptionOutcome
 
 /** Firma di M5 vista dalla pipeline: la stessa di [com.ugocalc.app.domain.inference.m5.SelectiveArbitrationEngine.arbitrate]. */
@@ -84,6 +86,12 @@ typealias BiasFactorStep = suspend (
 ) -> Double?
 
 /**
+ * Firma dello step che recupera le calibrazioni persistenti dell'utente (§13 punto 4): restituisce
+ * tutte le calibrazioni note per il tipo richiesto (o tutte se null).
+ */
+typealias CalibrationsStep = suspend () -> List<ScaleCalibrationEntity>
+
+/**
  * Firma della ricerca locale di CHO/100g per nome alimento, usata per risolvere un'ambiguità
  * residua dopo M5 (§5 M4 punto 2, §13 punto 2): dato un elenco di nomi candidati (il nome
  * originale + le sue alternative), restituisce il CHO/100g trovato nelle tabelle locali per
@@ -117,6 +125,7 @@ class V2AnalysisPipeline(
     private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
     private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
     private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
+    private val getCalibrations: CalibrationsStep = { emptyList() },
     private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
 ) {
 
@@ -136,10 +145,12 @@ class V2AnalysisPipeline(
         // l'indice N in questa lista descrive SEMPRE la foto N in [immaginiValide] (§13 punto 7).
         val angoliValidi = fotoValide.map { it.quality.angleDescription }
 
-        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi)) {
+        val calibrations = getCalibrations()
+        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, calibrations)) {
             is PerceptionOutcome.FallbackAV1 -> return PipelineOutcome.FallbackAV1(esito.motivo)
             is PerceptionOutcome.Riuscita -> esito.sceneGraph
         }
+
 
         val assegnazioni = when (val routing = strategyRouter.route(sceneGraph)) {
             is SceneRoutingResult.SchemaNonSupportato ->

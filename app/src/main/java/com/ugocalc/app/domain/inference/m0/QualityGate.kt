@@ -15,6 +15,8 @@ class QualityGate(
     private val brightnessMax: Double = DEFAULT_BRIGHTNESS_MAX,
     private val duplicateMaxDistance: Int = DEFAULT_DUPLICATE_MAX_DISTANCE,
     private val motionMaxRadPerSec: Double = DEFAULT_MOTION_MAX_RAD_PER_SEC,
+    private val isoMax: Int = DEFAULT_ISO_MAX,
+    private val exposureTimeMaxSeconds: Double = DEFAULT_EXPOSURE_TIME_MAX_SECONDS,
 ) {
 
     fun assess(photos: List<PhotoQuality>): IngestionResult {
@@ -29,6 +31,10 @@ class QualityGate(
                 foto.sharpness < sharpnessMin -> PhotoRejectionReason.SFOCATA
                 foto.brightness < brightnessMin -> PhotoRejectionReason.TROPPO_SCURA
                 foto.brightness > brightnessMax -> PhotoRejectionReason.TROPPO_CHIARA
+                foto.cameraMetadata?.isoValue != null && foto.cameraMetadata.isoValue > isoMax ->
+                    PhotoRejectionReason.RUMOROSA_ISO
+                foto.cameraMetadata?.exposureTimeSeconds != null && foto.cameraMetadata.exposureTimeSeconds > exposureTimeMaxSeconds ->
+                    PhotoRejectionReason.MOSSA_ESPOSIZIONE
                 hashAccettati.any { hammingDistance(it, foto.hash) <= duplicateMaxDistance } ->
                     PhotoRejectionReason.DUPLICATA
                 else -> null
@@ -53,6 +59,10 @@ class QualityGate(
         const val DEFAULT_DUPLICATE_MAX_DISTANCE = 10
         /** Velocità angolare (giroscopio, §16) oltre la quale la foto è considerata mossa: soglia fisica, non una stima di nitidezza. */
         const val DEFAULT_MOTION_MAX_RAD_PER_SEC = 1.0
+        /** ISO massimo accettabile (§13 punto 7): oltre questa soglia il rumore digitale avvelena la percezione dei dettagli fini. */
+        const val DEFAULT_ISO_MAX = 3200
+        /** Tempo di esposizione massimo in secondi (§13 punto 7): oltre 1/15s il rischio di micro-mosso (del soggetto o della mano) è troppo alto. */
+        const val DEFAULT_EXPOSURE_TIME_MAX_SECONDS = 0.066 // ~1/15s
 
         fun hammingDistance(a: Long, b: Long): Int = java.lang.Long.bitCount(a xor b)
     }
@@ -87,6 +97,9 @@ data class CameraMetadata(
     val exposureTimeSeconds: Double? = null,
     val focalLengthMm: Double? = null,
     val aperture: Double? = null,
+    /** Dimensione fisica del sensore in millimetri, utile a M3 per correzioni ottiche o stime di scala alternative (§16). */
+    val sensorWidthMm: Double? = null,
+    val sensorHeightMm: Double? = null,
 )
 
 /** Motivo per cui una foto è stata scartata da M0. */
@@ -97,6 +110,10 @@ enum class PhotoRejectionReason {
     DUPLICATA,
     /** Velocità angolare del giroscopio oltre soglia vicino allo scatto (§16): foto probabilmente mossa. */
     MOSSA_DAL_SENSORE,
+    /** ISO troppo alto (§13 punto 7): troppo rumore digitale per un'identificazione affidabile. */
+    RUMOROSA_ISO,
+    /** Tempo di esposizione troppo lungo (§13 punto 7): alto rischio di mosso. */
+    MOSSA_ESPOSIZIONE,
 }
 
 /** Esito della valutazione di una singola foto. */
