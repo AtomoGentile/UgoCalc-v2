@@ -185,7 +185,7 @@ class V2AnalysisPipeline(
         val verificaFinale = if (risoluzioni.isEmpty()) verifica else verifica.copy(ambiguitaRisolta = risoluzioni)
         val abbinamenti = matchNutrition(model, stimeFinali)
         val nutrizione = NutritionCalculator.calculate(stimeFinali, abbinamenti)
-        val outcome = PipelineOutcome.Verificato(sceneFinale, stimeFinali, verificaFinale, nutrizione, arbitratoMotivoMancato)
+        val outcome = PipelineOutcome.Verificato(sceneFinale, stimeFinali, verificaFinale, nutrizione, arbitratoMotivoMancato, abbinamenti = abbinamenti)
         val telemetryId = recordTelemetry(outcome, model, sessionMode)
         return outcome.copy(telemetryId = telemetryId)
     }
@@ -292,6 +292,11 @@ sealed interface PipelineOutcome {
      * [telemetryId] è l'id della riga salvata da M8 (-1 se non registrata, es. nei test che non
      * configurano [TelemetryStep]): mai richiesto per mostrare il risultato all'utente, serve solo
      * a collegare una futura correzione manuale al record giusto (§7, §8).
+     *
+     * [abbinamenti] è l'esito grezzo di M6 (nome alimento → voce di tabella abbinata, §5 M6): oltre
+     * ai totali già pronti in [nutrizione], serve a chi promuove la V2 a flusso visibile (§13 punto
+     * 1) per ricostruire una riga modificabile (correzione manuale del match, ricerca online) nello
+     * stesso formato già usato dalla V1 (`CalculatedFoodLine`), senza richiamare di nuovo M6.
      */
     data class Verificato(
         val sceneGraph: SceneGraph,
@@ -300,5 +305,6 @@ sealed interface PipelineOutcome {
         val nutrizione: NutritionReport,
         val arbitratoMotivoMancato: String? = null,
         val telemetryId: Long = -1,
+        val abbinamenti: Map<String, NormalizedFoodEntry> = emptyMap(),
     ) : PipelineOutcome
 }

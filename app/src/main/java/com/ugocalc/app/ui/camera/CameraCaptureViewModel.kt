@@ -8,7 +8,10 @@ import com.ugocalc.app.di.ShadowAnalysisScope
 import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.SessionPhoto
 import com.ugocalc.app.domain.inference.V2AnalysisPipelineFactory
+import com.ugocalc.app.domain.inference.toAnalysisTotals
+import com.ugocalc.app.domain.inference.toModelVisionSuccess
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
@@ -71,13 +74,56 @@ class CameraCaptureViewModel @Inject constructor(
         sessionStore.setCapturedImages(images, CAPTURED_IMAGE_MIME_TYPE)
         _uiState.update { it.copy(isAnalyzing = true) }
         viewModelScope.launch {
+            val settings = settingsRepository.settings.first()
+            val model = models.firstOrNull()
+            val v2VisibleEnabled = settings.v2VisibleModeEnabled && model != null
+            val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
+            if (v2Result != null) {
+                val (outcome, totals) = v2Result
+                sessionStore.setV2Result(outcome, totals)
+                _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
+                notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+                return@launch
+            }
+            // Nessuna V2 visibile richiesta, oppure V2 fallita (foto scadenti, fallback dichiarato,
+            // schema non supportato, eccezione): la V1 resta sempre la rete di sicurezza (§13 punto 1).
             val outcomes = runVisionForModels(models, images, CAPTURED_IMAGE_MIME_TYPE)
             sessionStore.setVisionOutcomes(outcomes)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
             recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
+            // La modalità ombra ha senso solo quando la V2 non è già stata provata come motore
+            // primario in questa stessa analisi: farla girare due volte raddoppierebbe le chiamate
+            // AI senza alcun beneficio (§13 punto 1).
+            if (!v2VisibleEnabled) {
+                runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
+            }
         }
-        runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
+    }
+
+    /**
+     * Motore V2 come flusso visibile (piano V2 §13 punto 1): esegue la pipeline M0→M8 e, se
+     * completata con successo, restituisce l'esito già pronto per [AnalysisSessionStore.setV2Result].
+     * Qualunque esito diverso da [PipelineOutcome.Verificato] (foto scadenti, fallback dichiarato,
+     * schema non supportato) o un'eccezione (rete, quota, parsing) fa tornare `null`: il chiamante
+     * ricade sulla V1 nella stessa sessione, mai un errore mostrato senza alternativa.
+     */
+    private suspend fun runV2Visible(capturedPhotos: List<CapturedPhoto>, model: AiModel): Pair<ModelVisionOutcome.Success, AnalysisTotals>? {
+        val sessionId = sessionStore.session.value.sessionId
+        val sessionMode = sessionStore.session.value.sessionMode
+        return runCatching {
+            val photos = capturedPhotos.mapIndexed { index, photo ->
+                val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                val cameraMetadata = extractCameraMetadata(photo.bytes)
+                SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata), photo.bytes)
+            }
+            val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+            if (outcome !is PipelineOutcome.Verificato) return@runCatching null
+            if (outcome.telemetryId >= 0) {
+                benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
+            }
+            outcome.toModelVisionSuccess(model) to outcome.toAnalysisTotals()
+        }.getOrNull()
     }
 
     /**

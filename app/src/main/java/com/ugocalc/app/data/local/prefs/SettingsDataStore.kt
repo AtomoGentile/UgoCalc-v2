@@ -70,6 +70,16 @@ data class UserSettings(
      */
     val v2ShadowModeEnabled: Boolean = false,
     /**
+     * Promuove la pipeline V2 a motore visibile (piano V2 §13 punto 1): quando attivo, l'analisi
+     * mostrata all'utente è quella calcolata da M0-M8, non più da [com.ugocalc.app.data.remote.ai.AiOrchestrator.runVisionAnalysis].
+     * Se la pipeline V2 fallisce (foto scadenti, fallback dichiarato, schema non supportato,
+     * eccezione) l'analisi ricade sempre sulla V1 sulla stessa sessione, mai un errore mostrato
+     * senza alternativa. Indipendente da [v2ShadowModeEnabled]: se questo flag è attivo la V2 gira
+     * già come motore primario, quindi non ha senso farla girare anche in ombra sulla stessa
+     * analisi. Falso di default.
+     */
+    val v2VisibleModeEnabled: Boolean = false,
+    /**
      * Modalità Casa/Ristorante attiva a livello di app (§ richiesta utente, icona in topAppBar
      * Homepage): pilota sia l'icona mostrata sia quale set di colori personalizzati viene applicato
      * ([primaryColorArgb] ecc. per Casa, [primaryColorRistoranteArgb] ecc. per Ristorante). Separata
@@ -107,6 +117,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
         val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
+        val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
     }
 
@@ -136,6 +147,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             lastSeenVersionCode = prefs[Keys.LAST_SEEN_VERSION_CODE] ?: 0,
             biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
+            v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
         )
     }
@@ -202,6 +214,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.BIAS_DATA_CONSENT_GIVEN] = given }
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
+    suspend fun setV2VisibleModeEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.V2_VISIBLE_MODE_ENABLED] = enabled }
     suspend fun setActiveSessionMode(mode: SessionMode) =
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
 }

@@ -98,6 +98,22 @@ fun BiasEvolutionScreen(
                         }
                         Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
                     }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text("Usa la V2 come motore visibile", fontWeight = FontWeight.Bold)
+                            Text(
+                                "Il risultato che vedi dopo lo scatto è calcolato dal nuovo motore V2, non più " +
+                                    "dalla V1. Se la V2 non riesce (foto scadenti, errore di rete o di formato), " +
+                                    "l'analisi ricade automaticamente sulla V1 nella stessa sessione.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = UgoGrey,
+                            )
+                        }
+                        Switch(checked = uiState.v2VisibleModeEnabled, onCheckedChange = { viewModel.setV2VisibleModeEnabled(it) })
+                    }
                     Button(onClick = onOpenGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                         Text("Registra peso vero di un'analisi")
                     }
