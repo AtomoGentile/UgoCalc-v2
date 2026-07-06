@@ -4,6 +4,7 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
+import com.ugocalc.app.data.local.db.dao.BenchmarkMealDao
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
@@ -11,6 +12,7 @@ import com.ugocalc.app.data.local.db.dao.OfficialTableDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.data.local.db.entity.BenchmarkMealEntity
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
@@ -27,8 +29,9 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         SearchFrequencyEntity::class,
         V2AnalysisRecordEntity::class,
         BiasCorrectionEntity::class,
+        BenchmarkMealEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -40,6 +43,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun searchFrequencyDao(): SearchFrequencyDao
     abstract fun v2AnalysisRecordDao(): V2AnalysisRecordDao
     abstract fun biasCorrectionDao(): BiasCorrectionDao
+    abstract fun benchmarkMealDao(): BenchmarkMealDao
 
     companion object {
         const val DATABASE_NAME = "ugocalc.db"

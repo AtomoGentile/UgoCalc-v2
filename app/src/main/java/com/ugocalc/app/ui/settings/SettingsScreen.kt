@@ -49,6 +49,7 @@ fun SettingsScreen(
     onOpenChangelog: () -> Unit,
     onOpenHistoryChart: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenOverlayTest: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showClearHistoryDialog by remember { mutableStateOf(false) }
@@ -66,6 +67,7 @@ fun SettingsScreen(
             SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables)
             SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup)
             SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog)
+            SettingsMenuItem("[Test] Overlay su fotocamera di sistema", "Esperimento isolato: rettangolo statico sopra il mirino per verificare i blocchi del produttore", onOpenOverlayTest)
 
             Text(
                 "Versione ${BuildConfig.VERSION_NAME}",

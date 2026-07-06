@@ -79,3 +79,25 @@ val MIGRATION_5_6 = object : Migration(5, 6) {
         )
     }
 }
+
+/** Benchmark pesato V1 vs V2 (§10, §13 punto 5): nuova tabella `benchmark_meals` più il collegamento `sessionId` su `v2_analysis_records` (vedi BenchmarkMealEntity). */
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE v2_analysis_records ADD COLUMN sessionId TEXT")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `benchmark_meals` (
+                `sessionId` TEXT PRIMARY KEY NOT NULL,
+                `capturedAtEpochMillis` INTEGER NOT NULL,
+                `sessionMode` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `v1PesiPerAlimentoJson` TEXT,
+                `v1NutrizionePerAlimentoJson` TEXT,
+                `v2RecordId` INTEGER,
+                `groundTruthPesiJson` TEXT,
+                `groundTruthLivello` TEXT
+            )
+            """.trimIndent()
+        )
+    }
+}

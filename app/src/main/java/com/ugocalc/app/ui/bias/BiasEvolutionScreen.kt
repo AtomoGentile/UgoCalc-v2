@@ -48,6 +48,8 @@ import java.util.Locale
 fun BiasEvolutionScreen(
     onBack: () -> Unit,
     onOpenGroundTruthEntry: () -> Unit,
+    onOpenBenchmarkGroundTruthEntry: () -> Unit,
+    onOpenBenchmarkDashboard: () -> Unit,
     viewModel: BiasEvolutionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -98,6 +100,12 @@ fun BiasEvolutionScreen(
                     }
                     Button(onClick = onOpenGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
                         Text("Registra peso vero di un'analisi")
+                    }
+                    Button(onClick = onOpenBenchmarkGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text("Benchmark: registra peso vero di un pasto")
+                    }
+                    Button(onClick = onOpenBenchmarkDashboard, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                        Text("Benchmark V1 vs V2")
                     }
                 }
                 HorizontalDivider()

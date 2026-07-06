@@ -9,6 +9,10 @@
     <!-- Giroscopio per M0 (piano V2 §16): non required, i device senza sensore restano installabili
          e degradano in modo esplicito (nessun dato di movimento, vedi GyroscopeMotionTracker). -->
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
+    <!-- Solo per il test isolato dell'overlay sopra la fotocamera di sistema (OverlayTestScreen):
+         va richiesto esplicitamente a runtime via ACTION_MANAGE_OVERLAY_PERMISSION, dichiararlo qui
+         non basta su Android 6+. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".UgoCalcApplication"
@@ -31,6 +35,13 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Service minimo, non foreground: vive solo mentre la fotocamera di sistema è in primo
+             piano (avviato/fermato da OverlayTestScreen intorno al lancio dell'Intent), quindi non
+             serve una foreground service notification per questo test. -->
+        <service
+            android:name=".ui.overlaytest.OverlayTestService"
+            android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

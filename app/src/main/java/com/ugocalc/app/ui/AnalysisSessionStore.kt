@@ -8,6 +8,7 @@ import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -28,6 +29,8 @@ class AnalysisSessionStore @Inject constructor() {
         val selectedModels: List<AiModel> = emptyList(),
         /** Scelta esplicita dell'utente a inizio analisi (piano V2 §8), mai dedotta dalla foto: usata oggi solo dalla pipeline V2 in ombra. */
         val sessionMode: SessionMode = SessionMode.CASA,
+        /** Id univoco del pasto corrente (§13 punto 5, benchmark V1/V2): collega la stima V1 e quella V2 fatte sulle stesse foto, così un peso vero registrato più tardi può confrontare entrambe. Stabile per tutta la sessione (anche su "Riprova"), rigenerato solo con [reset]. */
+        val sessionId: String = UUID.randomUUID().toString(),
         val capturedImages: List<ByteArray> = emptyList(),
         val imageMimeType: String = "image/jpeg",
         val visionOutcomes: List<ModelVisionOutcome> = emptyList(),

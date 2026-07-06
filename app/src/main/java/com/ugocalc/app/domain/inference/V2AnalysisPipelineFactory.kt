@@ -26,11 +26,16 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val tableRepository: TableRepository,
 ) {
-    fun create(): V2AnalysisPipeline = V2AnalysisPipeline(
+    /**
+     * [sessionId] collega il record M8 salvato da questa esecuzione al pasto tracciato per il
+     * benchmark V1/V2 (§10, §13 punto 5), se il chiamante ne ha già generato uno; `null` se la
+     * pipeline gira fuori da una sessione tracciata (es. test, chiamate dirette).
+     */
+    fun create(sessionId: String? = null): V2AnalysisPipeline = V2AnalysisPipeline(
         perceive = perceptionEngine::perceive,
         arbitrate = arbitrationEngine::arbitrate,
         matchNutrition = nutritionMatchStepAdapter::match,
-        recordTelemetry = telemetryRepository::record,
+        recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
         biasFactor = { sessionMode, strategy, aiModelId ->
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, consentGiven)

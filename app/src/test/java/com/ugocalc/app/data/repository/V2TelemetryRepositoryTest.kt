@@ -1,5 +1,6 @@
 package com.ugocalc.app.data.repository
 
+import com.ugocalc.app.data.local.db.dao.SessionModeAiModelPair
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.inference.PipelineOutcome
@@ -41,6 +42,14 @@ private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
 
     override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
+
+    override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson == null }
+
+    override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> =
+        rows.values.filter { it.groundTruthPesiJson != null }
+            .map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }
+            .distinct()
 }
 
 class V2TelemetryRepositoryTest {
