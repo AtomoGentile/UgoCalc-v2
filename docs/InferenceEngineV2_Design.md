@@ -146,12 +146,12 @@ File: entity `V2AnalysisRecordEntity.kt`, DAO `V2AnalysisRecordDao.kt`, reposito
 
 Ciò che funziona: `V2TelemetryRepository.record()` salva l'intero esito di un'analisi (SceneGraph, stime di peso, report di verifica, report nutrizionale) in colonne JSON, con modalità di sessione, modello IA e versione di schema. `BiasCorrectionCalculator.calculate()` implementa l'algoritmo di taratura: richiede almeno 5 osservazioni, verifica che almeno l'80% concordi sul segno dello scarto stimato/reale, e in tal caso restituisce come fattore correttivo la **mediana** dei rapporti (robusta agli outlier) — altrimenti dichiara esplicitamente dati insufficienti o bias instabile, senza mai inventare un fattore. `BiasCorrectionRepository` mantiene la chiave esatta *(modalità, strategia, modello IA)*, mai un'aggregazione cross-modello, dietro un flag di consenso esplicito dell'utente (`SettingsRepository.biasDataConsentGiven`, aggiunto per motivi di privacy, non previsto nella prima stesura del piano). Inoltre `getAllCorrectionsWithUsageStats()` ricostruisce dalle osservazioni M8 le statistiche di utilizzo mostrate in UI: peso stimato medio, peso vero medio, peso corretto medio, correzione media stimata, errore medio, MAE, MSE, RMSE e confronto MAE/RMSE dopo applicazione teorica del fattore.
 
-Ciò che manca per chiudere il ciclo:
-1. Non esiste alcuna UI per l'utente per registrare un peso vero o una correzione manuale collegata a un record M8: `recordGroundTruth()` non viene mai chiamato fuori dai test.
-2. Non esiste alcun trigger automatico (job periodico, evento all'apertura dell'app) che richiami `recalculate()`: il ricalcolo del bias è codice raggiungibile solo dai test.
-3. `PhysicsEngine` (M3) non chiama mai `currentFactor()`: anche un fattore calcolato non verrebbe applicato al peso stimato. `BiasEvolutionScreen` è oggi un pannello di trasparenza e diagnostica (fattori + statistiche d'uso), non un anello di retroazione.
+**Stato aggiornato (6 luglio 2026, §20): il ciclo è ora chiuso end-to-end.**
+1. `GroundTruthEntryScreen`/`GroundTruthEntryViewModel` (`ui/bias/`), raggiungibile da un pulsante in `BiasEvolutionScreen`, elenca le analisi V2 senza ground truth (`V2TelemetryRepository.listPendingGroundTruth()`) e chiama `recordGroundTruth()` con i pesi inseriti dall'utente per alimento e il livello (Gold/Silver/Bronze).
+2. `AppForegroundObserver.onStart()` richiama `BiasCorrectionRepository.recalculateAll(consentGiven)` ad ogni apertura dell'app in foreground: non è un `WorkManager` periodico, ma copre lo stesso scopo pratico, dato che l'app va comunque in foreground prima di ogni analisi. `recalculateAll()` itera tutti i segmenti (modalità, modello) con almeno un ground truth (`V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth()`) incrociati con le 6 strategie.
+3. `PhysicsEngine.estimate()` (M3) accetta ora un `biasFactor: Double?` opzionale, moltiplicato sul peso grezzo e dichiarato esplicitamente nella `CalculationChain` (`fattore_correzione`) — mai applicato in silenzio. `V2AnalysisPipeline` lo recupera per ogni alimento tramite un nuovo passo iniettabile `BiasFactorStep`, cablato in `V2AnalysisPipelineFactory` leggendo `BiasCorrectionRepository.currentFactor()` e il consenso da `SettingsRepository`.
 
-Di conseguenza, il meccanismo di "il sistema impara dai propri errori e si corregge nel tempo" ha **l'infrastruttura dati e l'algoritmo pronti e testati**, ma non è ancora un ciclo automatico attivo: manca la raccolta di ground truth in UI, il trigger di ricalcolo, e il consumo del fattore in M3. Sono i tre pezzi mancanti tracciati in §13.
+Il meccanismo di "il sistema impara dai propri errori e si corregge nel tempo" ha quindi, oltre all'infrastruttura dati e all'algoritmo, anche i tre collegamenti che mancavano: raccolta ground truth in UI, trigger di ricalcolo, e consumo del fattore in M3. Resta comunque a valle della modalità ombra (§13 punto 1): finché la V2 non è il flusso visibile, il beneficio del fattore appreso non arriva ancora al risultato mostrato all'utente in produzione.
 
 ## 6. Tassonomia degli alimenti per strategia di stima
 
@@ -244,9 +244,9 @@ Livelli di ground truth: **Gold** = bilancia; **Silver** = etichetta/fonte affid
 
 **Ancore di scala**, implementate e testate in `ScaleResolver`/`ScaleAnchorType` (ordine di priorità: stoviglia calibrata > riferimento corporeo > oggetto universale > stima generica): il resolver sceglie l'ancora di priorità più alta dichiarata da M1 nella foto corrente. **Non esiste memoria tra una sessione e l'altra**: non ci sono tabelle Room per calibrazione stoviglie personali né per riferimenti corporei personali — ogni analisi riparte da zero sull'ancoraggio, senza poter riusare una calibrazione fatta in precedenza.
 
-**Fattori di correzione appresi** (§5 M8): l'algoritmo di taratura (mediana dei rapporti peso-vero/peso-stimato, soglia minima di campioni, verifica di concordanza del segno) è implementato e testato in isolamento in `BiasCorrectionCalculator`, con chiave sempre esatta *(modalità, strategia, modello IA)* — mai un'aggregazione cross-modello, perché il bias nasce nella percezione (M1) ed è specifico di quel modello: applicare senza distinzione il fattore calcolato su un modello a una lettura fatta da un altro andrebbe nella direzione sbagliata. Ma **il fattore non viene mai consumato da M3** (§5 M3): l'infrastruttura di calcolo esiste, il ciclo di retroazione automatico no.
+**Fattori di correzione appresi** (§5 M8): l'algoritmo di taratura (mediana dei rapporti peso-vero/peso-stimato, soglia minima di campioni, verifica di concordanza del segno) è implementato e testato in isolamento in `BiasCorrectionCalculator`, con chiave sempre esatta *(modalità, strategia, modello IA)* — mai un'aggregazione cross-modello, perché il bias nasce nella percezione (M1) ed è specifico di quel modello: applicare senza distinzione il fattore calcolato su un modello a una lettura fatta da un altro andrebbe nella direzione sbagliata. **Il fattore è ora consumato da M3** (§20): `PhysicsEngine.estimate()` lo applica al peso grezzo quando disponibile, tramite il passo `BiasFactorStep` cablato nella pipeline.
 
-**In sintesi, delle quattro componenti previste per §8, una è operativa in UI e tre restano mancanti.** Lo switch Casa/Ristorante esiste in Home ed è propagato alla V2 in ombra; calibrazione persistente delle stoviglie, riferimenti corporei persistenti e applicazione automatica del bias dentro M3 non sono ancora implementati. Esiste l'infrastruttura dati e algoritmica sottostante (enum, resolver, calcolatore di bias, DB); il ciclo completo richiede ancora ground truth da UI, ricalcolo automatico e consumo del fattore (§13).
+**In sintesi, delle quattro componenti previste per §8, due sono ora operative.** Lo switch Casa/Ristorante esiste in Home ed è propagato alla V2 in ombra; il ciclo di bias (raccolta ground truth → ricalcolo → applicazione in M3) è chiuso end-to-end (§20). Restano mancanti la calibrazione persistente delle stoviglie e dei riferimenti corporei personali (§13 punto 4).
 
 ## 9. Rischi e colli di bottiglia
 
@@ -309,7 +309,7 @@ Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sott
 
 1. **Promuovere `V2AnalysisPipeline` da modalità ombra a flusso visibile** (`CameraCaptureViewModel`/`VisionResultsViewModel`). Il collegamento shadow e lo switch Casa/Ristorante esistono; manca ancora l'uso della V2 come risultato mostrato all'utente, con gestione UI degli errori e fallback V1 esplicito.
 2. **Regola di sicurezza sull'ambiguità residua in M4**: dopo un tentativo di M5, un'identificazione ancora ambigua tra alternative con CHO diverso deve selezionare l'alternativa a CHO più alto e segnalarlo esplicitamente in UI come stima cautelativa da confermare. Priorità alta per un'app che informa dosi di insulina: sottostimare i CHO per eccesso di fiducia è l'errore peggiore possibile.
-3. **Chiudere il ciclo di bias (§5 M8, §8)**: UI per registrare ground truth (peso vero o correzione manuale) collegata a un record M8; trigger automatico di ricalcolo (job periodico o all'apertura dell'app); consumo del fattore calcolato dentro `PhysicsEngine`. La trasparenza UI e le statistiche d'uso dei fattori esistono già, ma non applicano ancora alcuna correzione al calcolo successivo.
+3. ~~Chiudere il ciclo di bias (§5 M8, §8)~~ — **fatto (§20, 6 luglio 2026)**: `GroundTruthEntryScreen` per registrare ground truth collegata a un record M8; `AppForegroundObserver` come trigger di ricalcolo all'apertura dell'app; `PhysicsEngine` consuma ora il fattore calcolato. Resta da valutare, quando ci saranno abbastanza dati reali, se il trigger all'apertura app è sufficiente o serve un vero job periodico (`WorkManager`, dipendenza già presente ma non ancora usata altrove).
 4. **Calibrazione persistente delle stoviglie e dei riferimenti corporei** (§8): tabelle Room dedicate, oggi inesistenti, così che una calibrazione fatta una volta non vada persa a ogni sessione.
 5. **Costruire il benchmark pesato** (§10) e collegare le fasi di validazione in ombra: senza questo, non è possibile sapere se la V2 è davvero migliore della V1 prima di esporla agli utenti.
 6. **Ripartizione da ricetta per la strategia Composto** (§5 M3, §6): oggi è un blocco geometrico rietichettato; una vera ripartizione tra ingredienti occlusi richiede una fonte di ricette (locale o online) non ancora progettata.
@@ -332,7 +332,7 @@ Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché
 | Collegamento alla UI | Fatto solo in **modalità ombra opzionale**: V1 resta il flusso visibile; promozione della V2 a risultato utente ancora mancante (§13) |
 | Ancora di scala principale | Riferimenti corporei e universali, non le stoviglie di casa — implementata la logica (M3), manca la persistenza delle calibrazioni |
 | Modalità di sessione | Selezione esplicita in Home, mai dedotta dall'immagine — usata dalla V2 in ombra e dai colori per modalità; V1 visibile non la consuma |
-| Evoluzione del sistema | Algoritmo di taratura bias pronto e testato (M8), UI di trasparenza con statistiche d'uso pronta; il ciclo automatico (raccolta → ricalcolo → applicazione) non è ancora chiuso |
+| Evoluzione del sistema | Algoritmo di taratura bias pronto e testato (M8), UI di trasparenza con statistiche d'uso pronta; il ciclo automatico (raccolta → ricalcolo → applicazione) è chiuso (§20) — resta a valle della modalità ombra finché la V2 non è flusso visibile |
 | Prerequisito di validazione | Benchmark pesato (casa + ristorante) — da costruire prima di qualunque decisione su una release in produzione |
 
 ---
@@ -412,6 +412,30 @@ La schermata `BIAS ed evoluzione del comportamento` non mostra più soltanto il 
 - La riga `Dopo correzione stimata` rende visibile se il fattore riduce davvero errore medio, MAE e RMSE sulle osservazioni raccolte.
 
 **Limite importante:** queste statistiche sono diagnostica locale del fattore già calcolato, non benchmark globale V1/V2. Non chiudono da sole il ciclo di auto-miglioramento: restano mancanti UI per ground truth, trigger automatico di `recalculate()` e applicazione del fattore in M3.
+
+---
+
+## 20. Changelog bias - chiusura del ciclo di apprendimento (§5 M8, §8, §13 punto 3)
+
+**Data: 6 luglio 2026.**
+
+I tre collegamenti mancanti individuati in §5 M8/§13 sono stati implementati:
+
+**Raccolta ground truth (UI):**
+- Nuova schermata `GroundTruthEntryScreen`/`GroundTruthEntryViewModel` (`ui/bias/`), raggiungibile da un pulsante "Registra peso vero di un'analisi" in `BiasEvolutionScreen` (route `Routes.GROUND_TRUTH_ENTRY`).
+- Elenca le analisi V2 senza ground truth (`V2TelemetryRepository.listPendingGroundTruth()`, appoggiata a una nuova query `V2AnalysisRecordDao.getAllWithoutGroundTruth()`), un campo peso per alimento e la scelta del livello (Gold/bilancia, Silver/etichetta, Bronze/stima utente).
+- Al salvataggio chiama `recordGroundTruth()` e poi `BiasCorrectionRepository.recalculate()` subito per le strategie coinvolte, così l'utente vede l'effetto senza aspettare il trigger periodico.
+
+**Trigger di ricalcolo:**
+- `BiasCorrectionRepository.recalculateAll(consentGiven)`: itera tutti i segmenti *(modalità, modello)* con almeno un ground truth registrato (nuova query `V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth()`), incrociati con le 6 `EstimationStrategy`, e richiama `recalculate()` per ciascuno.
+- Richiamato da `AppForegroundObserver.onStart()` (già esistente per la notifica "Analisi terminata"), sullo scope `@ShadowAnalysisScope` già usato dalla pipeline ombra: ad ogni apertura dell'app in foreground. Non è un `WorkManager` periodico in senso stretto (la dipendenza è dichiarata nel progetto ma resta inutilizzata) — è la scelta più semplice compatibile con i pattern esistenti, dato che l'app deve comunque aprirsi prima di ogni analisi.
+
+**Consumo del fattore in M3:**
+- `PhysicsEngine.estimate()` accetta un parametro opzionale `biasFactor: Double?`, moltiplicato sul peso grezzo quando presente; la `CalculationChain` guadagna una voce `fattore_correzione` e una `CalculationSource` dedicata, così la correzione resta sempre visibile e mai silenziosa (§2, §7).
+- `V2AnalysisPipeline` guadagna un nuovo passo iniettabile `BiasFactorStep` (stesso pattern di `PerceptionStep`/`TelemetryStep`), risolto per ogni alimento in `stimaTutti()` prima di chiamare `PhysicsEngine.estimate()`.
+- `V2AnalysisPipelineFactory` inietta `BiasCorrectionRepository` e `SettingsRepository` e costruisce il passo leggendo il consenso e `currentFactor()` per il segmento esatto (modalità, strategia, modello) — mai un'aggregazione cross-modello, coerente con §8.
+
+**Limite che resta:** questo chiude il ciclo di apprendimento *dentro* il motore V2, ma la V2 gira ancora solo in modalità ombra (§13 punto 1): finché non è il flusso visibile, un fattore di correzione applicato in M3 non cambia il risultato che l'utente vede oggi in produzione, solo i dati raccolti per il benchmark futuro.
 
 ---
 

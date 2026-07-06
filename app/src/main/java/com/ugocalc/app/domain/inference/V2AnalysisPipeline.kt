@@ -14,6 +14,7 @@ import com.ugocalc.app.domain.inference.m4.ConsistencyVerifier
 import com.ugocalc.app.domain.inference.m5.ArbitrationOutcome
 import com.ugocalc.app.domain.inference.m7.NutritionCalculator
 import com.ugocalc.app.domain.inference.m7.NutritionReport
+import com.ugocalc.app.domain.inference.model.AmbiguityResolution
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FlaggedItem
 import com.ugocalc.app.domain.inference.model.RevisedFood
@@ -76,6 +77,16 @@ typealias BiasFactorStep = suspend (
     aiModelId: String,
 ) -> Double?
 
+/**
+ * Firma della ricerca locale di CHO/100g per nome alimento, usata per risolvere un'ambiguità
+ * residua dopo M5 (§5 M4 punto 2, §13 punto 2): dato un elenco di nomi candidati (il nome
+ * originale + le sue alternative), restituisce il CHO/100g trovato nelle tabelle locali per
+ * ciascun candidato riconosciuto — nessuna chiamata al modello, per restare nel budget (§4).
+ * Il default non risolve mai nulla, così l'ambiguità resta segnalata ma non corretta finché
+ * questo step non viene collegato a una ricerca reale.
+ */
+typealias AmbiguityResolutionStep = suspend (candidati: List<String>) -> Map<String, Double>
+
 /** Una foto della sessione: metriche già calcolate per M0 e byte grezzi da inviare a M1 se accettata. */
 class SessionPhoto(val quality: PhotoQuality, val bytes: ByteArray)
 
@@ -100,6 +111,7 @@ class V2AnalysisPipeline(
     private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
     private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
     private val biasFactor: BiasFactorStep = { _, _, _ -> null },
+    private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
 ) {
 
     suspend fun run(
@@ -169,11 +181,58 @@ class V2AnalysisPipeline(
         sessionMode: SessionMode,
         arbitratoMotivoMancato: String? = null,
     ): PipelineOutcome.Verificato {
-        val abbinamenti = matchNutrition(model, stime)
-        val nutrizione = NutritionCalculator.calculate(stime, abbinamenti)
-        val outcome = PipelineOutcome.Verificato(scene, stime, verifica, nutrizione, arbitratoMotivoMancato)
+        val (sceneFinale, stimeFinali, risoluzioni) = risolviAmbiguitaResidua(scene, stime)
+        val verificaFinale = if (risoluzioni.isEmpty()) verifica else verifica.copy(ambiguitaRisolta = risoluzioni)
+        val abbinamenti = matchNutrition(model, stimeFinali)
+        val nutrizione = NutritionCalculator.calculate(stimeFinali, abbinamenti)
+        val outcome = PipelineOutcome.Verificato(sceneFinale, stimeFinali, verificaFinale, nutrizione, arbitratoMotivoMancato)
         val telemetryId = recordTelemetry(outcome, model, sessionMode)
         return outcome.copy(telemetryId = telemetryId)
+    }
+
+    /**
+     * Regola di sicurezza sull'ambiguità residua (§5 M4 punto 2, §13 punto 2): dopo l'eventuale
+     * tentativo di M5, gli alimenti che hanno ancora alternative di identificazione aperte vengono
+     * risolti scegliendo, tra il nome originale e le alternative, quello con il CHO/100g più alto
+     * nelle tabelle locali — mai lasciare che un'ambiguità irrisolta scelga per difetto
+     * un'identificazione a CHO più basso, l'errore peggiore per un'app che informa dosi di
+     * insulina. Se [resolveAmbiguity] non riconosce nessun candidato, l'alimento resta invariato:
+     * l'ambiguità resta segnalata da M4 (`flaggati`) ma non "risolta" per difetto.
+     */
+    private suspend fun risolviAmbiguitaResidua(
+        scene: SceneGraph,
+        stime: List<WeightEstimate>,
+    ): Triple<SceneGraph, List<WeightEstimate>, List<AmbiguityResolution>> {
+        val ambigui = scene.alimenti.filter { it.alternativeIdentificazione.isNotEmpty() }
+        if (ambigui.isEmpty()) return Triple(scene, stime, emptyList())
+
+        val risoluzioni = mutableListOf<AmbiguityResolution>()
+        val nomeRiscritto = mutableMapOf<String, String>()
+        for (food in ambigui) {
+            val candidati = listOf(food.nome) + food.alternativeIdentificazione
+            val choPerCandidato = resolveAmbiguity(candidati)
+            val scelto = candidati
+                .mapNotNull { nome -> choPerCandidato[nome]?.let { nome to it } }
+                .maxByOrNull { it.second }
+                ?: continue
+            if (scelto.first != food.nome) {
+                nomeRiscritto[food.nome] = scelto.first
+                risoluzioni += AmbiguityResolution(food.nome, scelto.first, scelto.second)
+            }
+        }
+        if (nomeRiscritto.isEmpty()) return Triple(scene, stime, risoluzioni)
+
+        val sceneFinale = scene.copy(
+            alimenti = scene.alimenti.map { food ->
+                val nuovoNome = nomeRiscritto[food.nome] ?: return@map food
+                food.copy(nome = nuovoNome, alternativeIdentificazione = emptyList())
+            },
+        )
+        val stimeFinali = stime.map { stima ->
+            val nuovoNome = nomeRiscritto[stima.nome] ?: return@map stima
+            stima.copy(nome = nuovoNome)
+        }
+        return Triple(sceneFinale, stimeFinali, risoluzioni)
     }
 
     private suspend fun stimaTutti(

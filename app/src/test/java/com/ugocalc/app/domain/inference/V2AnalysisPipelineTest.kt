@@ -212,6 +212,56 @@ class V2AnalysisPipelineTest {
     }
 
     @Test
+    fun `residual ambiguity after M5 picks the alternative with the highest CHO`() = runBlocking {
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
+            resolveAmbiguity = { candidati ->
+                assertEquals(listOf("riso in bianco", "riso basmati"), candidati)
+                mapOf("riso in bianco" to 28.0, "riso basmati" to 31.0)
+            },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        )
+
+        assertTrue(outcome is PipelineOutcome.Verificato)
+        val verificato = outcome as PipelineOutcome.Verificato
+        assertEquals("riso basmati", verificato.sceneGraph.alimenti.first().nome)
+        assertEquals("riso basmati", verificato.stime.first().nome)
+        assertEquals(1, verificato.verifica.ambiguitaRisolta.size)
+        val risoluzione = verificato.verifica.ambiguitaRisolta.first()
+        assertEquals("riso in bianco", risoluzione.nomeOriginale)
+        assertEquals("riso basmati", risoluzione.nomeScelto)
+        assertEquals(31.0, risoluzione.choPer100g, 0.0001)
+    }
+
+    @Test
+    fun `unresolved candidates leave the ambiguous food unchanged`() = runBlocking {
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
+            resolveAmbiguity = { emptyMap() },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        )
+
+        assertTrue(outcome is PipelineOutcome.Verificato)
+        val verificato = outcome as PipelineOutcome.Verificato
+        assertEquals("riso in bianco", verificato.sceneGraph.alimenti.first().nome)
+        assertTrue(verificato.verifica.ambiguitaRisolta.isEmpty())
+    }
+
+    @Test
     fun `M8 records the finished analysis exactly once and its id reaches the outcome`() = runBlocking {
         val scena = SceneGraph(
             schemaVersion = SceneGraph.SCHEMA_VERSION,
