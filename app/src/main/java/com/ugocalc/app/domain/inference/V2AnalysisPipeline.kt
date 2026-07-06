@@ -50,13 +50,27 @@ typealias NutritionMatchStep = suspend (
     stime: List<WeightEstimate>,
 ) -> Map<String, NormalizedFoodEntry>
 
+/**
+ * Firma di M8 vista dalla pipeline: salva l'analisi completata nell'archivio di telemetria (§5 M8)
+ * e restituisce l'id della riga salvata. Tipizzata a parte, come [PerceptionStep], così la pipeline
+ * resta testabile senza Room. Il default non registra nulla (id -1): usato dai test e da qualunque
+ * chiamante a cui la telemetria non interessa.
+ */
+typealias TelemetryStep = suspend (
+    outcome: PipelineOutcome.Verificato,
+    model: AiModel,
+    sessionMode: SessionMode,
+) -> Long
+
 /** Una foto della sessione: metriche già calcolate per M0 e byte grezzi da inviare a M1 se accettata. */
 class SessionPhoto(val quality: PhotoQuality, val bytes: ByteArray)
 
 /**
- * Orchestra M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 (§4). M8 (telemetria) non esiste ancora: la
- * pipeline si ferma al [NutritionReport] finale, che è già il risultato mostrabile all'utente
- * (CHO + grassi + spiegazione per alimento, §1).
+ * Orchestra M0 → M1 → M2 → M3 → M4 → M5 → M6 → M7 → M8 (§4). Il risultato mostrabile all'utente
+ * (CHO + grassi + spiegazione per alimento, §1) è pronto già a valle di M7; M8 (telemetria, §5)
+ * salva l'analisi nell'archivio di apprendimento senza intervenire sul risultato: un fallimento del
+ * salvataggio non deve mai far fallire l'analisi già calcolata, per questo [TelemetryStep] non
+ * lancia eccezioni verso l'utente, restituisce solo l'id salvato (o -1 se non registrato).
  *
  * Ogni esito di errore gestito lungo la catena (§5) diventa un ramo esplicito di [PipelineOutcome],
  * mai un'eccezione silenziosa: foto tutte scadenti, fallback M1→V1, schema SceneGraph non
@@ -70,6 +84,7 @@ class V2AnalysisPipeline(
     private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
     private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
     private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
+    private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
 ) {
 
     suspend fun run(
@@ -100,17 +115,17 @@ class V2AnalysisPipeline(
         val verifica = consistencyVerifier.verify(sceneGraph, stime, scale)
 
         if (!verifica.richiedeArbitrato) {
-            return finalizza(sceneGraph, stime, verifica, model)
+            return finalizza(sceneGraph, stime, verifica, model, sessionMode)
         }
 
         // M5, al massimo una volta per analisi (§5 M5): qualunque sia l'esito, M4 non lo richiama
         // una seconda volta sullo stesso flag.
         return when (val esito = arbitrate(model, immaginiValide, imageMimeType, sceneGraph, verifica.flaggati)) {
             is ArbitrationOutcome.NonDisponibile ->
-                finalizza(sceneGraph, stime, verifica, model, arbitratoMotivoMancato = esito.motivo)
+                finalizza(sceneGraph, stime, verifica, model, sessionMode, arbitratoMotivoMancato = esito.motivo)
             is ArbitrationOutcome.Riuscita -> {
                 if (esito.revisioni.isEmpty()) {
-                    finalizza(sceneGraph, stime, verifica, model)
+                    finalizza(sceneGraph, stime, verifica, model, sessionMode)
                 } else {
                     val scenaRivista = applicaRevisioni(sceneGraph, esito.revisioni)
                     val assegnazioniRiviste = when (val routing = strategyRouter.route(scenaRivista)) {
@@ -120,23 +135,30 @@ class V2AnalysisPipeline(
                     }
                     val stimeRiviste = stimaTutti(scenaRivista, assegnazioniRiviste, scale)
                     val verificaFinale = consistencyVerifier.verify(scenaRivista, stimeRiviste, scale)
-                    finalizza(scenaRivista, stimeRiviste, verificaFinale, model)
+                    finalizza(scenaRivista, stimeRiviste, verificaFinale, model, sessionMode)
                 }
             }
         }
     }
 
-    /** M6 (abbinamento nutrizionale) + M7 (calcolo CHO/grassi + spiegazione), sulle stime finali. */
+    /**
+     * M6 (abbinamento nutrizionale) + M7 (calcolo CHO/grassi + spiegazione) sulle stime finali,
+     * poi M8 (telemetria, §5): il salvataggio avviene sempre sul risultato già pronto, mai lo
+     * condiziona.
+     */
     private suspend fun finalizza(
         scene: SceneGraph,
         stime: List<WeightEstimate>,
         verifica: VerificationReport,
         model: AiModel,
+        sessionMode: SessionMode,
         arbitratoMotivoMancato: String? = null,
     ): PipelineOutcome.Verificato {
         val abbinamenti = matchNutrition(model, stime)
         val nutrizione = NutritionCalculator.calculate(stime, abbinamenti)
-        return PipelineOutcome.Verificato(scene, stime, verifica, nutrizione, arbitratoMotivoMancato)
+        val outcome = PipelineOutcome.Verificato(scene, stime, verifica, nutrizione, arbitratoMotivoMancato)
+        val telemetryId = recordTelemetry(outcome, model, sessionMode)
+        return outcome.copy(telemetryId = telemetryId)
     }
 
     private fun stimaTutti(
@@ -189,6 +211,10 @@ sealed interface PipelineOutcome {
      * richiesto l'arbitrato ma M5 non è stato disponibile (§5 M5 "Fallimento gestito"),
      * [arbitratoMotivoMancato] lo dichiara esplicitamente e [stime] / [verifica] restano quelli
      * pre-arbitrato — mai spacciati per una stima già rivista.
+     *
+     * [telemetryId] è l'id della riga salvata da M8 (-1 se non registrata, es. nei test che non
+     * configurano [TelemetryStep]): mai richiesto per mostrare il risultato all'utente, serve solo
+     * a collegare una futura correzione manuale al record giusto (§7, §8).
      */
     data class Verificato(
         val sceneGraph: SceneGraph,
@@ -196,5 +222,6 @@ sealed interface PipelineOutcome {
         val verifica: VerificationReport,
         val nutrizione: NutritionReport,
         val arbitratoMotivoMancato: String? = null,
+        val telemetryId: Long = -1,
     ) : PipelineOutcome
 }

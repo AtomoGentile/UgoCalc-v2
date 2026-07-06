@@ -36,3 +36,27 @@ val MIGRATION_3_4 = object : Migration(3, 4) {
         )
     }
 }
+
+/** M8 (piano V2 §5, §8): tabella di telemetria per l'archivio di apprendimento della V2 (vedi V2AnalysisRecordEntity). */
+val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `v2_analysis_records` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `analyzedAtEpochMillis` INTEGER NOT NULL,
+                `sessionMode` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `schemaVersion` INTEGER NOT NULL,
+                `sceneGraphJson` TEXT NOT NULL,
+                `weightEstimatesJson` TEXT NOT NULL,
+                `verificationReportJson` TEXT NOT NULL,
+                `nutritionReportJson` TEXT NOT NULL,
+                `arbitratoMotivoMancato` TEXT,
+                `groundTruthPesiJson` TEXT,
+                `groundTruthLivello` TEXT
+            )
+            """.trimIndent()
+        )
+    }
+}
