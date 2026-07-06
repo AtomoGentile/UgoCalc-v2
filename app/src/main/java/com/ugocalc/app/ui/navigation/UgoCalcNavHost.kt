@@ -23,7 +23,6 @@ import com.ugocalc.app.ui.history.HistoryScreen
 import com.ugocalc.app.ui.home.HomeScreen
 import com.ugocalc.app.ui.manualentry.ManualFoodEntryScreen
 import com.ugocalc.app.ui.modelselect.ModelSelectionScreen
-import com.ugocalc.app.ui.overlaytest.OverlayTestScreen
 import com.ugocalc.app.ui.results.VisionResultsScreen
 import com.ugocalc.app.ui.settings.AccessibilitySettingsScreen
 import com.ugocalc.app.ui.settings.ApiSettingsScreen
@@ -169,11 +168,8 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
                 onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
                 onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
-                onOpenOverlayTest = { navController.navigate(Routes.OVERLAY_TEST) },
             )
         }
-
-        composable(Routes.OVERLAY_TEST) { OverlayTestScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }

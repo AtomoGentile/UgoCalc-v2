@@ -29,7 +29,6 @@ object Routes {
     const val SETTINGS_HISTORY_CHART = "settings_history_chart"
     const val SETTINGS_TABLE_EDITOR = "settings_table_editor/{tableId}"
     const val SETTINGS_BACKUP = "settings_backup"
-    const val OVERLAY_TEST = "overlay_test"
 
     /**
      * Gli id modello possono contenere "/" (es. "openai/gpt-4o" per GitHub Models): senza
