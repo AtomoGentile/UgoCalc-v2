@@ -63,7 +63,9 @@ class VisionResultsViewModel @Inject constructor(
         val state = _uiState.value
         if (sessionStore.session.value.usingV2Engine) {
             _uiState.value = state.copy(matchingDone = true)
-            notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+            viewModelScope.launch {
+                notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+            }
             return
         }
         val referenceOutcome = state.successfulOutcomes.firstOrNull { it.model.id == state.referenceModelId }
