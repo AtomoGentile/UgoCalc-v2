@@ -143,9 +143,6 @@ fun HomeScreen(
                                 contentDescription = if (uiState.sessionMode == SessionMode.CASA) "Modalità Casa" else "Modalità Ristorante"
                             )
                         }
-                        IconButton(onClick = onNavigateToSettings) {
-                            Icon(Icons.Default.Settings, contentDescription = "Impostazioni")
-                        }
                     },
                 )
             },
