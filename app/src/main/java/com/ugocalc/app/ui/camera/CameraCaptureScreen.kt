@@ -1,6 +1,7 @@
 package com.ugocalc.app.ui.camera
 
 import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -34,6 +35,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -59,6 +61,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.ui.components.LoadingOverlay
+import com.ugocalc.app.util.OverlayPermissionHelper
 import com.ugocalc.app.util.isCameraPermissionGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,10 +85,12 @@ private const val MAX_PHOTOS = 5
  * mostra le miniature degli scatti raccolti finora, con la possibilità di aggiungerne altri,
  * ispezionarli a schermo intero (pizzicando per ingrandire) o rimuoverli prima di confermare.
  *
- * Prima di ogni scatto (compreso il primo) si passa da [PhotoAngleGuideScreen] (§13 punto 7): una
- * livella in tempo reale (accelerometro + giroscopio) che suggerisce l'inclinazione e la rotazione
- * intorno al piatto per il target di quello scatto (vedi [PHOTO_ANGLE_TARGETS]), prima di aprire
- * effettivamente la fotocamera di sistema.
+ * Durante ogni scatto (compreso il primo) una livella in tempo reale (accelerometro + giroscopio,
+ * [CameraAngleOverlayService]) suggerisce l'inclinazione e la rotazione intorno al piatto per il
+ * target di quello scatto (vedi [PHOTO_ANGLE_TARGETS]) disegnata come overlay flottante SOPRA la
+ * fotocamera di sistema — non più su una schermata separata prima di aprirla (vecchio
+ * `PhotoAngleGuideScreen`, rimosso): l'utente vede la guida mentre inquadra davvero. Per questo
+ * serve il permesso overlay ([OverlayPermissionHelper]), oltre a quello fotocamera.
  */
 @Composable
 fun CameraCaptureScreen(
@@ -111,7 +116,19 @@ fun CameraCaptureScreen(
     var pendingCapturePath by rememberSaveable { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
+    fun stopAngleOverlay() {
+        context.stopService(Intent(context, CameraAngleOverlayService::class.java))
+    }
+
+    // Rimozione di sicurezza se il Composable viene distrutto in modo inatteso: l'overlay non deve
+    // restare "appiccicato" sopra altre app se l'utente esce con back mentre la fotocamera di
+    // sistema è in primo piano (vedi anche il commento sul service in CameraAngleOverlayService).
+    DisposableEffect(Unit) {
+        onDispose { stopAngleOverlay() }
+    }
+
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        stopAngleOverlay()
         val file = pendingCapturePath?.let(::File)
         pendingCapturePath = null
         if (success && file != null) {
@@ -144,64 +161,82 @@ fun CameraCaptureScreen(
         takePictureLauncher.launch(uri)
     }
 
+    // Indice (nella sessione) dello scatto che si sta per fare, per scegliere il target giusto in
+    // PHOTO_ANGLE_TARGETS: va salvato perché sopravvive alla richiesta permesso camera/overlay, che
+    // apre un'altra Activity e può far ricreare questa in mezzo.
+    var pendingPhotoIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    fun launchSystemCameraForIndex(index: Int) {
+        val target = PHOTO_ANGLE_TARGETS[index.coerceIn(0, PHOTO_ANGLE_TARGETS.lastIndex)]
+        // L'overlay è solo un aiuto visivo: se il permesso non è (più) concesso si scatta comunque,
+        // senza bloccare la funzione principale della schermata.
+        if (OverlayPermissionHelper.hasOverlayPermission(context)) {
+            context.startService(CameraAngleOverlayService.buildStartIntent(context, target))
+        }
+        launchSystemCamera()
+    }
+
+    // SYSTEM_ALERT_WINDOW è un permesso "speciale": va concesso dalla schermata di sistema aperta
+    // con ACTION_MANAGE_OVERLAY_PERMISSION (vedi OverlayPermissionHelper), non c'è un risultato
+    // affidabile nell'Intent di ritorno — si rilancia comunque lo scatto, con o senza overlay a
+    // seconda di quanto l'utente ha effettivamente concesso.
+    val overlayPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val index = pendingPhotoIndex ?: uiState.capturedImages.size
+        pendingPhotoIndex = null
+        launchSystemCameraForIndex(index)
+    }
+
     // Il manifest dichiara android.permission.CAMERA (§2.2 Impostazioni > Permessi): con questo
     // permesso dichiarato, l'intent ACTION_IMAGE_CAPTURE verso la fotocamera di sistema richiede
     // che sia stato concesso a runtime, altrimenti alcune fotocamere di sistema (es. Samsung, stock
     // Android recenti) lo rifiutano con SecurityException e l'app crasha. Se l'utente non è mai
     // passato da Impostazioni > Permessi, va richiesto qui, al primo utilizzo effettivo.
-    //
-    // Il permesso concesso apre la schermata guida (livella), non direttamente la fotocamera: vedi
-    // `guideForIndex` sotto e `PhotoAngleGuideScreen` (§13 punto 7).
-    var guideForIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val index = pendingPhotoIndex ?: uiState.capturedImages.size
         if (granted) {
-            guideForIndex = uiState.capturedImages.size
-        } else if (uiState.capturedImages.isEmpty()) {
-            // Stesso comportamento di un annullamento del primo scatto: si esce dalla schermata.
-            onCancelled()
-        }
-        // Negato ma foto già raccolte (richiesta partita da "Aggiungi un'altra"): si resta sulla
-        // galleria esistente, nessuna foto persa.
-    }
-
-    fun ensureCameraPermissionThenShowGuide() {
-        if (isCameraPermissionGranted(context)) {
-            guideForIndex = uiState.capturedImages.size
+            if (OverlayPermissionHelper.hasOverlayPermission(context)) {
+                pendingPhotoIndex = null
+                launchSystemCameraForIndex(index)
+            } else {
+                pendingPhotoIndex = index
+                overlayPermissionLauncher.launch(OverlayPermissionHelper.buildRequestOverlayPermissionIntent(context))
+            }
         } else {
-            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            pendingPhotoIndex = null
+            // Stesso comportamento di un annullamento del primo scatto: si esce dalla schermata.
+            if (uiState.capturedImages.isEmpty()) onCancelled()
+            // Negato ma foto già raccolte (richiesta partita da "Aggiungi un'altra"): si resta sulla
+            // galleria esistente, nessuna foto persa.
         }
     }
 
-    // Al primo ingresso in questa schermata (nessuna foto ancora in mano) mostra subito la livella
-    // (previa richiesta del permesso se serve), senza richiedere un tocco aggiuntivo sull'utente.
+    fun ensureCameraPermissionThenLaunch() {
+        val index = uiState.capturedImages.size
+        when {
+            !isCameraPermissionGranted(context) -> {
+                pendingPhotoIndex = index
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+            !OverlayPermissionHelper.hasOverlayPermission(context) -> {
+                pendingPhotoIndex = index
+                overlayPermissionLauncher.launch(OverlayPermissionHelper.buildRequestOverlayPermissionIntent(context))
+            }
+            else -> launchSystemCameraForIndex(index)
+        }
+    }
+
+    // Al primo ingresso in questa schermata (nessuna foto ancora in mano) apre subito la fotocamera
+    // di sistema con la livella overlay attiva (previa richiesta dei permessi se servono), senza
+    // richiedere un tocco aggiuntivo sull'utente.
     LaunchedEffect(Unit) {
-        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenShowGuide()
+        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenLaunch()
     }
 
     var zoomIndex by remember { mutableStateOf<Int?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         val images = uiState.capturedImages
-        val currentGuideIndex = guideForIndex
-        if (currentGuideIndex != null) {
-            // Suggeritore d'angolazione in tempo reale (piano V2 §13 punto 7): livella mostrata
-            // prima di ogni scatto, non un overlay sul mirino — vedi `PhotoAngleGuideScreen` per il
-            // perché (la fotocamera di sistema non espone un surface di preview a quest'app).
-            PhotoAngleGuideScreen(
-                target = PHOTO_ANGLE_TARGETS[currentGuideIndex.coerceIn(0, PHOTO_ANGLE_TARGETS.lastIndex)],
-                photoNumber = currentGuideIndex + 1,
-                totalPhotos = MAX_PHOTOS,
-                onReady = {
-                    guideForIndex = null
-                    launchSystemCamera()
-                },
-                onCancel = {
-                    guideForIndex = null
-                    if (uiState.capturedImages.isEmpty()) onCancelled()
-                },
-            )
-        } else if (images.isNotEmpty()) {
+        if (images.isNotEmpty()) {
             val currentZoomIndex = zoomIndex
             if (currentZoomIndex != null && currentZoomIndex < images.size) {
                 PhotoZoomReview(
@@ -215,7 +250,7 @@ fun CameraCaptureScreen(
             } else {
                 PhotoGallery(
                     images = images.map { it.bytes },
-                    onAddAnother = ::ensureCameraPermissionThenShowGuide,
+                    onAddAnother = ::ensureCameraPermissionThenLaunch,
                     onSelect = { index -> zoomIndex = index },
                     onConfirm = { viewModel.confirmPhotos(selectedModels) },
                 )

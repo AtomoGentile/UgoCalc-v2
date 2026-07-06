@@ -1,4 +1,4 @@
-package com.ugocalc.app.ui.overlaytest
+package com.ugocalc.app.util
 
 import android.content.Context
 import android.content.Intent
@@ -6,13 +6,15 @@ import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 
-private const val TAG = "OverlayTest"
+private const val TAG = "OverlayPermission"
 
 /**
- * Test isolato: SYSTEM_ALERT_WINDOW è un permesso "speciale" (non runtime standard) su Android
- * 6+ — dichiararlo nel manifest non basta, va concesso dall'utente nella schermata di sistema
- * aperta con ACTION_MANAGE_OVERLAY_PERMISSION, e va verificato con Settings.canDrawOverlays()
- * perché non passa dal normale flusso ActivityResultContracts.RequestPermission().
+ * SYSTEM_ALERT_WINDOW è un permesso "speciale" (non runtime standard) su Android 6+ —
+ * dichiararlo nel manifest non basta, va concesso dall'utente nella schermata di sistema aperta
+ * con ACTION_MANAGE_OVERLAY_PERMISSION, e va verificato con Settings.canDrawOverlays() perché non
+ * passa dal normale flusso ActivityResultContracts.RequestPermission(). Condiviso dal test
+ * overlay ([com.ugocalc.app.ui.overlaytest.OverlayTestScreen]) e dalla livella overlay reale
+ * usata durante lo scatto ([com.ugocalc.app.ui.camera.CameraCaptureScreen]).
  */
 object OverlayPermissionHelper {
 

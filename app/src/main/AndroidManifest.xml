@@ -9,9 +9,10 @@
     <!-- Giroscopio per M0 (piano V2 §16): non required, i device senza sensore restano installabili
          e degradano in modo esplicito (nessun dato di movimento, vedi GyroscopeMotionTracker). -->
     <uses-feature android:name="android.hardware.sensor.gyroscope" android:required="false" />
-    <!-- Solo per il test isolato dell'overlay sopra la fotocamera di sistema (OverlayTestScreen):
-         va richiesto esplicitamente a runtime via ACTION_MANAGE_OVERLAY_PERMISSION, dichiararlo qui
-         non basta su Android 6+. -->
+    <!-- Overlay sopra la fotocamera di sistema: usato sia dal test isolato (OverlayTestScreen) sia
+         dalla livella reale mostrata durante lo scatto (CameraAngleOverlayService). Va richiesto
+         esplicitamente a runtime via ACTION_MANAGE_OVERLAY_PERMISSION, dichiararlo qui non basta su
+         Android 6+. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
@@ -41,6 +42,13 @@
              serve una foreground service notification per questo test. -->
         <service
             android:name=".ui.overlaytest.OverlayTestService"
+            android:exported="false" />
+
+        <!-- Livella reale mostrata come overlay sopra la fotocamera di sistema durante lo scatto
+             (sostituisce PhotoAngleGuideScreen, §13 punto 7): stesso motivo del service di test
+             sopra, nessuna foreground notification necessaria. -->
+        <service
+            android:name=".ui.camera.CameraAngleOverlayService"
             android:exported="false" />
 
         <provider
