@@ -11,6 +11,7 @@ object Routes {
     const val FINAL_RESULT = "final_result"
     const val HISTORY = "history"
     const val HISTORY_DETAIL = "history_detail/{historyId}"
+    const val BIAS_EVOLUTION = "bias_evolution"
 
     const val SETTINGS = "settings"
     const val SETTINGS_API = "settings_api"
@@ -24,6 +25,7 @@ object Routes {
     const val SETTINGS_CHANGELOG = "settings_changelog"
     const val SETTINGS_HISTORY_CHART = "settings_history_chart"
     const val SETTINGS_TABLE_EDITOR = "settings_table_editor/{tableId}"
+    const val SETTINGS_BACKUP = "settings_backup"
 
     /**
      * Gli id modello possono contenere "/" (es. "openai/gpt-4o" per GitHub Models): senza

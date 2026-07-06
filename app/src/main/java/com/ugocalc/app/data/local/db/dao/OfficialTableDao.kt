@@ -39,4 +39,8 @@ interface OfficialTableDao {
 
     @Query("UPDATE official_tables SET priorityOrder = :priority WHERE id = :id")
     suspend fun updatePriority(id: Long, priority: Int)
+
+    /** Sostituzione totale in un import di backup (§17): le voci normalizzate seguono a cascata (ON DELETE CASCADE). */
+    @Query("DELETE FROM official_tables")
+    suspend fun deleteAll()
 }

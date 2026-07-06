@@ -12,6 +12,7 @@ import androidx.navigation.navArgument
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
+import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.camera.CameraCaptureScreen
 import com.ugocalc.app.ui.finalresult.FinalResultScreen
 import com.ugocalc.app.ui.history.HistoryDetailScreen
@@ -22,6 +23,7 @@ import com.ugocalc.app.ui.modelselect.ModelSelectionScreen
 import com.ugocalc.app.ui.results.VisionResultsScreen
 import com.ugocalc.app.ui.settings.AccessibilitySettingsScreen
 import com.ugocalc.app.ui.settings.ApiSettingsScreen
+import com.ugocalc.app.ui.settings.BackupScreen
 import com.ugocalc.app.ui.settings.ChangelogScreen
 import com.ugocalc.app.ui.settings.ConfidenceSettingsScreen
 import com.ugocalc.app.ui.settings.FavoritesSettingsScreen
@@ -49,6 +51,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onNavigateToManualEntry = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
                 onNavigateToBarcodeScan = { navController.navigate(Routes.BARCODE_SCAN) },
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
+                onNavigateToBiasEvolution = { navController.navigate(Routes.BIAS_EVOLUTION) },
                 onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
                 onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                 onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
@@ -135,6 +138,8 @@ fun UgoCalcNavHost(navController: NavHostController) {
             HistoryDetailScreen(onBack = { navController.popBackStack() })
         }
 
+        composable(Routes.BIAS_EVOLUTION) { BiasEvolutionScreen(onBack = { navController.popBackStack() }) }
+
         composable(Routes.SETTINGS) {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
@@ -147,10 +152,12 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
                 onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
                 onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
+                onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
             )
         }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_HISTORY_CHART) { HistoryChartSettingsScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_API) { ApiSettingsScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_FAVORITES) { FavoritesSettingsScreen(onBack = { navController.popBackStack() }) }

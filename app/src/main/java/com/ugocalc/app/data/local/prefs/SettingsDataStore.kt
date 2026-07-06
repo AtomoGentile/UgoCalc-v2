@@ -45,6 +45,15 @@ data class UserSettings(
     val hasSeenDataDisclaimer: Boolean = false,
     /** Popup "Novità" (§ richiesta utente): 0 = mai avviata, altrimenti l'ultimo versionCode per cui l'utente ha già visto le novità. */
     val lastSeenVersionCode: Int = 0,
+    /**
+     * Consenso esplicito al trattamento delle correzioni manuali per il calcolo dei fattori di
+     * correzione del bias (piano V2 §8, richiesta utente): resta su tutto il dispositivo, non lascia
+     * mai il telefono, ma è comunque un trattamento aggiuntivo dei dati inseriti dall'utente
+     * (i pesi corretti a mano), quindi richiede un consenso separato dal disclaimer generale.
+     * Falso di default: finché non è attivo, [com.ugocalc.app.data.repository.BiasCorrectionRepository]
+     * non calcola né salva alcun fattore.
+     */
+    val biasDataConsentGiven: Boolean = false,
 )
 
 @Singleton
@@ -68,6 +77,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val FONT_COLOR = intPreferencesKey("font_color_argb")
         val HAS_SEEN_DATA_DISCLAIMER = booleanPreferencesKey("has_seen_data_disclaimer")
         val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
+        val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -89,6 +99,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             fontColorArgb = prefs[Keys.FONT_COLOR],
             hasSeenDataDisclaimer = prefs[Keys.HAS_SEEN_DATA_DISCLAIMER] ?: false,
             lastSeenVersionCode = prefs[Keys.LAST_SEEN_VERSION_CODE] ?: 0,
+            biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
         )
     }
 
@@ -133,4 +144,6 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.HAS_SEEN_DATA_DISCLAIMER] = seen }
     suspend fun setLastSeenVersionCode(versionCode: Int) =
         context.dataStore.edit { it[Keys.LAST_SEEN_VERSION_CODE] = versionCode }
+    suspend fun setBiasDataConsentGiven(given: Boolean) =
+        context.dataStore.edit { it[Keys.BIAS_DATA_CONSENT_GIVEN] = given }
 }

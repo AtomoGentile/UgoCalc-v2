@@ -60,6 +60,7 @@ fun HomeScreen(
     onNavigateToManualEntry: () -> Unit,
     onNavigateToBarcodeScan: () -> Unit,
     onNavigateToHistory: () -> Unit,
+    onNavigateToBiasEvolution: () -> Unit,
     onNavigateToSettings: () -> Unit,
     /** Preferito con peso già noto (§ richiesta utente): il totale è già stato calcolato, si va dritti al risultato. */
     onFavoriteReadyForResult: () -> Unit,
@@ -95,6 +96,12 @@ fun HomeScreen(
                     selected = true,
                     colors = itemColors,
                     onClick = { scope.launch { drawerState.close() } },
+                )
+                NavigationDrawerItem(
+                    label = { Text("BIAS ed evoluzione del comportamento") },
+                    selected = false,
+                    colors = itemColors,
+                    onClick = { scope.launch { drawerState.close() }; onNavigateToBiasEvolution() },
                 )
                 NavigationDrawerItem(
                     label = { Text("Cronologia") },

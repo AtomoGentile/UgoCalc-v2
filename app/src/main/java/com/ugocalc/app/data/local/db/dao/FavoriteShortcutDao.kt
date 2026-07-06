@@ -9,6 +9,10 @@ interface FavoriteShortcutDao {
     @Query("SELECT * FROM favorite_shortcuts ORDER BY sortOrder ASC")
     fun observeAll(): Flow<List<FavoriteShortcutEntity>>
 
+    /** Lettura una tantum (§ backup/esportazione): [observeAll] è un Flow, non adatto a un singolo export puntuale. */
+    @Query("SELECT * FROM favorite_shortcuts ORDER BY sortOrder ASC")
+    suspend fun getAllOnce(): List<FavoriteShortcutEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: FavoriteShortcutEntity): Long
 
@@ -17,4 +21,8 @@ interface FavoriteShortcutDao {
 
     @Delete
     suspend fun delete(entity: FavoriteShortcutEntity)
+
+    /** Sostituzione totale in un import di backup (§17). */
+    @Query("DELETE FROM favorite_shortcuts")
+    suspend fun deleteAll()
 }

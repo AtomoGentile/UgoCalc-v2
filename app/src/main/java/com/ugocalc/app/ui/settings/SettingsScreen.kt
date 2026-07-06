@@ -48,6 +48,7 @@ fun SettingsScreen(
     onOpenTables: () -> Unit,
     onOpenChangelog: () -> Unit,
     onOpenHistoryChart: () -> Unit,
+    onOpenBackup: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showClearHistoryDialog by remember { mutableStateOf(false) }
@@ -63,6 +64,7 @@ fun SettingsScreen(
             SettingsMenuItem("Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart)
             SettingsMenuItem("Cancella cronologia delle analisi", "Cancella tutto lo storico delle analisi", onClick = { showClearHistoryDialog = true })
             SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables)
+            SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup)
             SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog)
 
             Text(
