@@ -21,7 +21,7 @@ data class UgoCalcBackupArchive(
 ) {
     companion object {
         /** Versione corrente del formato di backup (§17), indipendente dallo schema del database Room. */
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }
 
@@ -65,6 +65,7 @@ data class BiasCorrectionDto(
     val sessionMode: String,
     val strategy: String,
     val aiModelId: String,
+    val foodCategory: String,
     val factor: Double,
     val sampleCount: Int,
     val updatedAtEpochMillis: Long,

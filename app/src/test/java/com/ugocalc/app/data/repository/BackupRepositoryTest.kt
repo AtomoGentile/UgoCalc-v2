@@ -84,12 +84,12 @@ private class FakeNormalizedFoodEntryDao : NormalizedFoodEntryDao {
 }
 
 private class FakeBiasCorrectionDao : BiasCorrectionDao {
-    val saved = mutableMapOf<Triple<String, String, String>, BiasCorrectionEntity>()
-    override suspend fun get(sessionMode: String, strategy: String, aiModelId: String): BiasCorrectionEntity? =
-        saved[Triple(sessionMode, strategy, aiModelId)]
+    val saved = mutableMapOf<List<String>, BiasCorrectionEntity>()
+    override suspend fun get(sessionMode: String, strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
+        saved[listOf(sessionMode, strategy, aiModelId, foodCategory)]
     override suspend fun getAll(): List<BiasCorrectionEntity> = saved.values.toList()
     override suspend fun upsert(entity: BiasCorrectionEntity) {
-        saved[Triple(entity.sessionMode, entity.strategy, entity.aiModelId)] = entity
+        saved[listOf(entity.sessionMode, entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
     }
     override suspend fun deleteAll() { saved.clear() }
 }
@@ -134,7 +134,7 @@ class BackupRepositoryTest {
         val historyId = historyDao.insert(AnalysisHistoryEntity(foodTitle = "Pasta al pomodoro", analyzedAtEpochMillis = 1000L, totalChoG = 80.0, totalGrassiG = 10.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
         val tableId = tableDao.insert(OfficialTableEntity(displayName = "CREA", fileType = OfficialFileType.PDF, storedFilePath = "/tmp/x.pdf", uploadedAtEpochMillis = 1L, priorityOrder = 0, rawExtractedText = "testo", normalizationStatus = NormalizationStatus.DONE))
         entryDao.insertAll(listOf(NormalizedFoodEntryEntity(tableId = tableId, nome = "riso", choPer100g = 28.0, grassiPer100g = 0.3, rowOrder = 0)))
-        biasDao.upsert(BiasCorrectionEntity("CASA", "DISTESA_SUL_PIATTO", "claude-opus-4.8", 1.2, 5, 1000L))
+        biasDao.upsert(BiasCorrectionEntity("CASA", "DISTESA_SUL_PIATTO", "claude-opus-4.8", "PASTA", 1.2, 5, 1000L))
         favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = historyId, label = "Pasta preferita", sortOrder = 0))
         favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = null, label = "Combo standard", sortOrder = 1, comboGrams = 100.0, comboChoPer100g = 20.0, comboGrassiPer100g = 1.0))
 

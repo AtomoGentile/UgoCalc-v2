@@ -7,6 +7,7 @@ import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.GroundTruthLevel
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
+import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -74,9 +75,9 @@ class GroundTruthEntryViewModel @Inject constructor(
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             val sessionMode = SessionMode.entries.firstOrNull { it.name == entry.record.sessionMode }
             if (sessionMode != null) {
-                val strategieCoinvolte = entry.stime.filter { it.nome in pesiG.keys }.map { it.strategia }.distinct()
-                for (strategia in strategieCoinvolte) {
-                    biasCorrectionRepository.recalculate(sessionMode, strategia, entry.record.aiModelId, consentGiven)
+                entry.stime.filter { it.nome in pesiG.keys }.forEach { stima ->
+                    val categoria = FoodCategoryRouter.categorize(stima.nome)
+                    biasCorrectionRepository.recalculate(sessionMode, stima.strategia, entry.record.aiModelId, categoria, consentGiven)
                 }
             }
 
