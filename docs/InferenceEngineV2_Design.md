@@ -362,4 +362,35 @@ Motivazione per farlo comunque (perché resta un'idea valida, solo non ancora co
 
 ---
 
+## 18. Changelog UI – Interfaccia per modalità Casa/Ristorante e colori personalizzati per modalità
+
+**Data: 6 luglio 2026 – Implementato in commit `47b9f0f`**
+
+Interfaccia visiva per la selezione e personalizzazione della modalità Casa/Ristorante (§8):
+
+**HomeScreen:**
+- Icona switchable nella topAppBar accanto al pulsante Cronologia: mostra icona casetta (🏠) in modalità Casa, icona ristorante (🍽) in modalità Ristorante
+- Toccando l'icona si alterna tra le due modalità (Casa ↔ Ristorante)
+- La modalità scelta resta attiva finché l'analisi non parte (rimane nello stato di sessione della HomeScreen, non persistente fino a "Analizza")
+- Pulsante "Analizza" semplificato (rimosso testo "(Casa)"/"(Ristorante)" dal pulsante stesso)
+
+**Impostazioni > Accessibilità:**
+- Aggiunta sezione "Colori per modalità casa" (struttura identica a quella preesistente di personalizzazione colori)
+- Aggiunta sezione equivalente "Colori per modalità ristorante" (visibile quando la modalità corrente è Ristorante)
+- Campi personalizzabili per modalità: Primario, Secondario, Terziario, Sfondo, Errore
+- La sezione visibile dipende dalla modalità selezionata via icona in HomeScreen (legge da `AnalysisSessionStore.session.sessionMode`)
+
+**Storage e persistenza:**
+- Aggiunto a `UserSettings` (SettingsDataStore.kt): `primaryColorRistoranteArgb`, `secondaryColorRistoranteArgb`, `tertiaryColorRistoranteArgb`, `backgroundColorRistoranteArgb`, `errorColorRistoranteArgb`
+- Ogni campo è memorizzato come ARGB intero nella preferenza DataStore (null = usa default del tema)
+- SettingsRepository e SettingsViewModel espongono metodi `setPrimaryColorRistorante()`, `setSecondaryColorRistorante()`, etc. per modificare i colori
+- SettingsViewModel legge la modalità corrente dal `AnalysisSessionStore` e la passa nello `SettingsScreenState`
+
+**Comportamento:**
+- Colori modalità Casa indipendenti da colori modalità Ristorante (nessun vincolo di sincronizzazione)
+- Se l'utente cambia la modalità in HomeScreen mentre è dentro Impostazioni > Accessibilità, la sezione di colori visualizzata si aggiorna immediatamente
+- Default: se nessun colore personalizzato è impostato, usa il default del tema corrente (chiaro/scuro)
+
+---
+
 *Fine del documento.*
