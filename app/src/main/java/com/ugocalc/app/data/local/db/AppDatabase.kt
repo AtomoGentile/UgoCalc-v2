@@ -31,7 +31,7 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         BiasCorrectionEntity::class,
         BenchmarkMealEntity::class,
     ],
-    version = 7,
+    version = 8,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

@@ -36,9 +36,9 @@ class V2AnalysisPipelineFactory @Inject constructor(
         arbitrate = arbitrationEngine::arbitrate,
         matchNutrition = nutritionMatchStepAdapter::match,
         recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
-        biasFactor = { sessionMode, strategy, aiModelId ->
+        biasFactor = { sessionMode, strategy, aiModelId, foodCategory ->
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
-            biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, consentGiven)
+            biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
         },
         resolveAmbiguity = { candidati ->
             // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni

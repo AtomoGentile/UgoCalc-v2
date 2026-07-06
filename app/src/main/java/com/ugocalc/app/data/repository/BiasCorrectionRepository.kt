@@ -3,10 +3,12 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
+import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator
 import com.ugocalc.app.domain.inference.m8.BiasCorrectionResult
 import com.ugocalc.app.domain.inference.m8.BiasObservation
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
+import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import kotlinx.serialization.decodeFromString
@@ -55,15 +57,15 @@ class BiasCorrectionRepository @Inject constructor(
         }
 
     /** Fattore corrente per il segmento, se esiste (§8: consumato da M3 nella catena di calcolo). Null se il consenso non è dato, dati insufficienti o bias instabile. */
-    suspend fun currentFactor(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, consentGiven: Boolean): Double? {
+    suspend fun currentFactor(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, foodCategory: FoodCategory, consentGiven: Boolean): Double? {
         if (!consentGiven) return null
-        return biasCorrectionDao.get(sessionMode.name, strategy.name, aiModelId)?.factor
+        return biasCorrectionDao.get(sessionMode.name, strategy.name, aiModelId, foodCategory.name)?.factor
     }
 
-    /** Ricalcola il fattore per (sessionMode, strategy, aiModelId) dalle correzioni accumulate in M8. Va chiamato a ogni nuova correzione o come job periodico (§8); no-op se il consenso non è dato. */
-    suspend fun recalculate(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, consentGiven: Boolean) {
+    /** Ricalcola il fattore per (sessionMode, strategy, aiModelId, foodCategory) dalle correzioni accumulate in M8. Va chiamato a ogni nuova correzione o come job periodico (§8); no-op se il consenso non è dato. */
+    suspend fun recalculate(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, foodCategory: FoodCategory, consentGiven: Boolean) {
         if (!consentGiven) return
-        val observations = observationsFor(sessionMode.name, strategy.name, aiModelId)
+        val observations = observationsFor(sessionMode.name, strategy.name, aiModelId, foodCategory)
 
         val result = BiasCorrectionCalculator.calculate(observations)
         if (result is BiasCorrectionResult.Applicabile) {
@@ -72,6 +74,7 @@ class BiasCorrectionRepository @Inject constructor(
                     sessionMode = sessionMode.name,
                     strategy = strategy.name,
                     aiModelId = aiModelId,
+                    foodCategory = foodCategory.name,
                     factor = result.fattore,
                     sampleCount = result.campione,
                     updatedAtEpochMillis = System.currentTimeMillis(),
@@ -82,24 +85,34 @@ class BiasCorrectionRepository @Inject constructor(
     }
 
     /**
-     * Ricalcola tutti i segmenti (modalità, strategia, modello) che hanno almeno un ground truth
-     * registrato (§8, §13 punto 3): pensato per un trigger periodico o all'apertura dell'app, invece
-     * di richiedere che il chiamante conosca in anticipo ogni combinazione possibile. No-op se il
-     * consenso non è dato — [recalculate] lo verifica comunque per ogni segmento.
+     * Ricalcola tutti i segmenti (modalità, strategia, modello, categoria alimentare) che hanno
+     * almeno un ground truth registrato (§8, §13 punto 3, §14): pensato per un trigger periodico o
+     * all'apertura dell'app. A differenza della versione precedente (solo sessionMode × strategy ×
+     * aiModelId), qui la combinazione (strategy, foodCategory) da ricalcolare è dedotta dalle
+     * osservazioni effettivamente presenti per ciascuna coppia (sessionMode, aiModelId), invece di
+     * provare tutto il prodotto cartesiano — molte combinazioni (es. strategia Contabile + categoria
+     * Pasta) non possono mai comparire nei dati. No-op se il consenso non è dato — [recalculate] lo
+     * verifica comunque per ogni segmento.
      */
     suspend fun recalculateAll(consentGiven: Boolean) {
         if (!consentGiven) return
         val segments = analysisDao.getSessionModeAiModelPairsWithGroundTruth()
         for (segment in segments) {
             val sessionMode = SessionMode.entries.firstOrNull { it.name == segment.sessionMode } ?: continue
-            for (strategy in EstimationStrategy.entries) {
-                recalculate(sessionMode, strategy, segment.aiModelId, consentGiven)
+            val records = analysisDao.getWithGroundTruth(sessionMode.name, segment.aiModelId)
+            val presentCombos = records.flatMap { record ->
+                json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+                    .map { estimate -> estimate.strategia to FoodCategoryRouter.categorize(estimate.nome) }
+            }.distinct()
+            for ((strategy, foodCategory) in presentCombos) {
+                recalculate(sessionMode, strategy, segment.aiModelId, foodCategory, consentGiven)
             }
         }
     }
 
     private suspend fun usageStatsFor(correction: BiasCorrectionEntity): BiasCorrectionUsageStats? {
-        val observations = observationsFor(correction.sessionMode, correction.strategy, correction.aiModelId)
+        val foodCategory = FoodCategory.entries.firstOrNull { it.name == correction.foodCategory } ?: return null
+        val observations = observationsFor(correction.sessionMode, correction.strategy, correction.aiModelId, foodCategory)
         if (observations.isEmpty()) return null
 
         val rawErrors = observations.map { it.pesoStimatoG - it.pesoVeroG }
@@ -128,12 +141,12 @@ class BiasCorrectionRepository @Inject constructor(
         )
     }
 
-    private suspend fun observationsFor(sessionMode: String, strategy: String, aiModelId: String): List<BiasObservation> {
+    private suspend fun observationsFor(sessionMode: String, strategy: String, aiModelId: String, foodCategory: FoodCategory): List<BiasObservation> {
         val records = analysisDao.getWithGroundTruth(sessionMode, aiModelId)
         return records.flatMap { record ->
             val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
             val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-            estimates.filter { it.strategia.name == strategy }.mapNotNull { estimate ->
+            estimates.filter { it.strategia.name == strategy && FoodCategoryRouter.categorize(it.nome) == foodCategory }.mapNotNull { estimate ->
                 groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
             }
         }
