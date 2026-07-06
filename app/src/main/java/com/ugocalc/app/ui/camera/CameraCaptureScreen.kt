@@ -81,6 +81,11 @@ private const val MAX_PHOTOS = 5
  * diverse), tutte inviate insieme all'AI per un'analisi più efficace: la galleria qui sotto
  * mostra le miniature degli scatti raccolti finora, con la possibilità di aggiungerne altri,
  * ispezionarli a schermo intero (pizzicando per ingrandire) o rimuoverli prima di confermare.
+ *
+ * Prima di ogni scatto (compreso il primo) si passa da [PhotoAngleGuideScreen] (§13 punto 7): una
+ * livella in tempo reale (accelerometro + giroscopio) che suggerisce l'inclinazione e la rotazione
+ * intorno al piatto per il target di quello scatto (vedi [PHOTO_ANGLE_TARGETS]), prima di aprire
+ * effettivamente la fotocamera di sistema.
  */
 @Composable
 fun CameraCaptureScreen(
@@ -144,9 +149,14 @@ fun CameraCaptureScreen(
     // che sia stato concesso a runtime, altrimenti alcune fotocamere di sistema (es. Samsung, stock
     // Android recenti) lo rifiutano con SecurityException e l'app crasha. Se l'utente non è mai
     // passato da Impostazioni > Permessi, va richiesto qui, al primo utilizzo effettivo.
+    //
+    // Il permesso concesso apre la schermata guida (livella), non direttamente la fotocamera: vedi
+    // `guideForIndex` sotto e `PhotoAngleGuideScreen` (§13 punto 7).
+    var guideForIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
-            launchSystemCamera()
+            guideForIndex = uiState.capturedImages.size
         } else if (uiState.capturedImages.isEmpty()) {
             // Stesso comportamento di un annullamento del primo scatto: si esce dalla schermata.
             onCancelled()
@@ -155,26 +165,43 @@ fun CameraCaptureScreen(
         // galleria esistente, nessuna foto persa.
     }
 
-    fun ensureCameraPermissionThenLaunch() {
+    fun ensureCameraPermissionThenShowGuide() {
         if (isCameraPermissionGranted(context)) {
-            launchSystemCamera()
+            guideForIndex = uiState.capturedImages.size
         } else {
             cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
         }
     }
 
-    // Al primo ingresso in questa schermata (nessuna foto ancora in mano) apre subito la fotocamera
-    // di sistema (previa richiesta del permesso se serve), senza richiedere un tocco aggiuntivo
-    // sull'utente.
+    // Al primo ingresso in questa schermata (nessuna foto ancora in mano) mostra subito la livella
+    // (previa richiesta del permesso se serve), senza richiedere un tocco aggiuntivo sull'utente.
     LaunchedEffect(Unit) {
-        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenLaunch()
+        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenShowGuide()
     }
 
     var zoomIndex by remember { mutableStateOf<Int?>(null) }
 
     Box(modifier = Modifier.fillMaxSize()) {
         val images = uiState.capturedImages
-        if (images.isNotEmpty()) {
+        val currentGuideIndex = guideForIndex
+        if (currentGuideIndex != null) {
+            // Suggeritore d'angolazione in tempo reale (piano V2 §13 punto 7): livella mostrata
+            // prima di ogni scatto, non un overlay sul mirino — vedi `PhotoAngleGuideScreen` per il
+            // perché (la fotocamera di sistema non espone un surface di preview a quest'app).
+            PhotoAngleGuideScreen(
+                target = PHOTO_ANGLE_TARGETS[currentGuideIndex.coerceIn(0, PHOTO_ANGLE_TARGETS.lastIndex)],
+                photoNumber = currentGuideIndex + 1,
+                totalPhotos = MAX_PHOTOS,
+                onReady = {
+                    guideForIndex = null
+                    launchSystemCamera()
+                },
+                onCancel = {
+                    guideForIndex = null
+                    if (uiState.capturedImages.isEmpty()) onCancelled()
+                },
+            )
+        } else if (images.isNotEmpty()) {
             val currentZoomIndex = zoomIndex
             if (currentZoomIndex != null && currentZoomIndex < images.size) {
                 PhotoZoomReview(
@@ -188,7 +215,7 @@ fun CameraCaptureScreen(
             } else {
                 PhotoGallery(
                     images = images.map { it.bytes },
-                    onAddAnother = ::ensureCameraPermissionThenLaunch,
+                    onAddAnother = ::ensureCameraPermissionThenShowGuide,
                     onSelect = { index -> zoomIndex = index },
                     onConfirm = { viewModel.confirmPhotos(selectedModels) },
                 )

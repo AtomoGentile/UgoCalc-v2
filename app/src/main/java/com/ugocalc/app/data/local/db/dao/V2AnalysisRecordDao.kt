@@ -24,4 +24,15 @@ interface V2AnalysisRecordDao {
     /** Righe con ground truth: la base dei fattori di correzione appresi per (modalità, strategia, modello) (§8). */
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL AND sessionMode = :sessionMode AND aiModelId = :aiModelId ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity>
+
+    /** Righe ancora senza ground truth: da mostrare all'utente per registrare un peso vero (§13 punto 3). */
+    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC")
+    suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity>
+
+    /** Coppie (modalità, modello) per cui esiste almeno un ground truth: base per il ricalcolo periodico di tutti i segmenti (§8, §13). */
+    @Query("SELECT DISTINCT sessionMode, aiModelId FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
+    suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair>
 }
+
+/** Proiezione minima per [V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth]. */
+data class SessionModeAiModelPair(val sessionMode: String, val aiModelId: String)

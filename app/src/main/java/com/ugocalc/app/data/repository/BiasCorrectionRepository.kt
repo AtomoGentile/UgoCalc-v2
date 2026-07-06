@@ -81,6 +81,23 @@ class BiasCorrectionRepository @Inject constructor(
         // Dati insufficienti o bias instabile (§8): nessun fattore salvato, M3 resta sulla stima grezza.
     }
 
+    /**
+     * Ricalcola tutti i segmenti (modalità, strategia, modello) che hanno almeno un ground truth
+     * registrato (§8, §13 punto 3): pensato per un trigger periodico o all'apertura dell'app, invece
+     * di richiedere che il chiamante conosca in anticipo ogni combinazione possibile. No-op se il
+     * consenso non è dato — [recalculate] lo verifica comunque per ogni segmento.
+     */
+    suspend fun recalculateAll(consentGiven: Boolean) {
+        if (!consentGiven) return
+        val segments = analysisDao.getSessionModeAiModelPairsWithGroundTruth()
+        for (segment in segments) {
+            val sessionMode = SessionMode.entries.firstOrNull { it.name == segment.sessionMode } ?: continue
+            for (strategy in EstimationStrategy.entries) {
+                recalculate(sessionMode, strategy, segment.aiModelId, consentGiven)
+            }
+        }
+    }
+
     private suspend fun usageStatsFor(correction: BiasCorrectionEntity): BiasCorrectionUsageStats? {
         val observations = observationsFor(correction.sessionMode, correction.strategy, correction.aiModelId)
         if (observations.isEmpty()) return null

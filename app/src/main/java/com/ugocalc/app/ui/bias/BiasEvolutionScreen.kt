@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -44,7 +45,11 @@ import java.util.Locale
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BiasEvolutionScreen(onBack: () -> Unit, viewModel: BiasEvolutionViewModel = hiltViewModel()) {
+fun BiasEvolutionScreen(
+    onBack: () -> Unit,
+    onOpenGroundTruthEntry: () -> Unit,
+    viewModel: BiasEvolutionViewModel = hiltViewModel(),
+) {
     val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(topBar = { TopAppBar(title = { Text("BIAS ed evoluzione del comportamento") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
@@ -90,6 +95,9 @@ fun BiasEvolutionScreen(onBack: () -> Unit, viewModel: BiasEvolutionViewModel = 
                             )
                         }
                         Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
+                    }
+                    Button(onClick = onOpenGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
+                        Text("Registra peso vero di un'analisi")
                     }
                 }
                 HorizontalDivider()

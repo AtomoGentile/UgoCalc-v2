@@ -14,6 +14,7 @@ import com.ugocalc.app.domain.inference.m4.ConsistencyVerifier
 import com.ugocalc.app.domain.inference.m5.ArbitrationOutcome
 import com.ugocalc.app.domain.inference.m7.NutritionCalculator
 import com.ugocalc.app.domain.inference.m7.NutritionReport
+import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FlaggedItem
 import com.ugocalc.app.domain.inference.model.RevisedFood
 import com.ugocalc.app.domain.inference.model.SceneGraph
@@ -62,6 +63,19 @@ typealias TelemetryStep = suspend (
     sessionMode: SessionMode,
 ) -> Long
 
+/**
+ * Firma del fattore di correzione da bias vista dalla pipeline (§5 M3, §8): dato il segmento esatto
+ * (modalità, strategia, modello), il fattore appreso da applicare al peso grezzo di M3, o null se non
+ * disponibile (consenso non dato, dati insufficienti o bias instabile). Tipizzata a parte, come le
+ * altre injection points, così la pipeline resta testabile senza Room. Il default non applica mai
+ * alcuna correzione.
+ */
+typealias BiasFactorStep = suspend (
+    sessionMode: SessionMode,
+    strategy: EstimationStrategy,
+    aiModelId: String,
+) -> Double?
+
 /** Una foto della sessione: metriche già calcolate per M0 e byte grezzi da inviare a M1 se accettata. */
 class SessionPhoto(val quality: PhotoQuality, val bytes: ByteArray)
 
@@ -85,6 +99,7 @@ class V2AnalysisPipeline(
     private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
     private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
     private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
+    private val biasFactor: BiasFactorStep = { _, _, _ -> null },
 ) {
 
     suspend fun run(
@@ -111,7 +126,7 @@ class V2AnalysisPipeline(
         }
 
         val scale = ScaleResolver.resolve(sceneGraph.ancore)
-        val stime = stimaTutti(sceneGraph, assegnazioni, scale)
+        val stime = stimaTutti(sceneGraph, assegnazioni, scale, sessionMode, model)
         val verifica = consistencyVerifier.verify(sceneGraph, stime, scale)
 
         if (!verifica.richiedeArbitrato) {
@@ -133,7 +148,7 @@ class V2AnalysisPipeline(
                             return PipelineOutcome.SchemaNonSupportato(routing.trovata, routing.attesa)
                         is SceneRoutingResult.Ok -> routing.assegnazioni
                     }
-                    val stimeRiviste = stimaTutti(scenaRivista, assegnazioniRiviste, scale)
+                    val stimeRiviste = stimaTutti(scenaRivista, assegnazioniRiviste, scale, sessionMode, model)
                     val verificaFinale = consistencyVerifier.verify(scenaRivista, stimeRiviste, scale)
                     finalizza(scenaRivista, stimeRiviste, verificaFinale, model, sessionMode)
                 }
@@ -161,15 +176,18 @@ class V2AnalysisPipeline(
         return outcome.copy(telemetryId = telemetryId)
     }
 
-    private fun stimaTutti(
+    private suspend fun stimaTutti(
         scene: SceneGraph,
         assegnazioni: List<StrategyAssignment>,
         scale: ScaleContext,
+        sessionMode: SessionMode,
+        model: AiModel,
     ): List<WeightEstimate> {
         val foodByName = scene.alimenti.associateBy { it.nome }
         return assegnazioni.map { assegnazione ->
             val food = foodByName.getValue(assegnazione.nome)
-            physicsEngine.estimate(food, assegnazione.strategia, scale)
+            val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id)
+            physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
         }
     }
 
