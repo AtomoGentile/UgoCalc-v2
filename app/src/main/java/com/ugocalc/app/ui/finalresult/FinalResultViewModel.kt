@@ -9,10 +9,12 @@ import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.domain.model.AiProviderType
 import com.ugocalc.app.domain.model.AnalysisTotals
+import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.OnlineFoodResearchResult
+import com.ugocalc.app.domain.model.RecognizedFood
 import com.ugocalc.app.ui.AnalysisSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -93,24 +95,65 @@ class FinalResultViewModel @Inject constructor(
     }
 
     /**
-     * L'utente corregge il nome che l'AI ha riconosciuto (es. l'AI dice "pane" ma è "pasta"):
-     * l'abbinamento precedente (se c'era) riguardava il nome sbagliato, quindi non ha più senso —
-     * la riga torna "senza corrispondenza" finché l'utente non la ricerca di nuovo (manualmente o
-     * online) col nome corretto.
+     * L'utente corregge il nome e/o il peso che l'AI ha riconosciuto (es. l'AI dice "pane" ma è
+     * "pasta", o "165g" era in realtà "220g"). Un'unica funzione invece di due chiamate separate:
+     * entrambe le modifiche vanno applicate allo stesso [original] e salvate con un solo
+     * `sessionStore.setTotals`, altrimenti una seconda chiamata che rilegge `_uiState.value.totals`
+     * subito dopo la prima rischierebbe di leggere lo stato precedente (lo StateFlow di
+     * [AnalysisSessionStore] si ripropaga a `_uiState` in modo asincrono) e sovrascrivere la prima
+     * modifica. Se il nome cambia, l'abbinamento precedente (se c'era) riguardava il nome sbagliato
+     * e non ha più senso: la riga torna "senza corrispondenza" finché l'utente non la ricerca di
+     * nuovo (manualmente o online) col nome corretto. Se cambia solo il peso, l'abbinamento resta
+     * quello già trovato — CHO e grassi si ricalcolano da soli perché dipendono da
+     * [com.ugocalc.app.domain.model.RecognizedFood.pesoStimatoG].
      */
-    fun editRecognizedFoodName(lineIndex: Int, newName: String) {
-        val trimmed = newName.trim()
-        if (trimmed.isBlank()) return
+    fun correctRecognizedFood(lineIndex: Int, newName: String, newGrams: Double?) {
         val totals = _uiState.value.totals ?: return
         if (lineIndex !in totals.lines.indices) return
         val original = totals.lines[lineIndex]
-        if (trimmed == original.recognizedFood.nome) return
-        val updatedLine = original.copy(
-            recognizedFood = original.recognizedFood.copy(nome = trimmed),
-            match = null,
-            tableEntry = null,
+
+        val trimmedName = newName.trim()
+        val nameChanged = trimmedName.isNotBlank() && trimmedName != original.recognizedFood.nome
+        val weightChanged = newGrams != null && newGrams > 0.0 && newGrams != original.recognizedFood.pesoStimatoG
+        if (!nameChanged && !weightChanged) return
+
+        val updatedRecognizedFood = original.recognizedFood.copy(
+            nome = if (nameChanged) trimmedName else original.recognizedFood.nome,
+            pesoStimatoG = if (weightChanged) newGrams!! else original.recognizedFood.pesoStimatoG,
         )
+        val updatedLine = if (nameChanged) {
+            // Il nome cambiato invalida l'abbinamento precedente, riguardava un alimento diverso.
+            original.copy(recognizedFood = updatedRecognizedFood, match = null, tableEntry = null)
+        } else {
+            original.copy(recognizedFood = updatedRecognizedFood)
+        }
         val newLines = totals.lines.toMutableList().apply { this[lineIndex] = updatedLine }
+        sessionStore.setTotals(AnalysisTotals(newLines))
+    }
+
+    /**
+     * Aggiunge un alimento scelto direttamente dall'utente tra quelli in tabella, saltando del
+     * tutto il riconoscimento AI — per un alimento che l'AI non ha visto nella foto, o quando
+     * l'utente preferisce indicarlo a mano. Stesso costrutto usato dall'inserimento manuale puro
+     * ([com.ugocalc.app.ui.manualentry.ManualFoodEntryViewModel]): l'abbinamento è per definizione
+     * certo, non c'è nulla da matchare.
+     */
+    fun addManualFood(entry: NormalizedFoodEntry, grams: Double) {
+        if (grams <= 0.0) return
+        val newLine = CalculatedFoodLine(
+            recognizedFood = RecognizedFood(nome = entry.nome, pesoStimatoG = grams, commento = "Inserito manualmente", confidenza = Confidence.ALTO),
+            match = FoodMatch(nomeRiconosciuto = entry.nome, voceTabellaAbbinata = entry.nome, nessunaCorrispondenza = false, confidenzaAbbinamento = Confidence.ALTO),
+            tableEntry = entry,
+        )
+        val newLines = (_uiState.value.totals?.lines ?: emptyList()) + newLine
+        sessionStore.setTotals(AnalysisTotals(newLines))
+    }
+
+    /** Rimuove una riga già presente (aggiunta manualmente o riconosciuta dall'AI): correzione dell'errore opposto, un alimento visto per sbaglio. */
+    fun removeLine(lineIndex: Int) {
+        val totals = _uiState.value.totals ?: return
+        if (lineIndex !in totals.lines.indices) return
+        val newLines = totals.lines.toMutableList().apply { removeAt(lineIndex) }
         sessionStore.setTotals(AnalysisTotals(newLines))
     }
 

@@ -60,3 +60,22 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         )
     }
 }
+
+/** §8: fattori di correzione appresi, uno per segmento esatto (modalità, strategia, modello) (vedi BiasCorrectionEntity). */
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `bias_corrections` (
+                `sessionMode` TEXT NOT NULL,
+                `strategy` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `factor` REAL NOT NULL,
+                `sampleCount` INTEGER NOT NULL,
+                `updatedAtEpochMillis` INTEGER NOT NULL,
+                PRIMARY KEY(`sessionMode`, `strategy`, `aiModelId`)
+            )
+            """.trimIndent()
+        )
+    }
+}

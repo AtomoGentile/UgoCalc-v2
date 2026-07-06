@@ -1,5 +1,6 @@
 package com.ugocalc.app.ui.camera
 
+import android.Manifest
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
@@ -39,6 +40,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -57,6 +59,7 @@ import androidx.exifinterface.media.ExifInterface
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.ui.components.LoadingOverlay
+import com.ugocalc.app.util.isCameraPermissionGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.ByteArrayInputStream
@@ -93,12 +96,19 @@ fun CameraCaptureScreen(
         if (uiState.analysisDone) onAnalysisReady()
     }
 
-    var pendingCaptureFile by remember { mutableStateOf<File?>(null) }
+    // rememberSaveable (non remember): scattare in orizzontale ruota fisicamente il dispositivo
+    // mentre la fotocamera di sistema è in primo piano, quindi questa Activity — in background —
+    // subisce un cambio di configurazione e viene ricreata quando l'utente torna indietro. Con un
+    // semplice `remember`, il riferimento al file in scrittura andava perso alla ricreazione: la
+    // callback qui sotto vedeva `file == null` e trattava una foto scattata con successo come un
+    // annullamento, perdendo lo scatto. Si salva solo il path (String, sempre pacchettizzabile),
+    // non il File stesso.
+    var pendingCapturePath by rememberSaveable { mutableStateOf<String?>(null) }
     val coroutineScope = rememberCoroutineScope()
 
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        val file = pendingCaptureFile
-        pendingCaptureFile = null
+        val file = pendingCapturePath?.let(::File)
+        pendingCapturePath = null
         if (success && file != null) {
             // Nessuna decodifica/ricompressione: i byte del JPEG scritto dalla fotocamera di
             // sistema restano intatti (anche verso le API AI) — la rotazione (se il tag EXIF la
@@ -121,14 +131,39 @@ fun CameraCaptureScreen(
         val photosDir = File(context.cacheDir, "photos").apply { mkdirs() }
         val file = File(photosDir, "capture_${System.currentTimeMillis()}.jpg")
         val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        pendingCaptureFile = file
+        pendingCapturePath = file.absolutePath
         takePictureLauncher.launch(uri)
     }
 
+    // Il manifest dichiara android.permission.CAMERA (§2.2 Impostazioni > Permessi): con questo
+    // permesso dichiarato, l'intent ACTION_IMAGE_CAPTURE verso la fotocamera di sistema richiede
+    // che sia stato concesso a runtime, altrimenti alcune fotocamere di sistema (es. Samsung, stock
+    // Android recenti) lo rifiutano con SecurityException e l'app crasha. Se l'utente non è mai
+    // passato da Impostazioni > Permessi, va richiesto qui, al primo utilizzo effettivo.
+    val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) {
+            launchSystemCamera()
+        } else if (uiState.capturedImages.isEmpty()) {
+            // Stesso comportamento di un annullamento del primo scatto: si esce dalla schermata.
+            onCancelled()
+        }
+        // Negato ma foto già raccolte (richiesta partita da "Aggiungi un'altra"): si resta sulla
+        // galleria esistente, nessuna foto persa.
+    }
+
+    fun ensureCameraPermissionThenLaunch() {
+        if (isCameraPermissionGranted(context)) {
+            launchSystemCamera()
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
     // Al primo ingresso in questa schermata (nessuna foto ancora in mano) apre subito la fotocamera
-    // di sistema, senza richiedere un tocco aggiuntivo sull'utente.
+    // di sistema (previa richiesta del permesso se serve), senza richiedere un tocco aggiuntivo
+    // sull'utente.
     LaunchedEffect(Unit) {
-        if (uiState.capturedImages.isEmpty()) launchSystemCamera()
+        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenLaunch()
     }
 
     var zoomIndex by remember { mutableStateOf<Int?>(null) }
@@ -149,7 +184,7 @@ fun CameraCaptureScreen(
             } else {
                 PhotoGallery(
                     images = images,
-                    onAddAnother = ::launchSystemCamera,
+                    onAddAnother = ::ensureCameraPermissionThenLaunch,
                     onSelect = { index -> zoomIndex = index },
                     onConfirm = { viewModel.confirmPhotos(selectedModels) },
                 )

@@ -4,12 +4,14 @@ import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
+import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
@@ -24,8 +26,9 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         FavoriteShortcutEntity::class,
         SearchFrequencyEntity::class,
         V2AnalysisRecordEntity::class,
+        BiasCorrectionEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -36,6 +39,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun favoriteShortcutDao(): FavoriteShortcutDao
     abstract fun searchFrequencyDao(): SearchFrequencyDao
     abstract fun v2AnalysisRecordDao(): V2AnalysisRecordDao
+    abstract fun biasCorrectionDao(): BiasCorrectionDao
 
     companion object {
         const val DATABASE_NAME = "ugocalc.db"

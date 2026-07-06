@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
@@ -42,8 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.OnlineFoodResearchResult
 import com.ugocalc.app.domain.model.OnlineResearchReliability
 import com.ugocalc.app.ui.components.BackIconButton
@@ -62,8 +66,12 @@ fun FinalResultScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var correctingLineIndex by remember { mutableStateOf<Int?>(null) }
-    var editingNameLineIndex by remember { mutableStateOf<Int?>(null) }
+    var editingLineIndex by remember { mutableStateOf<Int?>(null) }
     var editingNameText by remember { mutableStateOf("") }
+    var editingGramsText by remember { mutableStateOf("") }
+    var addingManualFood by remember { mutableStateOf(false) }
+    var pendingManualEntry by remember { mutableStateOf<NormalizedFoodEntry?>(null) }
+    var pendingManualGramsText by remember { mutableStateOf("") }
 
     LaunchedEffect(uiState.saved) {
         if (uiState.saved) onSaved()
@@ -117,7 +125,13 @@ fun FinalResultScreen(
                     }
                 }
 
-                Text("Dettaglio", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 16.dp, bottom = 8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 8.dp),
+                ) {
+                    Text("Dettaglio", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+                    TextButton(onClick = { addingManualFood = true }) { Text("+ Aggiungi alimento") }
+                }
                 LazyColumn(modifier = Modifier.weight(1f)) {
                     itemsIndexed(totals.lines) { index, line ->
                         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
@@ -129,11 +143,19 @@ fun FinalResultScreen(
                                 )
                                 IconButton(onClick = {
                                     editingNameText = line.recognizedFood.nome
-                                    editingNameLineIndex = index
+                                    editingGramsText = line.recognizedFood.pesoStimatoG.toInt().toString()
+                                    editingLineIndex = index
                                 }) {
                                     Icon(
                                         Icons.Filled.Edit,
-                                        contentDescription = "Correggi il nome dell'alimento",
+                                        contentDescription = "Correggi nome o peso dell'alimento",
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                                IconButton(onClick = { viewModel.removeLine(index) }) {
+                                    Icon(
+                                        Icons.Filled.Close,
+                                        contentDescription = "Rimuovi ${line.recognizedFood.nome}",
                                         modifier = Modifier.size(20.dp),
                                     )
                                 }
@@ -188,27 +210,82 @@ fun FinalResultScreen(
         }
     }
 
-    val editIndex = editingNameLineIndex
+    val editIndex = editingLineIndex
     if (editIndex != null) {
         AlertDialog(
-            onDismissRequest = { editingNameLineIndex = null },
-            title = { Text("Correggi il nome dell'alimento") },
+            onDismissRequest = { editingLineIndex = null },
+            title = { Text("Correggi l'alimento") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = editingNameText,
+                        onValueChange = { editingNameText = it },
+                        label = { Text("Nome") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    OutlinedTextField(
+                        value = editingGramsText,
+                        onValueChange = { editingGramsText = it },
+                        label = { Text("Grammi") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.correctRecognizedFood(editIndex, editingNameText, editingGramsText.toDoubleOrNull())
+                    editingLineIndex = null
+                }) { Text("Salva") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editingLineIndex = null }) { Text("Annulla") }
+            },
+        )
+    }
+
+    if (addingManualFood) {
+        ModalBottomSheet(onDismissRequest = { addingManualFood = false }) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "Aggiungi un alimento dalle tue tabelle, senza passare dal riconoscimento automatico",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 12.dp),
+                )
+                FoodSearchPicker(onSelect = { entry ->
+                    pendingManualEntry = entry
+                    pendingManualGramsText = ""
+                    addingManualFood = false
+                })
+            }
+        }
+    }
+
+    val manualEntry = pendingManualEntry
+    if (manualEntry != null) {
+        AlertDialog(
+            onDismissRequest = { pendingManualEntry = null },
+            title = { Text("Quanti grammi di ${manualEntry.nome}?") },
             text = {
                 OutlinedTextField(
-                    value = editingNameText,
-                    onValueChange = { editingNameText = it },
+                    value = pendingManualGramsText,
+                    onValueChange = { pendingManualGramsText = it },
+                    label = { Text("Grammi") },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier.fillMaxWidth(),
                 )
             },
             confirmButton = {
                 TextButton(onClick = {
-                    viewModel.editRecognizedFoodName(editIndex, editingNameText)
-                    editingNameLineIndex = null
-                }) { Text("Salva") }
+                    pendingManualGramsText.toDoubleOrNull()?.let { grams -> viewModel.addManualFood(manualEntry, grams) }
+                    pendingManualEntry = null
+                }) { Text("Aggiungi") }
             },
             dismissButton = {
-                TextButton(onClick = { editingNameLineIndex = null }) { Text("Annulla") }
+                TextButton(onClick = { pendingManualEntry = null }) { Text("Annulla") }
             },
         )
     }

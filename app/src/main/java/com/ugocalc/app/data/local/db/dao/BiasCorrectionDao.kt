@@ -1,0 +1,25 @@
+package com.ugocalc.app.data.local.db.dao
+
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
+
+/** M8/§8 – accesso ai fattori di correzione appresi, uno per ciascun segmento (modalità, strategia, modello). */
+@Dao
+interface BiasCorrectionDao {
+    @Query("SELECT * FROM bias_corrections WHERE sessionMode = :sessionMode AND strategy = :strategy AND aiModelId = :aiModelId")
+    suspend fun get(sessionMode: String, strategy: String, aiModelId: String): BiasCorrectionEntity?
+
+    /** Tutti i fattori appresi (§ backup/esportazione). */
+    @Query("SELECT * FROM bias_corrections")
+    suspend fun getAll(): List<BiasCorrectionEntity>
+
+    /** Sostituzione totale in un import di backup (§17). */
+    @Query("DELETE FROM bias_corrections")
+    suspend fun deleteAll()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(entity: BiasCorrectionEntity)
+}

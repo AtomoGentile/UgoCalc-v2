@@ -36,9 +36,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
-
-private fun isCameraGranted(context: Context) = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) ==
-    android.content.pm.PackageManager.PERMISSION_GRANTED
+import com.ugocalc.app.util.isCameraPermissionGranted
 
 private fun isNotificationGranted(context: Context) = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
     ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
@@ -58,14 +56,14 @@ fun PermissionsSettingsScreen(
     // I permessi possono cambiare fuori dal ciclo di vita di Compose (dialog di sistema o schermata
     // "Impostazioni app" raggiunta col pulsante sotto): senza rileggerli a ON_RESUME, lo stato mostrato
     // resta congelato a quello calcolato alla prima composizione anche se nel frattempo sono stati concessi.
-    var cameraGranted by remember { mutableStateOf(isCameraGranted(context)) }
+    var cameraGranted by remember { mutableStateOf(isCameraPermissionGranted(context)) }
     var notificationGranted by remember { mutableStateOf(isNotificationGranted(context)) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                cameraGranted = isCameraGranted(context)
+                cameraGranted = isCameraPermissionGranted(context)
                 notificationGranted = isNotificationGranted(context)
             }
         }
@@ -74,7 +72,7 @@ fun PermissionsSettingsScreen(
     }
 
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        cameraGranted = isCameraGranted(context)
+        cameraGranted = isCameraPermissionGranted(context)
     }
     val notificationPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
         notificationGranted = isNotificationGranted(context)
