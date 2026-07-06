@@ -4,6 +4,7 @@ import com.ugocalc.app.domain.inference.m0.PhotoAssessment
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.QualityGate
 import com.ugocalc.app.domain.inference.m1.PerceptionOutcome
+import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.m2.SceneRoutingResult
 import com.ugocalc.app.domain.inference.m2.StrategyAssignment
 import com.ugocalc.app.domain.inference.m2.StrategyRouter
@@ -17,6 +18,7 @@ import com.ugocalc.app.domain.inference.m7.NutritionReport
 import com.ugocalc.app.domain.inference.model.AmbiguityResolution
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FlaggedItem
+import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.RevisedFood
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
@@ -66,16 +68,19 @@ typealias TelemetryStep = suspend (
 ) -> Long
 
 /**
- * Firma del fattore di correzione da bias vista dalla pipeline (§5 M3, §8): dato il segmento esatto
- * (modalità, strategia, modello), il fattore appreso da applicare al peso grezzo di M3, o null se non
- * disponibile (consenso non dato, dati insufficienti o bias instabile). Tipizzata a parte, come le
- * altre injection points, così la pipeline resta testabile senza Room. Il default non applica mai
- * alcuna correzione.
+ * Firma del fattore di correzione da bias vista dalla pipeline (§5 M3, §8, §14): dato il segmento
+ * esatto (modalità, strategia, modello, categoria alimentare — vedi [FoodCategory]), il fattore
+ * appreso da applicare al peso grezzo di M3, o null se non disponibile (consenso non dato, dati
+ * insufficienti o bias instabile). La categoria è stata aggiunta perché la sola strategia mescolava
+ * alimenti troppo diversi (pasta e riso condividono `DISTESA_SUL_PIATTO`). Tipizzata a parte, come
+ * le altre injection points, così la pipeline resta testabile senza Room. Il default non applica
+ * mai alcuna correzione.
  */
 typealias BiasFactorStep = suspend (
     sessionMode: SessionMode,
     strategy: EstimationStrategy,
     aiModelId: String,
+    foodCategory: FoodCategory,
 ) -> Double?
 
 /**
@@ -111,7 +116,7 @@ class V2AnalysisPipeline(
     private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
     private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
     private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
-    private val biasFactor: BiasFactorStep = { _, _, _ -> null },
+    private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
     private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
 ) {
 
@@ -250,7 +255,8 @@ class V2AnalysisPipeline(
         val foodByName = scene.alimenti.associateBy { it.nome }
         return assegnazioni.map { assegnazione ->
             val food = foodByName.getValue(assegnazione.nome)
-            val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id)
+            val categoria = FoodCategoryRouter.categorize(food.nome)
+            val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id, categoria)
             physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
         }
     }
