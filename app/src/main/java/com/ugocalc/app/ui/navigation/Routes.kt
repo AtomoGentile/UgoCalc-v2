@@ -12,6 +12,7 @@ object Routes {
     const val HISTORY = "history"
     const val HISTORY_DETAIL = "history_detail/{historyId}"
     const val BIAS_EVOLUTION = "bias_evolution"
+    const val GROUND_TRUTH_ENTRY = "ground_truth_entry"
 
     const val SETTINGS = "settings"
     const val SETTINGS_API = "settings_api"

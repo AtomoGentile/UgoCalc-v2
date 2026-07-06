@@ -13,6 +13,7 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
+import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
 import com.ugocalc.app.ui.camera.CameraCaptureScreen
 import com.ugocalc.app.ui.finalresult.FinalResultScreen
 import com.ugocalc.app.ui.history.HistoryDetailScreen
@@ -138,7 +139,13 @@ fun UgoCalcNavHost(navController: NavHostController) {
             HistoryDetailScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Routes.BIAS_EVOLUTION) { BiasEvolutionScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.BIAS_EVOLUTION) {
+            BiasEvolutionScreen(
+                onBack = { navController.popBackStack() },
+                onOpenGroundTruthEntry = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
+            )
+        }
+        composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(

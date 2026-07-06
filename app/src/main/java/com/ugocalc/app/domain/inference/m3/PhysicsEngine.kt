@@ -24,10 +24,17 @@ import kotlin.math.roundToInt
  */
 class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
 
+    /**
+     * [biasFactor], se presente, è il fattore appreso dal segmento (modalità, strategia, modello) in
+     * M8 (§8): moltiplica il peso grezzo e resta dichiarato nella catena di calcolo, mai applicato in
+     * silenzio. Null quando non c'è ancora un fattore stabile per il segmento, o il consenso non è
+     * dato — in quel caso il peso resta quello grezzo, come prima di questo collegamento.
+     */
     fun estimate(
         food: PerceivedFood,
         strategy: EstimationStrategy,
         scale: ScaleContext,
+        biasFactor: Double? = null,
     ): WeightEstimate {
         val raw = when (strategy) {
             EstimationStrategy.CONTABILE -> countable(food)
@@ -38,7 +45,16 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
             EstimationStrategy.TRASCURABILE -> negligible(food)
         }
         val u = uncertainty(food, strategy, scale, raw)
-        val peso = raw.pesoG
+        val peso = if (biasFactor != null) raw.pesoG * biasFactor else raw.pesoG
+        val chain = if (biasFactor != null) {
+            raw.chain.copy(
+                valori = raw.chain.valori + ("fattore_correzione" to biasFactor),
+                fonti = raw.chain.fonti + CalculationSource("fattore_correzione", biasFactor, "bias appreso (§8)"),
+                sintesi = "${raw.chain.sintesi} — corretto ×${biasFactor} da bias appreso",
+            )
+        } else {
+            raw.chain
+        }
         val interval = ConfidenceInterval(
             minG = (peso * (1 - u)).coerceAtLeast(0.0),
             maxG = peso * (1 + u),
@@ -48,7 +64,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
             strategia = strategy,
             pesoG = peso,
             intervallo = interval,
-            catenaCalcolo = raw.chain,
+            catenaCalcolo = chain,
             confidenza = confidenceFor(u),
         )
     }

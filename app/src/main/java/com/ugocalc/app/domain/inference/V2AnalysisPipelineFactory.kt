@@ -1,9 +1,12 @@
 package com.ugocalc.app.domain.inference
 
+import com.ugocalc.app.data.repository.BiasCorrectionRepository
+import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.m1.UnifiedPerceptionEngine
 import com.ugocalc.app.domain.inference.m5.SelectiveArbitrationEngine
 import com.ugocalc.app.domain.inference.m6.NutritionMatchStepAdapter
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /**
@@ -18,11 +21,17 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val arbitrationEngine: SelectiveArbitrationEngine,
     private val nutritionMatchStepAdapter: NutritionMatchStepAdapter,
     private val telemetryRepository: V2TelemetryRepository,
+    private val biasCorrectionRepository: BiasCorrectionRepository,
+    private val settingsRepository: SettingsRepository,
 ) {
     fun create(): V2AnalysisPipeline = V2AnalysisPipeline(
         perceive = perceptionEngine::perceive,
         arbitrate = arbitrationEngine::arbitrate,
         matchNutrition = nutritionMatchStepAdapter::match,
         recordTelemetry = telemetryRepository::record,
+        biasFactor = { sessionMode, strategy, aiModelId ->
+            val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
+            biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, consentGiven)
+        },
     )
 }
