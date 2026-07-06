@@ -15,11 +15,30 @@ import kotlinx.serialization.Serializable
 data class VerificationReport(
     val controlli: List<ConstraintCheck>,
     @SerialName("flaggati") val flaggati: List<FlaggedItem> = emptyList(),
+    /**
+     * Ambiguità di identificazione rimaste irrisolte dopo un tentativo di M5 (§5 M4 punto 2, §13
+     * punto 2): per ciascun alimento con alternative ancora aperte, la pipeline sceglie
+     * automaticamente l'alternativa con il CHO/100g più alto — mai sottostimare i carboidrati su
+     * un'identificazione incerta — e lo dichiara qui come stima cautelativa da confermare in UI.
+     */
+    @SerialName("ambiguita_risolta") val ambiguitaRisolta: List<AmbiguityResolution> = emptyList(),
 ) {
     /** Vero se M5 (arbitrato selettivo) deve essere invocato su almeno un alimento. */
     val richiedeArbitrato: Boolean
         get() = flaggati.isNotEmpty()
 }
+
+/**
+ * Una scelta cautelativa fatta dalla pipeline su un'identificazione rimasta ambigua dopo M5
+ * (§13 punto 2): tra il nome originale e le sue alternative, quella con più CHO/100g, da mostrare
+ * in UI come stima da confermare.
+ */
+@Serializable
+data class AmbiguityResolution(
+    @SerialName("nome_originale") val nomeOriginale: String,
+    @SerialName("nome_scelto") val nomeScelto: String,
+    @SerialName("cho_per_100g") val choPer100g: Double,
+)
 
 /** Esito di un singolo vincolo verificato da M4. */
 @Serializable

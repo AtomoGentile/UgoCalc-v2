@@ -2,6 +2,7 @@ package com.ugocalc.app.domain.inference
 
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.m1.UnifiedPerceptionEngine
 import com.ugocalc.app.domain.inference.m5.SelectiveArbitrationEngine
@@ -23,6 +24,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val telemetryRepository: V2TelemetryRepository,
     private val biasCorrectionRepository: BiasCorrectionRepository,
     private val settingsRepository: SettingsRepository,
+    private val tableRepository: TableRepository,
 ) {
     fun create(): V2AnalysisPipeline = V2AnalysisPipeline(
         perceive = perceptionEngine::perceive,
@@ -32,6 +34,13 @@ class V2AnalysisPipelineFactory @Inject constructor(
         biasFactor = { sessionMode, strategy, aiModelId ->
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, consentGiven)
+        },
+        resolveAmbiguity = { candidati ->
+            // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni
+            // candidato prende il CHO/100g della prima voce trovata nelle tabelle dell'utente.
+            candidati.mapNotNull { nome ->
+                tableRepository.searchEntries(nome).firstOrNull()?.let { nome to it.entry.choPer100g }
+            }.toMap()
         },
     )
 }
