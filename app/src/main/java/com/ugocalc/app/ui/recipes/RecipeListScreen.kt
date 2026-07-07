@@ -11,8 +11,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 
-import com.ugocalc.app.ui.recipes.RecipeListViewModel
-
 
 /** Simple UI to display user‑defined recipes. */
 @Composable

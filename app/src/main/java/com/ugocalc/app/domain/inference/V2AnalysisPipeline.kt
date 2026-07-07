@@ -128,9 +128,8 @@ class V2AnalysisPipeline(
         private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
         private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
         private val getCalibrations: CalibrationsStep = { emptyList() },
-        private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
-        private val recipeRepository: com.ugocalc.app.data.repository.RecipeRepository? = null,
-    ) {
+    private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
+) {
 
     suspend fun run(
         photos: List<SessionPhoto>,
@@ -274,31 +273,7 @@ class V2AnalysisPipeline(
             val categoria = FoodCategoryRouter.categorize(food.nome)
             val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id, categoria)
             val baseEstimate = physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
-            if (assegnazione.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && recipeRepository != null) {
-                val recipe = recipeRepository.findByName(food.nome)
-                if (recipe != null && recipe.ingredients.isNotEmpty()) {
-                    for (ing in recipe.ingredients) {
-                        val proportion = ing.percentage / 100.0
-                        results.add(
-                            baseEstimate.copy(
-                                nome = ing.name,
-                                pesoG = baseEstimate.pesoG * proportion,
-                                intervallo = baseEstimate.intervallo.copy(
-                                    minG = baseEstimate.intervallo.minG * proportion,
-                                    maxG = baseEstimate.intervallo.maxG * proportion,
-                                ),
-                                catenaCalcolo = baseEstimate.catenaCalcolo.copy(
-                                    sintesi = "${ing.name}: ${"%.1f".format(baseEstimate.pesoG * proportion)} g — da ricetta ${recipe.name}"
-                                ),
-                            )
-                        )
-                    }
-                } else {
-                    results.add(baseEstimate)
-                }
-            } else {
-                results.add(baseEstimate)
-            }
+            results.add(baseEstimate)
         }
         return results
     }

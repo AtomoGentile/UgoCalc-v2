@@ -3,8 +3,8 @@ package com.ugocalc.app.domain.model
 enum class AiProviderType {
     OPENAI,
     OPENAI_API,
-
-    OPENAI, ANTHROPIC, GEMINI
+    ANTHROPIC,
+    GEMINI
 }
 
 /** Un modello selezionabile nella schermata "scelta modello" (§2.4 punto 1) e nelle Impostazioni > API. */

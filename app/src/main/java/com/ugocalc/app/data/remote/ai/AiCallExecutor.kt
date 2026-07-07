@@ -35,7 +35,7 @@ class AiCallExecutor @Inject constructor(
 ) {
 
     internal fun clientFor(provider: AiProviderType): AiTextCompletionClient = when (provider) {
-        AiProviderType.OPENAI -> openAiClient
+        AiProviderType.OPENAI, AiProviderType.OPENAI_API -> openAiClient
         AiProviderType.ANTHROPIC -> anthropicClient
         AiProviderType.GEMINI -> geminiClient
     }

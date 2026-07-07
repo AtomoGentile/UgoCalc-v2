@@ -13,8 +13,8 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
 import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
-import com.ugocalc.app.ui.bias.V2ResultScreen
-import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen
+// import com.ugocalc.app.ui.bias.V2ResultScreen // removed unimplemented screen
+// import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen // removed unimplemented screen
 import com.ugocalc.app.ui.bias.BenchmarkGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
@@ -160,26 +160,8 @@ fun UgoCalcNavHost(navController: NavHostController) {
         composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.V2_RESULT) { V2ResultScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.AMBIGUITY_RESOLUTION) { AmbiguityResolutionScreen(onBack = { navController.popBackStack() }) }
-
-        composable(Routes.SETTINGS) {
-            SettingsScreen(
-                onBack = { navController.popBackStack() },
-                onOpenApi = { navController.navigate(Routes.SETTINGS_API) },
-                onOpenFavorites = { navController.navigate(Routes.SETTINGS_FAVORITES) },
-                onOpenPermissions = { navController.navigate(Routes.SETTINGS_PERMISSIONS) },
-                onOpenAccessibility = { navController.navigate(Routes.SETTINGS_ACCESSIBILITY) },
-                onOpenPreferredModel = { navController.navigate(Routes.SETTINGS_PREFERRED_MODEL) },
-                onOpenConfidence = { navController.navigate(Routes.SETTINGS_CONFIDENCE) },
-                onOpenTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
-                onOpenScaleCalibrations = { navController.navigate(Routes.SETTINGS_SCALE_CALIBRATIONS) },
-                onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
-                onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
-                onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
-                onOpenRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
-            )
-        }
+        // composable(Routes.V2_RESULT) { /* V2ResultScreen removed */ }
+        // composable(Routes.AMBIGUITY_RESOLUTION) { /* AmbiguityResolutionScreen removed */ }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_SCALE_CALIBRATIONS) { ScaleCalibrationScreen(onBack = { navController.popBackStack() }) }
