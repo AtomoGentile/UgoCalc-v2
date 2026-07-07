@@ -47,4 +47,13 @@ class SettingsRepository @Inject constructor(
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)
     fun clearApiKey(provider: AiProviderType) = apiKeyStore.clearApiKey(provider)
     fun hasAnyApiKeyConfigured(): Boolean = apiKeyStore.hasAnyApiKey()
+
+    /** Resetta tutte le impostazioni ai valori di default e rimuove le API key salvate. */
+    suspend fun resetAll() {
+        // Cancella tutti i dati delle impostazioni
+        dataStore.clearAll()
+        // Rimuove le API key per tutti i provider
+        AiProviderType.entries.forEach { apiKeyStore.clearApiKey(it) }
+    }
 }
+

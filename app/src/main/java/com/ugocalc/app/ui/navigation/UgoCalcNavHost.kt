@@ -62,6 +62,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
                 onNavigateToBiasEvolution = { navController.navigate(Routes.BIAS_EVOLUTION) },
                 onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
+                onNavigateToRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
                 onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                 onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
             )

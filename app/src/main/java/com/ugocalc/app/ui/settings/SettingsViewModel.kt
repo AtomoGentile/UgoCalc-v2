@@ -68,5 +68,7 @@ class SettingsViewModel @Inject constructor(
 
     fun clearHistory() = viewModelScope.launch { historyRepository.clearHistory() }
 
+    fun resetAllSettings() = viewModelScope.launch { settingsRepository.resetAll() }
+
     val availableModels = AiModelCatalog.ALL
 }

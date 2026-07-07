@@ -204,4 +204,6 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
     suspend fun setActiveSessionMode(mode: SessionMode) =
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
+
+    suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }
