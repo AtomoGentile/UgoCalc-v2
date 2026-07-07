@@ -3,6 +3,8 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.db.dao.RecipeDao
 import com.ugocalc.app.data.local.db.entity.RecipeEntity
 import com.ugocalc.app.data.local.db.entity.RecipeIngredientEntity
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -10,6 +12,15 @@ import javax.inject.Singleton
 class RecipeRepository @Inject constructor(
     private val recipeDao: RecipeDao
 ) {
+    val allRecipes: Flow<List<Recipe>> = recipeDao.getAll().map { list ->
+        list.map { toDomain(it) }
+    }
+
+    suspend fun getRecipeById(id: Long): Recipe? {
+        val entity = recipeDao.getById(id) ?: return null
+        val ingredients = recipeDao.getIngredientsForRecipe(entity.id).map { toDomain(it) }
+        return toDomain(entity, ingredients)
+    }
 
     suspend fun findByName(name: String): Recipe? {
         val entity = recipeDao.findByName(name) ?: return null

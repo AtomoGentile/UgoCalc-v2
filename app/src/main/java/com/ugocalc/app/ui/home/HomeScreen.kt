@@ -65,6 +65,7 @@ fun HomeScreen(
     onNavigateToHistory: () -> Unit,
     onNavigateToBiasEvolution: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToRecipes: () -> Unit,
     /** Preferito con peso già noto (§ richiesta utente): il totale è già stato calcolato, si va dritti al risultato. */
     onFavoriteReadyForResult: () -> Unit,
     /** Preferito legato a cronologia o senza peso fissato (§ richiesta utente "portano alla sezione quantità"). */
@@ -111,6 +112,12 @@ fun HomeScreen(
                     selected = false,
                     colors = itemColors,
                     onClick = { scope.launch { drawerState.close() }; onNavigateToHistory() },
+                )
+                NavigationDrawerItem(
+                    label = { Text("Ricette") },
+                    selected = false,
+                    colors = itemColors,
+                    onClick = { scope.launch { drawerState.close() }; onNavigateToRecipes() },
                 )
                 NavigationDrawerItem(
                     label = { Text("Impostazioni") },

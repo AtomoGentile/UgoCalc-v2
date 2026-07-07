@@ -9,6 +9,5 @@ import javax.inject.Inject
 class RecipeListViewModel @Inject constructor(
     private val repository: RecipeRepository
 ) : ViewModel() {
-    // Basic implementation for now
-    val recipes = kotlinx.coroutines.flow.flowOf(emptyList<com.ugocalc.app.data.repository.Recipe>())
+    val recipes = repository.allRecipes
 }
