@@ -1,6 +1,9 @@
 package com.ugocalc.app.domain.model
 
 enum class AiProviderType {
+    OPENAI,
+    OPENAI_API,
+
     OPENAI, ANTHROPIC, GEMINI
 }
 

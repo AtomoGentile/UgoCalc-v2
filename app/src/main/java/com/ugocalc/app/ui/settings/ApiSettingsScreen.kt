@@ -34,10 +34,16 @@ fun ApiSettingsScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("API") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState())) {
             ApiKeyField(
-                label = "OpenAI",
+                label = "OpenAI – Modelli (GitHub)",
                 provider = AiProviderType.OPENAI,
                 viewModel = viewModel,
-                hint = "Via GitHub Models: incolla un token GitHub (permesso \"models: read\"), non una key OpenAI.",
+                hint = "Token GitHub per i modelli OpenAI tramite GitHub Models (permesso \"models: read\").",
+            )
+            ApiKeyField(
+                label = "OpenAI – API",
+                provider = AiProviderType.OPENAI_API,
+                viewModel = viewModel,
+                hint = "Chiave API OpenAI per l'uso diretto del servizio (es. gpt‑4o).",
             )
             ApiKeyField("Anthropic Claude", AiProviderType.ANTHROPIC, viewModel)
             ApiKeyField("Google Gemini", AiProviderType.GEMINI, viewModel)

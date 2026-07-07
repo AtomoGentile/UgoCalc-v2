@@ -1,6 +1,7 @@
 package com.ugocalc.app.domain.inference.m1
 
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
+import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 
@@ -23,6 +24,7 @@ object PerceptionPrompt {
     fun build(
         sessionMode: SessionMode,
         angleDescriptions: List<String?> = emptyList(),
+        cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
     ): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
@@ -45,7 +47,7 @@ object PerceptionPrompt {
         successive (vista da un lato diverso del piatto) prima di dichiararlo non misurabile.
         Considerale insieme come un'unica scena da analizzare: non trattarle come pasti distinti né
         duplicare gli alimenti già contati.
-        ${angleReadingsBlock(angleDescriptions)}
+        ${angleReadingsBlock(angleDescriptions, cameraMetadatas)}
         ${calibrationsBlock(calibrations)}
 
         Il pasto è stato dichiarato dall'utente come "${modeLabel(sessionMode)}" (${modeDescription(sessionMode)}).
@@ -137,15 +139,27 @@ object PerceptionPrompt {
     /**
      * Angolazione REALMENTE misurata dai sensori per ciascuna foto (§13 punto 7), se disponibile:
      * non solo il protocollo generico dichiarato sopra, ma il valore letto durante quello scatto
-     * specifico. Ometti l'intero blocco se nessuna foto ha una misura (permesso overlay non
-     * concesso, o sensori assenti) invece di elencare N righe vuote inutili.
+     * specifico. Include anche i metadati hardware della camera (focale 35mm eq, sensore) per
+     * aiutare l'IA a interpretare le proporzioni e le distanze.
      */
-    private fun angleReadingsBlock(angleDescriptions: List<String?>): String {
-        if (angleDescriptions.none { it != null }) return ""
-        val righe = angleDescriptions.mapIndexed { index, descrizione ->
-            "Foto ${index + 1}: ${descrizione ?: "angolazione non misurata"}"
+    private fun angleReadingsBlock(
+        angleDescriptions: List<String?>,
+        cameraMetadatas: List<CameraMetadata?>,
+    ): String {
+        if (angleDescriptions.none { it != null } && cameraMetadatas.none { it != null }) return ""
+        val righe = angleDescriptions.indices.map { index ->
+            val angle = angleDescriptions.getOrNull(index) ?: "angolazione non misurata"
+            val meta = cameraMetadatas.getOrNull(index)
+            val hardware = if (meta != null) {
+                val focal = meta.focalLength35mmEq?.let { "${it.toInt()}mm eq." } ?: "focale non nota"
+                val sensor = if (meta.sensorWidthMm != null && meta.sensorHeightMm != null)
+                    " (sensore ${"%.1f".format(meta.sensorWidthMm)}x${"%.1f".format(meta.sensorHeightMm)}mm)"
+                else ""
+                " [Hardware: $focal$sensor]"
+            } else ""
+            "Foto ${index + 1}: $angle$hardware"
         }
-        return "\nAngolazione misurata per ciascuna foto, nello stesso ordine in cui te le fornisco:\n" +
+        return "\nAngolazione e metadati hardware misurati per ciascuna foto:\n" +
             righe.joinToString("\n")
     }
 

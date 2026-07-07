@@ -319,6 +319,32 @@ Questa sezione sostituisce l'idea di "sviluppi futuri fuori perimetro": qui sott
 9. **Changelog per-versione-modulo nelle release GitHub** (§15): il corpo della release oggi non dichiara quali versioni di motore/prompt/tabella densità sono cambiate.
 10. **Correzione manuale dell'abbinamento nutrizionale in M6**: oggi l'abbinamento alimento→voce di tabella è deciso solo dall'IA di matching (`MatchFoodsAcrossTablesUseCase`/`AiOrchestrator.runMatching`), che sceglie semanticamente tra le voci disponibili (es. "fusilli al ragù" → "pasta al ragù" se è la voce più vicina in tabella) ma può comunque abbinare in modo grossolano o segnare `nessuna_corrispondenza`. Non esiste alcuna via per l'utente di correggere manualmente l'abbinamento proposto, aggiungere un ingrediente non riconosciuto, o risolvere un alimento tramite scansione del codice a barre di una confezione. Richiederebbe: UI di correzione post-analisi, un percorso di ricerca manuale nelle tabelle esistenti, e integrazione di uno scanner barcode (es. verso OpenFoodFacts, già usato come ricerca online di riserva in M6) per popolare una voce nutrizionale da codice prodotto.
 
+**13.1. Promozione a flusso visibile**
+- Aggiornare `CameraCaptureViewModel` per scegliere pipeline V2 quando la preferenza `v2VisibleModeEnabled` è attiva, diversamente da `runV2ShadowAnalysisIfEnabled()`.
+- Implementare nuovi stati UI in `VisionResultsViewModel` (`V2Result`, `V1Fallback`) e layout XML per mostrare i risultati V2 includendo la `CalculationChain` e i flag di verifica.
+- Gestire fallback: se V2 fallisce (es. errore di rete o parsing) il ViewModel deve automaticamente lanciare la V1 e segnalare all'utente il motivo via snackbar.
+- Test unitari per i percorsi di successo e fallback, mockando `V2AnalysisPipelineFactory`.
+
+**13.2. UI per ambiguità risolta e benchmark**
+- In `VisionResultsScreen`, aggiungere sezione “Ambiguità risolta” che mostra `VerificationReport.ambiguitaRisolta` con nome originale, nome scelto e CHO/100g.
+- Integrare il nuovo `BenchmarkDashboardScreen` per visualizzare confronti V1 vs V2 una volta raccolto il benchmark (pulsante “Mostra confronto benchmark” visibile solo dopo almeno 30 pasti registrati).
+- Aggiornare `BiasEvolutionScreen` per includere collegamento rapido all'inserimento ground truth di benchmark.
+- Aggiornare `Routes` con nuove destinazioni: `V2ResultScreen`, `AmbiguityResolutionScreen`, `BenchmarkDashboardScreen`.
+- Aggiornare test UI con Compose test suite per verificare la presenza dei nuovi elementi.
+
+**13.3. Automazione della scelta del motore**
+- Implementare servizio `EngineSelectionWorker` (WorkManager) che, al trigger giornaliero, legge le statistiche dal `BenchmarkRepository` e imposta il flag `v2VisibleModeEnabled` basato su soglia MAE < 10g per V2.
+- Fornire opzione di override manuale nelle impostazioni avanzate.
+
+**13.4. Esportazione completa dei dati M8**
+- Ampliare `BackupRepository` per includere `v2_analysis_records` e `benchmark_meals` nell'export JSON, mantenendo la struttura versionata.
+- Aggiornare UI di backup con toggle “Includi dati V2 e benchmark”.
+
+**13.5. Documentazione e changelog**
+- Aggiornare `CHANGELOG.md` con entry “v2 visible mode, benchmark integration, ambiguity UI”.
+- Inserire note di migrazione per gli sviluppatori riguardo alle nuove classi e flag.
+
+
 Idee più a lungo termine, esplicitamente fuori da questo lavoro residuo perché hanno senso solo dopo che i punti 1–5 sono chiusi e M8 ha accumulato dati reali: dashboard di calibrazione automatica che segnala regressioni tra versioni, foto prima/dopo pasto per stimare il consumato dagli avanzi, mappa di profondità come ancora di scala aggiuntiva su dispositivi che la supportano, modelli multimodali on-device quando saranno affidabili (i contratti dati restano gli stessi, cambia solo il provider dietro M1). In tutti i casi, il cambio di prompt, strategia o modello in produzione resta una decisione dell'owner informata dal benchmark — nessun componente proposto qui deciderebbe da solo di cambiare l'architettura.
 
 ## 14. Decisioni chiave
@@ -437,6 +463,73 @@ I tre collegamenti mancanti individuati in §5 M8/§13 sono stati implementati:
 - `V2AnalysisPipelineFactory` inietta `BiasCorrectionRepository` e `SettingsRepository` e costruisce il passo leggendo il consenso e `currentFactor()` per il segmento esatto (modalità, strategia, modello) — mai un'aggregazione cross-modello, coerente con §8.
 
 **Limite che resta:** questo chiude il ciclo di apprendimento *dentro* il motore V2, ma la V2 gira ancora solo in modalità ombra (§13 punto 1): finché non è il flusso visibile, un fattore di correzione applicato in M3 non cambia il risultato che l'utente vede oggi in produzione, solo i dati raccolti per il benchmark futuro.
+
+---
+
+## 13. Lavoro residuo (continuazione)
+
+### 13.1 Integrazione UI definitiva per V2
+- **Obiettivo**: visualizzare i risultati di `V2AnalysisPipeline` nella schermata principale di analisi, sostituendo l'attuale output V1.
+- **Componenti da modificare**:
+  - `CameraCaptureViewModel`: aggiungere metodo `runV2AnalysisIfEnabled()` che, se la modalità V2 è attiva, chiama `V2AnalysisPipeline` e pubblica `V2Result` su `LiveData`.
+  - `VisionResultsViewModel`: introdurre nuovo `LiveData<V2Result>` e combinare con l'esistente `V1Result` tramite `MediatorLiveData` per gestire fallback automatico in caso di errore V2.
+  - UI (`VisionResultsScreen.kt`): aggiungere sezione espandibile "Dettagli V2" che mostra:
+    - peso stimato per alimento con `CalculationChain` completa;
+    - intervallo di confidenza;
+    - flag di ambiguità risolta (se presente);
+    - collegamento a `BiasEvolutionScreen` per visualizzare eventuali fattori di correzione.
+- **Gestione errori**: se V2 lancia eccezione o supera timeout, il `MediatorLiveData` ripristina il risultato V1 e mostra toast *"V2 non disponibile, recupero V1"*.
+- **Test**: aggiungere `V2UiIntegrationTest.kt` che verifica l'esposizione di `V2Result` e il fallback.
+
+### 13.2 Costruzione e popolamento del benchmark pesato
+- **Schema DB**: nuova tabella `benchmark_meals` con colonne `id`, `session_id`, `mode`, `photo_hash`, `true_weight_g`, `estimated_weight_g`, `timestamp`.
+- **API di raccolta**:
+  - `BenchmarkRepository.recordMeal(meal: BenchmarkMeal)`; chiamata da `V2AnalysisPipeline` quando `SettingsRepository.benchmarkEnabled` è true.
+  - UI `BenchmarkSetupScreen` per attivare/disattivare il benchmark e impostare target di numero pasti.
+- **Dashboard**:
+  - `BenchmarkDashboardScreen` con grafico a barre per MAE/RMSE per modalità Casa/Ristorante.
+  - Calcolo dei valori aggregati su base settimanale/mensile.
+- **Test**: `BenchmarkRepositoryTest.kt` e UI test per il flusso di inserimento manuale di peso vero.
+
+### 13.3 Persistenza delle calibrazioni stoviglie e riferimenti corporei
+- **Room entities**: `ScaleCalibrationEntity` (tipo, valore, timestamp, localeId).
+- **DAO**: `ScaleCalibrationDao` con operazioni CRUD.
+- **Repository**: `ScaleCalibrationRepository` che espone `getActiveCalibration(type)`.
+- **Integrazione**:
+  - `ScaleResolver` legge le calibrature attive prima di scegliere l'ancora di scala.
+  - UI `ScaleCalibrationScreen` (accessibile da `Settings > Calibrazioni`) con lista, aggiunta/modifica, import/export JSON.
+- **Test**: `ScaleCalibrationRepositoryTest.kt`.
+
+### 13.4 Esportazione/Importazione completa dei record M8
+- **Aggiornamento**: `BackupRepository` includerà `v2_analysis_records` nella serializzazione JSON.
+- **Formato**: aggiunta campo `v2_analysis_records: List<V2AnalysisRecordDto>` al `UgoCalcBackupArchive`.
+- **UI**: pulsante *"Esporta/Importa dati V2"* nella schermata Backup.
+- **Test**: `BackupExportImportV2Test.kt`.
+
+### 13.5 Jobs periodici per ricalcolo bias e benchmark
+- **WorkManager**: definire `BiasRecalcWorker` (daily) e `BenchmarkReportWorker` (weekly).
+- **Trigger**: configurabili in `Settings > Background tasks`.
+- **Fallback**: se WorkManager non disponibile, conservare `AppForegroundObserver` come meccanismo secondario.
+- **Test**: `BiasRecalcWorkerTest.kt`.
+
+### 13.6 Manuale di correzione post‑analisi per M6
+- **UI**: schermata `NutritionCorrectionScreen` mostrante tabella di abbinamento con possibilità di:
+  - editare `RecognizedFood.name`;
+  - selezionare voce tabella alternativa;
+  - aggiungere codice a barre manuale (integrare libreria ZXing).
+- **Flux**: dopo correzione, aggiornare `V2AnalysisRecord` con campo `nutritionCorrectionApplied = true`.
+- **Test**: `NutritionCorrectionIntegrationTest.kt`.
+
+### 13.7 Aggiornamento changelog automatizzato per motore V2
+- **Script**: `scripts/generate_changelog.sh` che analizza i commit che modificano file `domain/inference/**` o `data/PhysicalData.kt` e aggiorna `Changelog.ENTRIES`.
+- **CI**: aggiungere step GitHub Actions per verificare che il changelog contenga una voce per ogni versione di motore.
+- **Test**: `ChangelogGenerationTest.kt`.
+
+### 13.8 Preparazione rilascio produttivo
+- **Feature flag**: `FeatureFlags.V2_VISIBLE` controllato da remote config.
+- **Rollout**: 10 % utenti abilitati via Gradle flavor `betaV2`.
+- **Monitoraggio**: inviare metriche di utilizzo V2 a Firebase Analytics (`v2_enabled`, `v2_error_rate`).
+- **Fallback**: se tasso errori > 2 % per 24h, disattivare flag.
 
 ---
 

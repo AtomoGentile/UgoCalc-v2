@@ -49,6 +49,8 @@ fun SettingsScreen(
     onOpenChangelog: () -> Unit,
     onOpenHistoryChart: () -> Unit,
     onOpenBackup: () -> Unit,
+    onOpenScaleCalibrations: () -> Unit,
+    onOpenRecipes: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     var showClearHistoryDialog by remember { mutableStateOf(false) }
@@ -65,6 +67,8 @@ fun SettingsScreen(
             SettingsMenuItem("Cancella cronologia delle analisi", "Cancella tutto lo storico delle analisi", onClick = { showClearHistoryDialog = true })
             SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables)
             SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup)
+            SettingsMenuItem("Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations)
+            SettingsMenuItem("Ricette", "Gestisci le ricette per la strategia Composto", onOpenRecipes)
             SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog)
 
             Text(

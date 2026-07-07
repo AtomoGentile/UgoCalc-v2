@@ -147,3 +147,30 @@ val MIGRATION_8_9 = object : Migration(8, 9) {
         )
     }
 }
+
+/** §13 punto 6: ricette per la ripartizione di alimenti composti (vedi RecipeEntity). */
+val MIGRATION_9_10 = object : Migration(9, 10) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `recipes` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `name` TEXT NOT NULL,
+                `description` TEXT NOT NULL DEFAULT ''
+            )
+            """.trimIndent()
+        )
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `recipe_ingredients` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `recipeId` INTEGER NOT NULL,
+                `name` TEXT NOT NULL,
+                `percentage` REAL NOT NULL,
+                FOREIGN KEY(`recipeId`) REFERENCES `recipes`(`id`) ON DELETE CASCADE
+            )
+            """.trimIndent()
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_recipe_ingredients_recipeId ON recipe_ingredients(recipeId)")
+    }
+}

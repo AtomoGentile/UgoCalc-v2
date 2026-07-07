@@ -52,6 +52,7 @@ fun extractCameraMetadata(imageBytes: ByteArray): CameraMetadata {
         isoValue = exif.getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, -1).takeIf { it > 0 },
         exposureTimeSeconds = exif.getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, EXIF_ABSENT).takeIf { it > 0 },
         focalLengthMm = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, EXIF_ABSENT).takeIf { it > 0 },
+        focalLength35mmEq = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, EXIF_ABSENT).takeIf { it > 0 },
         aperture = exif.getAttributeDouble(ExifInterface.TAG_F_NUMBER, EXIF_ABSENT).takeIf { it > 0 },
     )
 }
