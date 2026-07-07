@@ -3,7 +3,7 @@ package com.ugocalc.app.workers
 import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import com.ugocalc.domain.inference.benchmark.BenchmarkRepository
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import kotlinx.coroutines.coroutineScope
 
 class BenchmarkReportWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
