@@ -189,6 +189,24 @@ fun UgoCalcNavHost(navController: NavHostController) {
         composable(Routes.SETTINGS_PREFERRED_MODEL) { PreferredModelSettingsScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_CONFIDENCE) { ConfidenceSettingsScreen(onBack = { navController.popBackStack() }) }
 
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onOpenApi = { navController.navigate(Routes.SETTINGS_API) },
+                onOpenFavorites = { navController.navigate(Routes.SETTINGS_FAVORITES) },
+                onOpenPermissions = { navController.navigate(Routes.SETTINGS_PERMISSIONS) },
+                onOpenAccessibility = { navController.navigate(Routes.SETTINGS_ACCESSIBILITY) },
+                onOpenPreferredModel = { navController.navigate(Routes.SETTINGS_PREFERRED_MODEL) },
+                onOpenConfidence = { navController.navigate(Routes.SETTINGS_CONFIDENCE) },
+                onOpenTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
+                onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
+                onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
+                onOpenScaleCalibrations = { navController.navigate(Routes.SETTINGS_SCALE_CALIBRATIONS) },
+                onOpenRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
+                onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
+            )
+        }
+
         composable(Routes.SETTINGS_TABLES_LIST) {
             OfficialTablesListScreen(
                 onBack = { navController.popBackStack() },
