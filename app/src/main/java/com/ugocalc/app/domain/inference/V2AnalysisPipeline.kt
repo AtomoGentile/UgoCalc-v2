@@ -1,6 +1,7 @@
 package com.ugocalc.app.domain.inference
 
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
+import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.m0.PhotoAssessment
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.QualityGate
@@ -39,6 +40,7 @@ typealias PerceptionStep = suspend (
     imageMimeType: String,
     sessionMode: SessionMode,
     angleDescriptions: List<String?>,
+    cameraMetadatas: List<CameraMetadata?>,
     calibrations: List<ScaleCalibrationEntity>,
 ) -> PerceptionOutcome
 
@@ -116,18 +118,19 @@ class SessionPhoto(val quality: PhotoQuality, val bytes: ByteArray)
  * supportato sono tutti casi che il chiamante deve poter distinguere e mostrare diversamente.
  */
 class V2AnalysisPipeline(
-    private val qualityGate: QualityGate = QualityGate(),
-    private val perceive: PerceptionStep,
-    private val strategyRouter: StrategyRouter = StrategyRouter(),
-    private val physicsEngine: PhysicsEngine = PhysicsEngine(),
-    private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
-    private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
-    private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
-    private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
-    private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
-    private val getCalibrations: CalibrationsStep = { emptyList() },
-    private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
-) {
+        private val qualityGate: QualityGate = QualityGate(),
+        private val perceive: PerceptionStep,
+        private val strategyRouter: StrategyRouter = StrategyRouter(),
+        private val physicsEngine: PhysicsEngine = PhysicsEngine(),
+        private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
+        private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
+        private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
+        private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
+        private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
+        private val getCalibrations: CalibrationsStep = { emptyList() },
+        private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
+        private val recipeRepository: com.ugocalc.app.data.repository.RecipeRepository? = null,
+    ) {
 
     suspend fun run(
         photos: List<SessionPhoto>,
@@ -144,9 +147,10 @@ class V2AnalysisPipeline(
         // Stesso ordine e stesso filtro di [immaginiValide] (costruite insieme da [fotoValide]):
         // l'indice N in questa lista descrive SEMPRE la foto N in [immaginiValide] (§13 punto 7).
         val angoliValidi = fotoValide.map { it.quality.angleDescription }
+        val metadataValidi = fotoValide.map { it.quality.cameraMetadata }
 
         val calibrations = getCalibrations()
-        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, calibrations)) {
+        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, metadataValidi, calibrations)) {
             is PerceptionOutcome.FallbackAV1 -> return PipelineOutcome.FallbackAV1(esito.motivo)
             is PerceptionOutcome.Riuscita -> esito.sceneGraph
         }
@@ -264,12 +268,39 @@ class V2AnalysisPipeline(
         model: AiModel,
     ): List<WeightEstimate> {
         val foodByName = scene.alimenti.associateBy { it.nome }
-        return assegnazioni.map { assegnazione ->
+        val results = mutableListOf<WeightEstimate>()
+        for (assegnazione in assegnazioni) {
             val food = foodByName.getValue(assegnazione.nome)
             val categoria = FoodCategoryRouter.categorize(food.nome)
             val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id, categoria)
-            physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
+            val baseEstimate = physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
+            if (assegnazione.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && recipeRepository != null) {
+                val recipe = recipeRepository.findByName(food.nome)
+                if (recipe != null && recipe.ingredients.isNotEmpty()) {
+                    for (ing in recipe.ingredients) {
+                        val proportion = ing.percentage / 100.0
+                        results.add(
+                            baseEstimate.copy(
+                                nome = ing.name,
+                                pesoG = baseEstimate.pesoG * proportion,
+                                intervallo = baseEstimate.intervallo.copy(
+                                    minG = baseEstimate.intervallo.minG * proportion,
+                                    maxG = baseEstimate.intervallo.maxG * proportion,
+                                ),
+                                catenaCalcolo = baseEstimate.catenaCalcolo.copy(
+                                    sintesi = "${ing.name}: ${"%.1f".format(baseEstimate.pesoG * proportion)} g — da ricetta ${recipe.name}"
+                                ),
+                            )
+                        )
+                    }
+                } else {
+                    results.add(baseEstimate)
+                }
+            } else {
+                results.add(baseEstimate)
+            }
         }
+        return results
     }
 
     /**

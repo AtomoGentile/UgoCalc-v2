@@ -95,7 +95,10 @@ data class PhotoQuality(
 data class CameraMetadata(
     val isoValue: Int? = null,
     val exposureTimeSeconds: Double? = null,
+    /** Lunghezza focale reale in mm. */
     val focalLengthMm: Double? = null,
+    /** Lunghezza focale equivalente nel formato 35mm (es. 23mm, 24mm, 70mm). */
+    val focalLength35mmEq: Double? = null,
     val aperture: Double? = null,
     /** Dimensione fisica del sensore in millimetri, utile a M3 per correzioni ottiche o stime di scala alternative (§16). */
     val sensorWidthMm: Double? = null,

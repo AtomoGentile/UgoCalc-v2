@@ -32,6 +32,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.data.repository.UpdateCheckResult
 import com.ugocalc.app.domain.model.Changelog
+import com.ugocalc.app.domain.model.ModuleVersions
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 
@@ -87,6 +88,9 @@ fun ChangelogScreen(onBack: () -> Unit, viewModel: ChangelogViewModel = hiltView
                     entry.highlights.forEach { highlight ->
                         Text("• $highlight", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
                     }
+                    entry.moduleVersions?.let { versions ->
+                        ModuleVersionsBlock(versions)
+                    }
                 }
                 HorizontalDivider()
             }
@@ -129,5 +133,18 @@ private fun UpdateResultSection(result: UpdateCheckResult?, onDownload: (String)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ModuleVersionsBlock(versions: ModuleVersions) {
+    Column(modifier = Modifier.padding(top = 8.dp)) {
+        Text("Versioni modulo", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+        versions.inferenceEngine?.let { Text("InferenceEngine: $it", style = MaterialTheme.typography.bodySmall) }
+        versions.perceptionPrompt?.let { Text("PerceptionPrompt: $it", style = MaterialTheme.typography.bodySmall) }
+        versions.physicalData?.let { Text("PhysicalData: $it", style = MaterialTheme.typography.bodySmall) }
+        versions.biasCalculator?.let { Text("BiasCalculator: $it", style = MaterialTheme.typography.bodySmall) }
+        versions.ambiguityResolver?.let { Text("AmbiguityResolver: $it", style = MaterialTheme.typography.bodySmall) }
+        versions.matchStep?.let { Text("MatchStep: $it", style = MaterialTheme.typography.bodySmall) }
     }
 }

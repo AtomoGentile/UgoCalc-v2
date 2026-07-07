@@ -9,6 +9,7 @@ import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.RecipeDao
 import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
@@ -18,6 +19,8 @@ import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
+import com.ugocalc.app.data.local.db.entity.RecipeEntity
+import com.ugocalc.app.data.local.db.entity.RecipeIngredientEntity
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.local.db.entity.SearchFrequencyEntity
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
@@ -33,8 +36,10 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         BiasCorrectionEntity::class,
         BenchmarkMealEntity::class,
         ScaleCalibrationEntity::class,
+        RecipeEntity::class,
+        RecipeIngredientEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)
@@ -48,6 +53,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun biasCorrectionDao(): BiasCorrectionDao
     abstract fun benchmarkMealDao(): BenchmarkMealDao
     abstract fun scaleCalibrationDao(): ScaleCalibrationDao
+    abstract fun recipeDao(): RecipeDao
 
     companion object {
         const val DATABASE_NAME = "ugocalc.db"

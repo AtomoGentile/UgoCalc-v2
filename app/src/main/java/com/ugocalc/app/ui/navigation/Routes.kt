@@ -15,6 +15,8 @@ object Routes {
     const val GROUND_TRUTH_ENTRY = "ground_truth_entry"
     const val BENCHMARK_GROUND_TRUTH_ENTRY = "benchmark_ground_truth_entry"
     const val BENCHMARK_DASHBOARD = "benchmark_dashboard"
+    const val V2_RESULT = "v2_result"
+    const val AMBIGUITY_RESOLUTION = "ambiguity_resolution"
 
     const val SETTINGS = "settings"
     const val SETTINGS_API = "settings_api"
@@ -27,6 +29,12 @@ object Routes {
     const val SETTINGS_TABLES_SEARCH = "settings_tables_search"
     const val SETTINGS_CHANGELOG = "settings_changelog"
     const val SETTINGS_HISTORY_CHART = "settings_history_chart"
+    const val SETTINGS_SCALE_CALIBRATIONS = "settings_scale_calibrations"
+    const val SETTINGS_RECIPES = "settings_recipes"
+    const val SETTINGS_RECIPE_DETAIL = "settings_recipe_detail/{recipeId}"
+    const val SETTINGS_RECIPE_EDIT = "settings_recipe_edit/{recipeId}"
+    fun recipeDetailRoute(recipeId: Long) = "settings_recipe_detail/$recipeId"
+    fun recipeEditRoute(recipeId: Long) = "settings_recipe_edit/$recipeId"
     const val SETTINGS_TABLE_EDITOR = "settings_table_editor/{tableId}"
     const val SETTINGS_BACKUP = "settings_backup"
 

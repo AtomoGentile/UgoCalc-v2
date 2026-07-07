@@ -3,6 +3,7 @@ package com.ugocalc.app.domain.inference.m1
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.remote.ai.AiCallExecutor
 import com.ugocalc.app.data.remote.ai.client.AiCallException
+import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
@@ -33,10 +34,11 @@ class UnifiedPerceptionEngine @Inject constructor(
         imageMimeType: String,
         sessionMode: SessionMode,
         angleDescriptions: List<String?> = emptyList(),
+        cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
     ): PerceptionOutcome {
         val imageParts = executor.encodeImages(images, imageMimeType)
-        val prompt = PerceptionPrompt.build(sessionMode, angleDescriptions, calibrations)
+        val prompt = PerceptionPrompt.build(sessionMode, angleDescriptions, cameraMetadatas, calibrations)
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, imageParts)
             PerceptionOutcome.Riuscita(sceneGraph)

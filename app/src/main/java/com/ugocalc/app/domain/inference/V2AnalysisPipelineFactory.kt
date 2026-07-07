@@ -27,6 +27,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val scaleCalibrationRepository: ScaleCalibrationRepository,
     private val settingsRepository: SettingsRepository,
     private val tableRepository: TableRepository,
+    private val recipeRepository: com.ugocalc.app.data.repository.RecipeRepository
 ) {
     /**
      * [sessionId] collega il record M8 salvato da questa esecuzione al pasto tracciato per il
@@ -50,5 +51,6 @@ class V2AnalysisPipelineFactory @Inject constructor(
                 tableRepository.searchEntries(nome).firstOrNull()?.let { nome to it.entry.choPer100g }
             }.toMap()
         },
+        recipeRepository = recipeRepository
     )
 }

@@ -13,6 +13,8 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
 import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
+import com.ugocalc.app.ui.bias.V2ResultScreen
+import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen
 import com.ugocalc.app.ui.bias.BenchmarkGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
@@ -28,7 +30,11 @@ import com.ugocalc.app.ui.settings.AccessibilitySettingsScreen
 import com.ugocalc.app.ui.settings.ApiSettingsScreen
 import com.ugocalc.app.ui.settings.BackupScreen
 import com.ugocalc.app.ui.settings.ChangelogScreen
+import com.ugocalc.app.ui.settings.ScaleCalibrationScreen
 import com.ugocalc.app.ui.settings.ConfidenceSettingsScreen
+import com.ugocalc.app.ui.recipes.RecipeListScreen
+import com.ugocalc.app.ui.recipes.RecipeDetailScreen
+import com.ugocalc.app.ui.recipes.RecipeEditScreen
 import com.ugocalc.app.ui.settings.FavoritesSettingsScreen
 import com.ugocalc.app.ui.settings.HistoryChartSettingsScreen
 import com.ugocalc.app.ui.settings.PermissionsSettingsScreen
@@ -154,6 +160,8 @@ fun UgoCalcNavHost(navController: NavHostController) {
         composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.V2_RESULT) { V2ResultScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.AMBIGUITY_RESOLUTION) { AmbiguityResolutionScreen(onBack = { navController.popBackStack() }) }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
@@ -165,13 +173,31 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenPreferredModel = { navController.navigate(Routes.SETTINGS_PREFERRED_MODEL) },
                 onOpenConfidence = { navController.navigate(Routes.SETTINGS_CONFIDENCE) },
                 onOpenTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
+                onOpenScaleCalibrations = { navController.navigate(Routes.SETTINGS_SCALE_CALIBRATIONS) },
                 onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },
                 onOpenHistoryChart = { navController.navigate(Routes.SETTINGS_HISTORY_CHART) },
                 onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
+                onOpenRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
             )
         }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_SCALE_CALIBRATIONS) { ScaleCalibrationScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_RECIPES) { RecipeListScreen(onRecipeSelected = { recipeId -> navController.navigate(Routes.recipeDetailRoute(recipeId)) }, onBack = { navController.popBackStack() }) }
+        composable(
+            route = Routes.SETTINGS_RECIPE_DETAIL,
+            arguments = listOf(navArgument("recipeId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("recipeId")?.toLongOrNull() ?: 0L
+            RecipeDetailScreen(recipeId = id, onEdit = { editId -> navController.navigate(Routes.recipeEditRoute(editId)) }, onBack = { navController.popBackStack() })
+        }
+        composable(
+            route = Routes.SETTINGS_RECIPE_EDIT,
+            arguments = listOf(navArgument("recipeId") { type = NavType.StringType })
+        ) { backStackEntry ->
+            val id = backStackEntry.arguments?.getString("recipeId")?.toLongOrNull() ?: 0L
+            RecipeEditScreen(recipeId = id, onSaved = { navController.popBackStack() }, onBack = { navController.popBackStack() })
+        }
         composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_HISTORY_CHART) { HistoryChartSettingsScreen(onBack = { navController.popBackStack() }) }
         composable(Routes.SETTINGS_API) { ApiSettingsScreen(onBack = { navController.popBackStack() }) }
