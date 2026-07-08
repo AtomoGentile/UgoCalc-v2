@@ -17,6 +17,10 @@ data class ScaleCalibrationEntity(
     val name: String,
     /** Dimensione reale in centimetri (diametro per piatti, lunghezza per dita/oggetti). */
     val valueCm: Double,
+    /** Larghezza reale in centimetri (opzionale, per riferimenti 2D/3D). */
+    val widthCm: Double? = null,
+    /** Altezza reale in centimetri (opzionale, per riferimenti 3D). */
+    val heightCm: Double? = null,
     /** Capacità in millilitri, usata solo per contenitori (bicchieri, tazze) nella strategia A CONTENITORE. */
     val capacityMl: Double? = null,
 )

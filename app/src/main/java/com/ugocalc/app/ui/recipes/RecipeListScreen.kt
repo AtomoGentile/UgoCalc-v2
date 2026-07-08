@@ -24,10 +24,11 @@ import com.ugocalc.app.ui.theme.UgoGrey
 @Composable
 fun RecipeListScreen(
     onRecipeSelected: (Long) -> Unit,
+    onAddRecipe: () -> Unit,
     onBack: () -> Unit,
     viewModel: RecipeListViewModel = hiltViewModel()
 ) {
-    val recipes by viewModel.recipes.collectAsState(initial = emptyList())
+    val recipes by viewModel.recipes.collectAsState()
 
     Scaffold(
         topBar = {
@@ -39,7 +40,7 @@ fun RecipeListScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { onRecipeSelected(0L) }, // 0L logic for new recipe
+                onClick = onAddRecipe,
                 containerColor = MaterialTheme.colorScheme.secondary,
                 contentColor = MaterialTheme.colorScheme.onSecondary
             ) {

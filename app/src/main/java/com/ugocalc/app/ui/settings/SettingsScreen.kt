@@ -17,17 +17,11 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.ui.components.BackIconButton
@@ -53,8 +47,6 @@ fun SettingsScreen(
     onOpenRecipes: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    var showClearHistoryDialog by remember { mutableStateOf(false) }
-
     Scaffold(topBar = { TopAppBar(title = { Text("Impostazioni") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
             SettingsMenuItem("API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi)
@@ -64,7 +56,6 @@ fun SettingsScreen(
             SettingsMenuItem("Modelli preferiti", "Se impostati, saltano del tutto la scelta modello ad ogni analisi", onOpenPreferredModel)
             SettingsMenuItem("Livello di confidenza", "Soglia per evidenziare le analisi più affidabili", onOpenConfidence)
             SettingsMenuItem("Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart)
-            SettingsMenuItem("Cancella cronologia delle analisi", "Cancella tutto lo storico delle analisi", onClick = { showClearHistoryDialog = true })
             SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables)
             SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup)
             SettingsMenuItem("Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations)
@@ -79,35 +70,8 @@ fun SettingsScreen(
             )
         }
     }
-
-    if (showClearHistoryDialog) {
-        AlertDialog(
-            onDismissRequest = { showClearHistoryDialog = false },
-            title = { Text("Cancellare la cronologia?") },
-            text = { Text("Questa azione elimina definitivamente tutte le analisi salvate.") },
-            confirmButton = {
-                TextButton(onClick = { viewModel.clearHistory(); showClearHistoryDialog = false }) { Text("Cancella") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showClearHistoryDialog = false }) { Text("Annulla") }
-            },
-        )
-    }
 }
 
-/**
- * Voce del menu Impostazioni (§ segnalazione utente "le Impostazioni sono ancora prive di
- * colore"): ogni riga è una Card tinta con il colore secondario del tema, così la lista intera
- * riflette i colori del tema invece di restare sui toni neutri di un ListItem semplice.
- *
- * Prima ruotava tra primario/secondario/terziario (§ segnalazione utente "rendi omogeneo il
- * colore, tutto col secondario"): ora usa sempre il secondario, lasciando il terziario per i
- * selettori (stellina preferiti, spillo, filtro attivo).
- *
- * Bug fix: usava secondaryContainer, un tono sfumato verso bianco/nero (vedi Theme.kt), non il
- * colore secondario scelto per davvero dall'utente — stesso problema già corretto sui pulsanti
- * "+"/"Salva" flottanti.
- */
 @Composable
 private fun SettingsMenuItem(title: String, subtitle: String, onClick: () -> Unit) {
     val container = MaterialTheme.colorScheme.secondary

@@ -60,6 +60,10 @@ private val DarkColors = darkColorScheme(
     secondary = Color(0xFF4CAF50),
     tertiary = Color(0xFFFFB74D),
     error = Color(0xFFEF9A9A),
+    background = Color(0xFF121212),
+    surface = Color(0xFF121212),
+    onBackground = Color.White,
+    onSurface = Color.White,
 )
 
 /** Colori del tema *senza* personalizzazione (§ "Predefinito" nel selettore colori), per seminare i cursori e per il reset. */

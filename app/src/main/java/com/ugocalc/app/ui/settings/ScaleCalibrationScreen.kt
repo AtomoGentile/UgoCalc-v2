@@ -21,7 +21,7 @@ import com.ugocalc.app.ui.theme.UgoGrey
 
 /**
  * Schermata per visualizzare, aggiungere e rimuovere calibrazioni di scala (§2.2).
- * Migliorata con controlli più chiari e layout adattivo.
+ * Supporta misure 3D (X, Y, Z) per una calibrazione precisa.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,6 +30,8 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
 
     var newName by remember { mutableStateOf("") }
     var newValue by remember { mutableStateOf("") }
+    var newWidth by remember { mutableStateOf("") }
+    var newHeight by remember { mutableStateOf("") }
     var newCapacity by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ScaleAnchorType.STOVIGLIA_CALIBRATA) }
 
@@ -70,7 +72,12 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                                         color = MaterialTheme.colorScheme.primary
                                     )
                                     Text(text = cal.name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                                    Text(text = "${cal.valueCm} cm", style = MaterialTheme.typography.bodyMedium)
+                                    
+                                    val dims = mutableListOf("X: ${cal.valueCm}")
+                                    cal.widthCm?.let { dims.add("Y: $it") }
+                                    cal.heightCm?.let { dims.add("Z: $it") }
+                                    Text(text = "Dimensioni: ${dims.joinToString(" x ")} cm", style = MaterialTheme.typography.bodyMedium)
+                                    
                                     cal.capacityMl?.let { capacity ->
                                         Text(text = "Capacità: $capacity ml", style = MaterialTheme.typography.bodySmall)
                                     }
@@ -91,11 +98,10 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp).padding(bottom = 8.dp)) {
-                    Text("Aggiungi nuova", style = MaterialTheme.typography.titleSmall)
+                    Text("Aggiungi nuova (X x Y x Z)", style = MaterialTheme.typography.titleSmall)
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
-                    // Selezione tipo con SegmentedButton per chiarezza e dimensioni uniformi
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         SegmentedButton(
                             selected = selectedType == ScaleAnchorType.STOVIGLIA_CALIBRATA,
@@ -125,28 +131,51 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                         OutlinedTextField(
                             value = newValue,
                             onValueChange = { newValue = it },
-                            label = { Text("Cm") },
+                            label = { Text("Lungo (X)") },
                             modifier = Modifier.weight(1f),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true
                         )
                         OutlinedTextField(
-                            value = newCapacity,
-                            onValueChange = { newCapacity = it },
-                            label = { Text("Ml (opz)") },
+                            value = newWidth,
+                            onValueChange = { newWidth = it },
+                            label = { Text("Largo (Y)") },
+                            placeholder = { Text("opz.") },
+                            modifier = Modifier.weight(1f),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            singleLine = true
+                        )
+                        OutlinedTextField(
+                            value = newHeight,
+                            onValueChange = { newHeight = it },
+                            label = { Text("Alto (Z)") },
+                            placeholder = { Text("opz.") },
                             modifier = Modifier.weight(1f),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                             singleLine = true
                         )
                     }
+                    
+                    OutlinedTextField(
+                        value = newCapacity,
+                        onValueChange = { newCapacity = it },
+                        label = { Text("Capacità in Millilitri (opzionale)") },
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        singleLine = true
+                    )
 
                     Button(
                         onClick = {
-                            val value = newValue.replace(",", ".").toDoubleOrNull() ?: return@Button
-                            val capacity = newCapacity.replace(",", ".").toDoubleOrNull()
-                            viewModel.addCalibration(selectedType, newName, value, capacity)
+                            val x = newValue.replace(",", ".").toDoubleOrNull() ?: return@Button
+                            val y = newWidth.replace(",", ".").toDoubleOrNull()
+                            val z = newHeight.replace(",", ".").toDoubleOrNull()
+                            val cap = newCapacity.replace(",", ".").toDoubleOrNull()
+                            viewModel.addCalibration(selectedType, newName, x, y, z, cap)
                             newName = ""
                             newValue = ""
+                            newWidth = ""
+                            newHeight = ""
                             newCapacity = ""
                         },
                         enabled = newName.isNotBlank() && newValue.isNotBlank(),

@@ -55,6 +55,13 @@ private fun buildAngleDescription(photo: CapturedPhoto): String? {
  */
 data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long, val measuredAngle: MeasuredAngle? = null)
 
+data class V2AnalysisResultInternal(
+    val outcome: ModelVisionOutcome.Success,
+    val totals: AnalysisTotals,
+    val stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
+    val ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>
+)
+
 data class CameraUiState(
     val capturedImages: List<CapturedPhoto> = emptyList(),
     val isAnalyzing: Boolean = false,
@@ -130,8 +137,7 @@ class CameraCaptureViewModel @Inject constructor(
         val v2VisibleEnabled = benchmarkRepository.evaluatePromotion().promoteV2 && model != null
         val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
         if (v2Result != null) {
-            val (outcome, totals) = v2Result
-            sessionStore.setV2Result(outcome, totals)
+            sessionStore.setV2Result(v2Result.outcome, v2Result.totals, v2Result.stime, v2Result.ambiguita)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
             return
@@ -158,7 +164,10 @@ class CameraCaptureViewModel @Inject constructor(
      * schema non supportato) o un'eccezione (rete, quota, parsing) fa tornare `null`: il chiamante
      * ricade sulla V1 nella stessa sessione, mai un errore mostrato senza alternativa.
      */
-    private suspend fun runV2Visible(capturedPhotos: List<CapturedPhoto>, model: AiModel): Pair<ModelVisionOutcome.Success, AnalysisTotals>? {
+    private suspend fun runV2Visible(
+        capturedPhotos: List<CapturedPhoto>, 
+        model: AiModel
+    ): V2AnalysisResultInternal? {
         val sessionId = sessionStore.session.value.sessionId
         val sessionMode = sessionStore.session.value.sessionMode
         return runCatching {
@@ -178,7 +187,12 @@ class CameraCaptureViewModel @Inject constructor(
             if (outcome.telemetryId >= 0) {
                 benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
             }
-            outcome.toModelVisionSuccess(model) to outcome.toAnalysisTotals()
+            V2AnalysisResultInternal(
+                outcome = outcome.toModelVisionSuccess(model),
+                totals = outcome.toAnalysisTotals(),
+                stime = outcome.stime,
+                ambiguita = outcome.verifica.ambiguitaRisolta
+            )
         }.onFailure { e ->
             Log.e("CameraCaptureVM", "V2 exception", e)
         }.getOrNull()

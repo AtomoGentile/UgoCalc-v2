@@ -20,6 +20,8 @@ data class VisionResultsUiState(
     val referenceModelId: String? = null,
     val isMatching: Boolean = false,
     val matchingDone: Boolean = false,
+    val usingV2Engine: Boolean = false,
+    val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
 ) {
     val allFailed: Boolean get() = outcomes.isNotEmpty() && outcomes.all { it is ModelVisionOutcome.Failure }
     val successfulOutcomes: List<ModelVisionOutcome.Success> get() = outcomes.filterIsInstance<ModelVisionOutcome.Success>()
@@ -41,6 +43,8 @@ class VisionResultsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 outcomes = session.visionOutcomes,
                 referenceModelId = session.referenceModelId,
+                usingV2Engine = session.usingV2Engine,
+                v2AmbiguitaRisolte = session.v2AmbiguitaRisolte,
             )
         }.launchIn(viewModelScope)
     }
