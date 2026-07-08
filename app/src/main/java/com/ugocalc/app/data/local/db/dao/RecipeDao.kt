@@ -20,6 +20,10 @@ interface RecipeDao {
     @Query("SELECT * FROM recipes WHERE name = :name LIMIT 1")
     suspend fun findByName(name: String): RecipeEntity?
 
+    // Fuzzy/contains match: case-insensitive substring search. Returns first match if any.
+    @Query("SELECT * FROM recipes WHERE LOWER(name) LIKE '%' || LOWER(:name) || '%' LIMIT 1")
+    suspend fun findByNameFuzzy(name: String): RecipeEntity?
+
     @Query("SELECT * FROM recipe_ingredients WHERE recipeId = :recipeId")
     suspend fun getIngredientsForRecipe(recipeId: Long): List<RecipeIngredientEntity>
 
