@@ -42,6 +42,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setBiasDataConsentGiven(given: Boolean) = dataStore.setBiasDataConsentGiven(given)
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) = dataStore.setV2ShadowModeEnabled(enabled)
     suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
+    suspend fun setV2VisibleModeEnabled(enabled: Boolean) = dataStore.setV2VisibleModeEnabled(enabled)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)

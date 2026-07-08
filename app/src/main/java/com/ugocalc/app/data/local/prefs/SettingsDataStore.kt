@@ -77,6 +77,12 @@ data class UserSettings(
      * singola analisi in corso (piano V2 §8).
      */
     val activeSessionMode: SessionMode = SessionMode.CASA,
+    /**
+     * Modalità visibile V2 promossa automaticamente dal BenchmarkReportWorker quando le metriche
+     * V2 superano quelle di V1 (piano V2 §13 punto 1). Una volta abilitata, V2 diventa il motore
+     * principale visibile all'utente.
+     */
+    val v2VisibleModeEnabled: Boolean = false,
 )
 
 @Singleton
@@ -108,6 +114,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
+        val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -137,6 +144,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
+            v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
         )
     }
 
@@ -204,6 +212,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
     suspend fun setActiveSessionMode(mode: SessionMode) =
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
+    suspend fun setV2VisibleModeEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.V2_VISIBLE_MODE_ENABLED] = enabled }
 
     suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }
