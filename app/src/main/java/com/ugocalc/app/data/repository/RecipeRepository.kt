@@ -28,6 +28,20 @@ class RecipeRepository @Inject constructor(
         return toDomain(entity, ingredients)
     }
 
+    /**
+     * Fuzzy lookup: try exact match first, then a case-insensitive substring search via DAO.
+     */
+    suspend fun findByNameFuzzy(name: String): Recipe? {
+        val exact = recipeDao.findByName(name)
+        if (exact != null) {
+            val ingredients = recipeDao.getIngredientsForRecipe(exact.id).map { toDomain(it) }
+            return toDomain(exact, ingredients)
+        }
+        val fuzzy = recipeDao.findByNameFuzzy(name) ?: return null
+        val ingredients = recipeDao.getIngredientsForRecipe(fuzzy.id).map { toDomain(it) }
+        return toDomain(fuzzy, ingredients)
+    }
+
     suspend fun addRecipe(recipe: Recipe): Long {
         val recipeId = recipeDao.insertRecipe(
             RecipeEntity(id = 0L, name = recipe.name, description = recipe.description)

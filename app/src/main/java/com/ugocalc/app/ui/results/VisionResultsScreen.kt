@@ -151,6 +151,13 @@ private fun ModelResultCard(
                             )
                         }
                         Text(food.commento, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        food.decomposition?.let { d ->
+                            Text(
+                                "Decomposed from '${d.recipeName}' — ${(d.percentageOfRecipe * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray,
+                            )
+                        }
                     }
                     if (outcome.result.fattoriIncertezza.isNotEmpty()) {
                         Text(

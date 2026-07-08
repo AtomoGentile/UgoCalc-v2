@@ -36,7 +36,7 @@ class NutritionMatchStepAdapter @Inject constructor(
             if (est.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && est.confidenza == RECIPE_MIN_CONFIDENCE) {
                 // Try to find a recipe matching the recognized name
                 val recipe = try {
-                    recipeRepository.findByName(est.nome.trim())
+                    recipeRepository.findByNameFuzzy(est.nome.trim())
                 } catch (e: Exception) {
                     null
                 }
@@ -53,6 +53,11 @@ class NutritionMatchStepAdapter @Inject constructor(
                                 pesoStimatoG = pesoIng,
                                 commento = "${est.catenaCalcolo.sintesi} — decomposizione ricetta '${recipe.name}' (${(pct * 100).toInt()}%)",
                                 confidenza = est.confidenza,
+                                decomposition = com.ugocalc.app.domain.model.DecompositionInfo(
+                                    recipeId = recipe.id,
+                                    recipeName = recipe.name,
+                                    percentageOfRecipe = pct,
+                                ),
                             )
                         )
                     }
