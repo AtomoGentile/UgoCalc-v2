@@ -10,6 +10,15 @@ data class RecognizedFood(
     @SerialName("peso_stimato_g") val pesoStimatoG: Double,
     val commento: String,
     val confidenza: Confidence,
+    val decomposition: DecompositionInfo? = null,
+)
+
+@Serializable
+data class DecompositionInfo(
+    val recipeId: Long? = null,
+    val recipeName: String,
+    /** percentage of the recipe assigned to this ingredient, 0.0..1.0 */
+    val percentageOfRecipe: Double,
 )
 
 /** Output completo del Passaggio 1 per un singolo modello AI (§3, schema JSON). */
