@@ -35,5 +35,26 @@ data class ChangelogEntry(
  * quanto le nuove funzionalità, etichettate esplicitamente come "Bug fix:" o "Corretto:".
  */
 object Changelog {
-    val ENTRIES = emptyList<ChangelogEntry>()
+    val ENTRIES = listOf(
+        ChangelogEntry(
+            version = "2.0.0",
+            highlights = listOf(
+                "Introduzione del motore di inferenza V2 (modalità shadow): V2 esegue una pipeline M0→M8 in background per raccogliere telemetria e valutare la qualità delle stime senza sostituire immediatamente V1 nella UI.",
+                "Valutazione automatica dei benchmark: aggiunto BenchmarkReportWorker che aggrega i pasti con ground truth e valuta la promozione di V2 basata sulla percentuale di pasti con errore CHO entro 10g.",
+                "Promozione automatica: se le metriche soddisfano i criteri, V2 viene promossa a 'visible mode' tramite la nuova impostazione persistente v2VisibleModeEnabled.",
+                "Integrazione Hilt + WorkManager: HiltWorkerFactory registrato in Application per permettere l'iniezione nei Worker; WorkManager fornito via un modulo DI.",
+                "Logica di promozione estratta in BenchmarkPromotionHandler per facilitare i test unitari e la manutenzione.",
+                "Scheduling: il worker di valutazione è schedulato come lavoro periodico (giornaliero) e usa enqueueUniquePeriodicWork per evitare duplicati.",
+                "Nuova impostazione persistente: v2VisibleModeEnabled (Settings) per abilitare V2 come motore visibile all'utente.",
+                "Test: aggiunti unit test per la logica di promozione (BenchmarkPromotionHandlerTest).",
+                "Bug fix e refactor minori: migliorata l'integrazione delle preferenze e isolata la logica di promotion per evitare effetti collaterali in fase di test."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.0.0",
+                perceptionPrompt = "1.0.0",
+                physicalData = "1.0.0",
+                biasCalculator = "1.0.0",
+            ),
+        ),
+    )
 }
