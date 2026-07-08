@@ -24,6 +24,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.core.net.toUri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -77,7 +78,7 @@ fun ChangelogScreen(onBack: () -> Unit, viewModel: ChangelogViewModel = hiltView
                     }
                     UpdateResultSection(
                         result = uiState.updateResult,
-                        onDownload = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) },
+                        onDownload = { url -> context.startActivity(Intent(Intent.ACTION_VIEW, url.toUri())) },
                     )
                 }
                 HorizontalDivider()

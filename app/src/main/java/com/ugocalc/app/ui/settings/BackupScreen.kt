@@ -3,22 +3,12 @@ package com.ugocalc.app.ui.settings
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,11 +32,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
- * Impostazioni > Backup e ripristino (piano V2 §17): un unico archivio JSON versionato con
- * cronologia, tabelle nutrizionali, fattori di correzione del bias e preferiti, scelto tramite
- * Storage Access Framework — nessun permesso di storage esteso necessario. L'import mostra sempre
- * un'anteprima di cosa verrebbe sostituito e richiede conferma esplicita prima di applicarlo
- * (§17 "sostituzione totale con conferma esplicita, mai merge silenzioso").
+ * Impostazioni > Backup e ripristino (piano V2 §17).
+ * Gestisce l'importazione/esportazione, la pulizia della cronologia e il ripristino di fabbrica.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,6 +43,8 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
     var statusMessage by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
     var pendingImport by remember { mutableStateOf<Pair<String, BackupSummary>?>(null) }
+    var showResetDialog by remember { mutableStateOf(false) }
+    var showClearHistoryDialog by remember { mutableStateOf(false) }
 
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
@@ -113,6 +103,49 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
                 Text("Importa backup")
             }
 
+            Spacer(modifier = Modifier.height(32.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Sezione pericolosa: Pulizia e Ripristino
+            Text(
+                "Gestione dati",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Cancella Cronologia
+            Text(
+                "Cancella tutto lo storico delle analisi salvate.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Button(
+                onClick = { showClearHistoryDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Cancella cronologia delle analisi")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Ripristino di fabbrica
+            Text(
+                "Rimuove tutte le personalizzazioni, i database caricati, la cronologia e le chiavi API.",
+                style = MaterialTheme.typography.bodySmall,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            Button(
+                onClick = { showResetDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Ripristina tutte le impostazioni")
+            }
+
             if (busy) {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 16.dp)) {
                     CircularProgressIndicator(modifier = Modifier.padding(end = 12.dp))
@@ -164,6 +197,50 @@ fun BackupScreen(onBack: () -> Unit, viewModel: BackupViewModel = hiltViewModel(
             dismissButton = {
                 TextButton(onClick = { pendingImport = null }) { Text("Annulla") }
             },
+        )
+    }
+
+    if (showClearHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearHistoryDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("Cancellare la cronologia?") },
+            text = { Text("Questa azione elimina definitivamente tutte le analisi salvate.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.clearHistory()
+                        showClearHistoryDialog = false
+                        statusMessage = "Cronologia cancellata."
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Cancella") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearHistoryDialog = false }) { Text("Annulla") }
+            },
+        )
+    }
+
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            icon = { Icon(Icons.Default.Warning, contentDescription = null) },
+            title = { Text("Sei sicuro?") },
+            text = { Text("Questa operazione cancellerà permanentemente ogni dato e configurazione dell'app. Non si può annullare.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.resetAllSettings()
+                        showResetDialog = false
+                        statusMessage = "Impostazioni ripristinate."
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) { Text("Ripristina") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) { Text("Annulla") }
+            }
         )
     }
 }

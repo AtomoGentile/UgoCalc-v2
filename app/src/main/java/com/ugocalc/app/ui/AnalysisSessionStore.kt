@@ -36,8 +36,12 @@ class AnalysisSessionStore @Inject constructor() {
         val visionOutcomes: List<ModelVisionOutcome> = emptyList(),
         val referenceModelId: String? = null,
         val totals: AnalysisTotals? = null,
-        /** Vero quando [visionOutcomes]/[totals] vengono dalla pipeline V2 promossa a flusso visibile (piano V2 §13 punto 1): in tal caso CHO/grassi sono già calcolati da M6/M7, "Ricevi i CHO" non deve rifare l'abbinamento. */
+        /** Vero quando [visionOutcomes]/[totals] vengono dalla pipeline V2 promossa a flusso visibile (piano V2 §13 punto 1). */
         val usingV2Engine: Boolean = false,
+        /** Pesi finali calcolati da M3 (V2), inclusa la catena di calcolo completa per la trasparenza (§13 punto 1). */
+        val v2Stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate> = emptyList(),
+        /** Risoluzioni di ambiguità effettuate da M4 (§13 punto 2). */
+        val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
         /** Alimento trovato dallo scanner codici a barre (§ richiesta utente), in attesa che ManualFoodEntryScreen lo raccolga. */
         val pendingManualEntry: NormalizedFoodEntry? = null,
         /** Righe già quantificate, in attesa che ManualFoodEntryScreen le carichi direttamente nel passo Quantità (§ richiesta utente: preferiti che riaprono la modifica quantità). */
@@ -69,12 +73,19 @@ class AnalysisSessionStore @Inject constructor() {
      * segnala a [com.ugocalc.app.ui.results.VisionResultsViewModel.receiveCho] di non rifare il
      * matching.
      */
-    fun setV2Result(outcome: ModelVisionOutcome.Success, totals: AnalysisTotals) = _session.update {
+    fun setV2Result(
+        outcome: ModelVisionOutcome.Success, 
+        totals: AnalysisTotals, 
+        stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
+        ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList()
+    ) = _session.update {
         it.copy(
             visionOutcomes = listOf(outcome),
             referenceModelId = outcome.model.id,
             totals = totals,
             usingV2Engine = true,
+            v2Stime = stime,
+            v2AmbiguitaRisolte = ambiguita,
         )
     }
 
@@ -100,6 +111,6 @@ class AnalysisSessionStore @Inject constructor() {
 
     /** Riprova l'analisi (§2.4 punto 4) mantenendo gli stessi modelli selezionati, per ri-scattare le foto. */
     fun resetForRetry() = _session.update {
-        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false)
+        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList())
     }
 }

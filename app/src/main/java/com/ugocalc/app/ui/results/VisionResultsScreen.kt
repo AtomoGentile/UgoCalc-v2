@@ -39,6 +39,8 @@ fun VisionResultsScreen(
     onBack: () -> Unit,
     onChoReceived: () -> Unit,
     onRetry: () -> Unit,
+    onNavigateToV2Details: () -> Unit = {},
+    onNavigateToAmbiguity: () -> Unit = {},
     viewModel: VisionResultsViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -75,6 +77,29 @@ fun VisionResultsScreen(
                             )
                         }
                     }
+
+                    if (uiState.usingV2Engine) {
+                        Button(
+                            onClick = onNavigateToV2Details,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+                            )
+                        ) { Text("Vedi dettagli tecnici V2") }
+                    }
+
+                    if (uiState.v2AmbiguitaRisolte.isNotEmpty()) {
+                        Button(
+                            onClick = onNavigateToAmbiguity,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                        ) { Text("Ambiguità risolte (${uiState.v2AmbiguitaRisolte.size})") }
+                    }
+
                     Button(
                         onClick = { viewModel.receiveCho() },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

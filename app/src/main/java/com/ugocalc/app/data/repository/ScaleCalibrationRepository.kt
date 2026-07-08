@@ -16,12 +16,21 @@ class ScaleCalibrationRepository @Inject constructor(
     suspend fun getByType(type: ScaleAnchorType): List<ScaleCalibrationEntity> =
         calibrationDao.getByType(type.name)
 
-    suspend fun addCalibration(type: ScaleAnchorType, name: String, valueCm: Double, capacityMl: Double? = null) {
+    suspend fun addCalibration(
+        type: ScaleAnchorType,
+        name: String,
+        valueCm: Double,
+        widthCm: Double? = null,
+        heightCm: Double? = null,
+        capacityMl: Double? = null,
+    ) {
         calibrationDao.insert(
             ScaleCalibrationEntity(
                 type = type.name,
                 name = name,
                 valueCm = valueCm,
+                widthCm = widthCm,
+                heightCm = heightCm,
                 capacityMl = capacityMl
             )
         )

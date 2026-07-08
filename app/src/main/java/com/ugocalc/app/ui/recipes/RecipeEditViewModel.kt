@@ -4,15 +4,18 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.Recipe
+import com.ugocalc.app.data.repository.RecipeIngredient
 import com.ugocalc.app.data.repository.RecipeRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 data class RecipeEditUiState(
-    val id: Long = 0L,
+    val id: Long = 0,
     val name: String = "",
     val description: String = "",
+    val ingredients: List<RecipeIngredient> = emptyList(),
     val isSaving: Boolean = false
 )
 
@@ -25,10 +28,19 @@ class RecipeEditViewModel @Inject constructor(
     val uiState: State<RecipeEditUiState> = _uiState
 
     fun loadRecipe(id: Long) {
-        if (id == 0L) return
+        if (id == 0L) {
+            _uiState.value = RecipeEditUiState()
+            return
+        }
         viewModelScope.launch {
-            // Loading logic would go here
-            _uiState.value = _uiState.value.copy(id = id)
+            repository.getRecipeById(id)?.let { recipe ->
+                _uiState.value = RecipeEditUiState(
+                    id = recipe.id,
+                    name = recipe.name,
+                    description = recipe.description,
+                    ingredients = recipe.ingredients
+                )
+            }
         }
     }
 
@@ -40,12 +52,36 @@ class RecipeEditViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(description = description)
     }
 
-    fun save(onSaved: (Long) -> Unit) {
+    fun addIngredient(name: String, percentage: Double) {
+        val newIngredient = RecipeIngredient(id = 0, name = name, percentage = percentage)
+        _uiState.value = _uiState.value.copy(
+            ingredients = _uiState.value.ingredients + newIngredient
+        )
+    }
+
+    fun removeIngredient(index: Int) {
+        val currentList = _uiState.value.ingredients.toMutableList()
+        if (index in currentList.indices) {
+            currentList.removeAt(index)
+            _uiState.value = _uiState.value.copy(ingredients = currentList)
+        }
+    }
+
+    fun save(onSaved: () -> Unit) {
+        val current = _uiState.value
+        if (current.name.isBlank()) return
+
+        _uiState.value = current.copy(isSaving = true)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isSaving = true)
-            // Save logic would go here
-            onSaved(_uiState.value.id)
+            val recipe = Recipe(
+                id = current.id,
+                name = current.name,
+                description = current.description,
+                ingredients = current.ingredients
+            )
+            repository.addRecipe(recipe)
             _uiState.value = _uiState.value.copy(isSaving = false)
+            onSaved()
         }
     }
 }

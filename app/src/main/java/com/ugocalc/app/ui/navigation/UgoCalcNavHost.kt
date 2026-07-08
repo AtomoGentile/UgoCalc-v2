@@ -12,12 +12,12 @@ import androidx.navigation.navArgument
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
+import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen
 import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
-// import com.ugocalc.app.ui.bias.V2ResultScreen // removed unimplemented screen
-// import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen // removed unimplemented screen
 import com.ugocalc.app.ui.bias.BenchmarkGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
+import com.ugocalc.app.ui.bias.V2ResultScreen
 import com.ugocalc.app.ui.camera.CameraCaptureScreen
 import com.ugocalc.app.ui.finalresult.FinalResultScreen
 import com.ugocalc.app.ui.history.HistoryDetailScreen
@@ -46,6 +46,22 @@ import com.ugocalc.app.ui.settings.tables.TableEditorScreen
 
 @Composable
 fun UgoCalcNavHost(navController: NavHostController) {
+    /** Naviga verso una destinazione principale pulendo lo stack ed evitando duplicati (§ bug fix backstack). */
+    val navigateTopLevel: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.startDestinationId) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
+
+    /** Ritorna indietro in modo sicuro, evitando di svuotare il backstack e finire in uno schermo vuoto. */
+    val safeBack: () -> Unit = {
+        if (navController.previousBackStackEntry != null) {
+            navController.popBackStack()
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = Routes.HOME,
@@ -59,10 +75,10 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onNavigateDirectlyToCamera = { modelIds -> navController.navigate(Routes.cameraCaptureRoute(modelIds)) },
                 onNavigateToManualEntry = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
                 onNavigateToBarcodeScan = { navController.navigate(Routes.BARCODE_SCAN) },
-                onNavigateToHistory = { navController.navigate(Routes.HISTORY) },
-                onNavigateToBiasEvolution = { navController.navigate(Routes.BIAS_EVOLUTION) },
-                onNavigateToSettings = { navController.navigate(Routes.SETTINGS) },
-                onNavigateToRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
+                onNavigateToHistory = { navigateTopLevel(Routes.HISTORY) },
+                onNavigateToBiasEvolution = { navigateTopLevel(Routes.BIAS_EVOLUTION) },
+                onNavigateToSettings = { navigateTopLevel(Routes.SETTINGS) },
+                onNavigateToRecipes = { navigateTopLevel(Routes.SETTINGS_RECIPES) },
                 onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                 onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
             )
@@ -75,13 +91,13 @@ fun UgoCalcNavHost(navController: NavHostController) {
                         popUpTo(Routes.HOME)
                     }
                 },
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
             )
         }
 
         composable(Routes.BARCODE_SCAN) {
             BarcodeScanScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onEntryReady = {
                     navController.navigate(Routes.MANUAL_FOOD_ENTRY) {
                         popUpTo(Routes.HOME)
@@ -93,7 +109,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
         composable(Routes.MODEL_SELECTION) {
             ModelSelectionScreen(
                 onNext = { modelIds -> navController.navigate(Routes.cameraCaptureRoute(modelIds)) },
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
             )
         }
 
@@ -111,13 +127,13 @@ fun UgoCalcNavHost(navController: NavHostController) {
                         popUpTo(Routes.MODEL_SELECTION)
                     }
                 },
-                onCancelled = { navController.popBackStack() },
+                onCancelled = safeBack,
             )
         }
 
         composable(Routes.VISION_RESULTS) {
             VisionResultsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onChoReceived = { navController.navigate(Routes.FINAL_RESULT) },
                 onRetry = { navController.popBackStack(Routes.CAMERA_CAPTURE, false) },
             )
@@ -125,7 +141,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(Routes.FINAL_RESULT) {
             FinalResultScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onSaved = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.HOME) { inclusive = true }
@@ -138,7 +154,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(Routes.HISTORY) {
             HistoryScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onOpenEntry = { id -> navController.navigate(Routes.historyDetailRoute(id)) },
             )
         }
@@ -147,52 +163,56 @@ fun UgoCalcNavHost(navController: NavHostController) {
             route = Routes.HISTORY_DETAIL,
             arguments = listOf(navArgument("historyId") { type = NavType.StringType }),
         ) {
-            HistoryDetailScreen(onBack = { navController.popBackStack() })
+            HistoryDetailScreen(onBack = safeBack)
         }
 
         composable(Routes.BIAS_EVOLUTION) {
             BiasEvolutionScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onOpenGroundTruthEntry = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
                 onOpenBenchmarkGroundTruthEntry = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
                 onOpenBenchmarkDashboard = { navController.navigate(Routes.BENCHMARK_DASHBOARD) },
             )
         }
-        composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = { navController.popBackStack() }) }
-        // composable(Routes.V2_RESULT) { /* V2ResultScreen removed */ }
-        // composable(Routes.AMBIGUITY_RESOLUTION) { /* AmbiguityResolutionScreen removed */ }
+        composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = safeBack) }
+        composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = safeBack) }
+        composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = safeBack) }
 
-        composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_SCALE_CALIBRATIONS) { ScaleCalibrationScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_RECIPES) { RecipeListScreen(onRecipeSelected = { recipeId -> navController.navigate(Routes.recipeDetailRoute(recipeId)) }, onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_SCALE_CALIBRATIONS) { ScaleCalibrationScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_RECIPES) { 
+            RecipeListScreen(
+                onRecipeSelected = { recipeId -> navController.navigate(Routes.recipeDetailRoute(recipeId)) }, 
+                onAddRecipe = { navController.navigate(Routes.recipeEditRoute(0L)) },
+                onBack = safeBack
+            ) 
+        }
         composable(
             route = Routes.SETTINGS_RECIPE_DETAIL,
             arguments = listOf(navArgument("recipeId") { type = NavType.StringType })
         ) { backStackEntry ->
             val id = backStackEntry.arguments?.getString("recipeId")?.toLongOrNull() ?: 0L
-            RecipeDetailScreen(recipeId = id, onEdit = { editId -> navController.navigate(Routes.recipeEditRoute(editId)) }, onBack = { navController.popBackStack() })
+            RecipeDetailScreen(recipeId = id, onEdit = { editId -> navController.navigate(Routes.recipeEditRoute(editId)) }, onBack = safeBack)
         }
         composable(
             route = Routes.SETTINGS_RECIPE_EDIT,
             arguments = listOf(navArgument("recipeId") { type = NavType.StringType })
         ) { backStackEntry ->
             val id = backStackEntry.arguments?.getString("recipeId")?.toLongOrNull() ?: 0L
-            RecipeEditScreen(recipeId = id, onSaved = { navController.popBackStack() }, onBack = { navController.popBackStack() })
+            RecipeEditScreen(recipeId = id, onSaved = { navController.popBackStack() }, onBack = safeBack)
         }
-        composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_HISTORY_CHART) { HistoryChartSettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_API) { ApiSettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_FAVORITES) { FavoritesSettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_PERMISSIONS) { PermissionsSettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_ACCESSIBILITY) { AccessibilitySettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_PREFERRED_MODEL) { PreferredModelSettingsScreen(onBack = { navController.popBackStack() }) }
-        composable(Routes.SETTINGS_CONFIDENCE) { ConfidenceSettingsScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_BACKUP) { BackupScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_HISTORY_CHART) { HistoryChartSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_API) { ApiSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_FAVORITES) { FavoritesSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_PERMISSIONS) { PermissionsSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_ACCESSIBILITY) { AccessibilitySettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_PREFERRED_MODEL) { PreferredModelSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_CONFIDENCE) { ConfidenceSettingsScreen(onBack = safeBack) }
 
         composable(Routes.SETTINGS) {
             SettingsScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onOpenApi = { navController.navigate(Routes.SETTINGS_API) },
                 onOpenFavorites = { navController.navigate(Routes.SETTINGS_FAVORITES) },
                 onOpenPermissions = { navController.navigate(Routes.SETTINGS_PERMISSIONS) },
@@ -210,19 +230,19 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(Routes.SETTINGS_TABLES_LIST) {
             OfficialTablesListScreen(
-                onBack = { navController.popBackStack() },
+                onBack = safeBack,
                 onOpenTable = { tableId -> navController.navigate(Routes.tableEditorRoute(tableId)) },
                 onOpenSearch = { navController.navigate(Routes.SETTINGS_TABLES_SEARCH) },
             )
         }
 
-        composable(Routes.SETTINGS_TABLES_SEARCH) { DatabaseSearchScreen(onBack = { navController.popBackStack() }) }
+        composable(Routes.SETTINGS_TABLES_SEARCH) { DatabaseSearchScreen(onBack = safeBack) }
 
-        composable(
-            route = Routes.SETTINGS_TABLE_EDITOR,
-            arguments = listOf(navArgument("tableId") { type = NavType.StringType }),
-        ) {
-            TableEditorScreen(onBack = { navController.popBackStack() })
+        composable(Routes.SETTINGS_TABLE_EDITOR, arguments = listOf(navArgument("tableId") { type = NavType.StringType })) {
+            TableEditorScreen(onBack = safeBack)
         }
+
+        composable(Routes.V2_RESULT) { V2ResultScreen(onBack = safeBack) }
+        composable(Routes.AMBIGUITY_RESOLUTION) { AmbiguityResolutionScreen(onBack = safeBack) }
     }
 }
