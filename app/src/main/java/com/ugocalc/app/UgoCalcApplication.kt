@@ -23,8 +23,8 @@ class UgoCalcApplication : Application(), Configuration.Provider {
         scheduleBenchmarkWorker()
     }
 
-    override fun getWorkManagerConfiguration(): Configuration =
-        Configuration.Builder()
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
             .build()
 

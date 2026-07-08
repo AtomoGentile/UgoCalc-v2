@@ -39,5 +39,7 @@ class BenchmarkRepositoryEvaluator(private val benchmarkRepository: com.ugocalc.
 }
 
 class SettingsRepositoryAdapter(private val settingsRepository: com.ugocalc.app.data.repository.SettingsRepository) : V2VisibleModeSetter {
-    override suspend fun setV2VisibleModeEnabled(enabled: Boolean) = settingsRepository.setV2VisibleModeEnabled(enabled)
+    override suspend fun setV2VisibleModeEnabled(enabled: Boolean) {
+        settingsRepository.setV2VisibleModeEnabled(enabled)
+    }
 }
