@@ -1,9 +1,12 @@
 package com.ugocalc.app.domain.inference.m6
 
+import com.ugocalc.app.data.repository.RecipeRepository
 import com.ugocalc.app.domain.inference.model.WeightEstimate
+import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
+import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.usecase.MatchFoodsAcrossTablesUseCase
 import javax.inject.Inject
 
@@ -14,22 +17,63 @@ import javax.inject.Inject
  * deterministico + catena di calcolo — nel contratto [RecognizedFood] che matching, calcolo
  * CHO/grassi e storico già consumano senza modifiche, qualunque sia la provenienza del peso.
  *
- * Un alimento senza abbinamento resta fuori dalla mappa restituita: [com.ugocalc.app.domain.inference.m7.NutritionCalculator]
- * lo tratta già come escluso dal totale, mai stimato a zero in silenzio (stessa regola della V1).
+ * Implementazione ibrida per la strategia COMPOSTO: se M3 restituisce un peso con strategia
+ * COMPOSTO_OCCLUSO e confidenza ALTO, provare a cercare una ricetta nel database tramite
+ * RecipeRepository.findByName(nome). Se trovata, decomporre il peso stimato tra gli ingredienti
+ * della ricetta (proporzionalmente alle percentuali) e passare gli ingredienti a MatchFoodsAcrossTablesUseCase.
+ * Altrimenti, fallback al comportamento precedente (un singolo RecognizedFood per stima).
  */
 class NutritionMatchStepAdapter @Inject constructor(
     private val matchFoodsAcrossTables: MatchFoodsAcrossTablesUseCase,
+    private val recipeRepository: RecipeRepository,
 ) {
+    private val RECIPE_MIN_CONFIDENCE = Confidence.ALTO // only automatic decomposition when confidence is ALTO
+
     suspend fun match(model: AiModel, stime: List<WeightEstimate>): Map<String, NormalizedFoodEntry> {
-        val recognizedFoods = stime.map {
-            RecognizedFood(
-                nome = it.nome,
-                pesoStimatoG = it.pesoG,
-                commento = it.catenaCalcolo.sintesi,
-                confidenza = it.confidenza,
+        val expandedRecognized = mutableListOf<RecognizedFood>()
+
+        for (est in stime) {
+            if (est.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && est.confidenza == RECIPE_MIN_CONFIDENCE) {
+                // Try to find a recipe matching the recognized name
+                val recipe = try {
+                    recipeRepository.findByName(est.nome.trim())
+                } catch (e: Exception) {
+                    null
+                }
+
+                if (recipe != null && recipe.ingredients.isNotEmpty()) {
+                    // Normalize percentages in case they don't sum to 100
+                    val total = recipe.ingredients.sumOf { it.percentage }.takeIf { it > 0.0 } ?: 100.0
+                    recipe.ingredients.forEach { ing ->
+                        val pct = if (total > 0.0) ing.percentage / total else 0.0
+                        val pesoIng = est.pesoG * pct
+                        expandedRecognized.add(
+                            RecognizedFood(
+                                nome = ing.name,
+                                pesoStimatoG = pesoIng,
+                                commento = "${est.catenaCalcolo.sintesi} — decomposizione ricetta '${recipe.name}' (${(pct * 100).toInt()}%)",
+                                confidenza = est.confidenza,
+                            )
+                        )
+                    }
+                    // Proceed to next estimate
+                    continue
+                }
+                // else fallthrough to default single recognized food
+            }
+
+            // Default behavior: single recognized food corresponding to the weight estimate
+            expandedRecognized.add(
+                RecognizedFood(
+                    nome = est.nome,
+                    pesoStimatoG = est.pesoG,
+                    commento = est.catenaCalcolo.sintesi,
+                    confidenza = est.confidenza,
+                )
             )
         }
-        val lines = matchFoodsAcrossTables(recognizedFoods, model)
+
+        val lines = matchFoodsAcrossTables(expandedRecognized, model)
         return lines.mapNotNull { line ->
             val entry = line.tableEntry
             if (line.isExcluded || entry == null) null else line.recognizedFood.nome to entry
