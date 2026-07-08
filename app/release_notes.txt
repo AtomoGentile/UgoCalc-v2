@@ -1,1 +1,12 @@
 Build di test UgoCalc — vedi i commit più recenti per il changelog dettagliato.
+
+UgoCalc v2 — Principali cambiamenti rispetto a v1
+
+- Introduzione del motore di inferenza V2 (modalità shadow): V2 esegue una pipeline M0→M8 in background per raccogliere telemetria e valutare la qualità delle stime senza sostituire immediatamente V1 nell'interfaccia utente.
+- Valutazione automatica dei benchmark: aggiunto un worker periodico (BenchmarkReportWorker) che valuta le metriche aggregate (es. percentuale di pasti con errore CHO entro 10g) e può promuovere la V2 a motore "visible" se le metriche lo giustificano.
+- Nuova impostazione persistente: "v2VisibleModeEnabled" in Settings (DataStore + SettingsRepository) che abilita V2 come motore visibile all'utente.
+- Integrazione Hilt + WorkManager: HiltWorkerFactory registrato nell'Application per iniettare dipendenze nei Worker; modulo WorkManager aggiunto.
+- Miglioramenti testabili: la logica di promozione è stata estratta in un handler testabile (BenchmarkPromotionHandler) con test unitari.
+- Scheduling: il worker di valutazione è schedulato come lavoro periodico (giornaliero) per riesaminare i benchmark automaticamente.
+
+Per i dettagli tecnici completi e le motivazioni progettuali, consultare docs/InferenceEngineV2_Design.md.
