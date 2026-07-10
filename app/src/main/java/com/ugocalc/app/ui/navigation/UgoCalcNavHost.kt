@@ -141,7 +141,13 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(Routes.FINAL_RESULT) {
             FinalResultScreen(
-                onBack = safeBack,
+                onBack = {
+                    // Richiesta utente: tornare direttamente alla galleria foto (§2.4 punto 6).
+                    // Se non veniamo dalla fotocamera (es. inserimento manuale), safeBack standard.
+                    if (!navController.popBackStack(Routes.CAMERA_CAPTURE, false)) {
+                        safeBack()
+                    }
+                },
                 onSaved = {
                     navController.navigate(Routes.HOME) {
                         popUpTo(Routes.HOME) { inclusive = true }

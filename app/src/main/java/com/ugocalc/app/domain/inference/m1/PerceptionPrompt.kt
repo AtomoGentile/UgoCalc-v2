@@ -50,6 +50,13 @@ object PerceptionPrompt {
         ${angleReadingsBlock(angleDescriptions, cameraMetadatas)}
         ${calibrationsBlock(calibrations)}
 
+        IMMAGINI DI RIFERIMENTO: Oltre alle foto del pasto, ti sono state fornite delle immagini di
+        riferimento per le calibrazioni dell'utente elencate sopra (se presenti). Usale per fare
+        matching visivo: se un oggetto nella scena del pasto ha lo stesso aspetto (forma, colore,
+        pattern) di una di queste immagini di calibrazione, puoi essere certo che si tratti della
+        stessa stoviglia o dello stesso riferimento corporeo, e devi applicare la dimensione reale
+        associata con confidenza "alto".
+
         Il pasto è stato dichiarato dall'utente come "${modeLabel(sessionMode)}" (${modeDescription(sessionMode)}).
         Questo determina l'ordine in cui cercare un'ancora di scala affidabile:
         ${anchorOrder(sessionMode)}

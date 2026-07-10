@@ -15,6 +15,9 @@ interface ScaleCalibrationDao {
     @Query("SELECT * FROM scale_calibrations WHERE type = :type")
     suspend fun getByType(type: String): List<ScaleCalibrationEntity>
 
+    @Query("SELECT * FROM scale_calibrations WHERE id = :id")
+    suspend fun getById(id: Long): ScaleCalibrationEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(calibration: ScaleCalibrationEntity): Long
 

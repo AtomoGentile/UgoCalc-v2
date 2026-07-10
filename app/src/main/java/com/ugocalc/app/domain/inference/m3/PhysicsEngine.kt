@@ -272,7 +272,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
         const val FALLBACK_RIEMPIMENTO = 0.8
         const val FALLBACK_FRAZIONE_RIEMPIMENTO = 0.7
         const val TRASCURABILE_G = 5.0
-        val FALLBACK_BLOCCO = Triple(8.0, 6.0, 2.0) // parallelepipedo di riserva (cm)
+        val FALLBACK_BLOCCO = Triple(10.0, 8.0, 2.5) // parallelepipedo di riserva (cm)
 
         fun g(x: Double): Int = x.roundToInt()
         fun cm(x: Double): String = ((x * 10).roundToInt() / 10.0).toString()

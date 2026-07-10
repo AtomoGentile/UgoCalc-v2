@@ -11,7 +11,7 @@ import com.ugocalc.app.domain.inference.model.FoodCategory
 object FoodCategoryRules {
 
     /** Categoria usata quando nessuna regola combacia. */
-    val FALLBACK: FoodCategory = FoodCategory.VERDURE_E_LEGUMI
+    val FALLBACK: FoodCategory = FoodCategory.ALTRO_BLOCCO
 
     val DEFAULT: List<FoodCategoryRule> = listOf(
         rule(FoodCategory.PIATTI_COMPOSTI,
@@ -20,29 +20,48 @@ object FoodCategoryRules {
             "piadina", "burrito", "kebab", "sushi", "involtino", "involtini", "arancino", "arancini",
             "ragu", "ragout", "sugo", "bolognese", "pesto", "carbonara"),
 
-        rule(FoodCategory.BEVANDE_E_LIQUIDI,
+        rule(FoodCategory.BEVANDE,
             "latte", "yogurt", "succo", "spremuta", "frullato", "smoothie", "centrifuga",
-            "caffe", "cappuccino", "te", "tisana", "camomilla", "acqua", "vino", "birra", "spritz",
+            "caffe", "cappuccino", "te", "tisana", "camomilla", "acqua", "vino", "birra", "spritz"),
+
+        rule(FoodCategory.ZUPPE_MINESTRE,
             "minestra", "minestrone", "zuppa", "brodo", "vellutata", "passato", "crema", "gazpacho"),
 
         rule(FoodCategory.CONTABILE,
-            "mela", "mele", "pera", "pere", "banana", "banane", "arancia", "arance", "mandarino",
-            "mandarini", "clementina", "kiwi", "pesca", "pesche", "albicocca", "albicocche",
-            "prugna", "prugne", "susina", "fico", "fichi", "uovo", "uova", "polpetta", "polpette",
+            "uovo", "uova", "polpetta", "polpette",
             "biscotto", "biscotti", "cracker", "grissino", "grissini", "fetta biscottata",
             "taralli", "tarallo", "oliva", "olive", "noce", "noci", "mandorla",
             "mandorle", "nocciola", "nocciole", "pomodorino", "pomodorini", "crostino", "crostini",
             "ravioli", "raviolo", "gnocco", "gnocchi", "wurstel", "salsiccia", "salsicce"),
 
-        rule(FoodCategory.BLOCCO_MISURABILE,
-            "carne", "bistecca", "fettina", "scaloppina", "cotoletta", "pollo", "petto", "coscia",
-            "tacchino", "maiale", "manzo", "vitello", "agnello", "arrosto", "pesce", "filetto",
-            "salmone", "tonno", "merluzzo", "orata", "branzino", "spigola", "gambero", "gamberi",
-            "formaggio", "mozzarella", "parmigiano", "grana", "pecorino", "stracchino", "ricotta",
-            "torta", "crostata", "tiramisu", "pane", "pizza", "focaccia", "prosciutto", "salame",
-            "mortadella", "bresaola", "speck", "frittata", "omelette", "pancetta"),
+        rule(FoodCategory.FRUTTA,
+            "mela", "mele", "pera", "pere", "banana", "banane", "arancia", "arance", "mandarino",
+            "mandarini", "clementina", "kiwi", "pesca", "pesche", "albicocca", "albicocche",
+            "prugna", "prugne", "susina", "fico", "fichi", "uva", "ciliegie", "fragole", "frutta"),
 
-        // --- Le quattro categorie che sostituiscono l'unico bucket DISTESA_SUL_PIATTO ---
+        rule(FoodCategory.CARNE,
+            "carne", "bistecca", "fettina", "scaloppina", "cotoletta", "pollo", "petto", "coscia",
+            "tacchino", "maiale", "manzo", "vitello", "agnello", "arrosto", "prosciutto", "salame",
+            "mortadella", "bresaola", "speck", "pancetta"),
+
+        rule(FoodCategory.PESCE_FILETTO,
+            "pesce", "filetto", "salmone", "tonno", "merluzzo", "orata", "branzino", "spigola"),
+
+        rule(FoodCategory.MOLLUSCHI_GUSCIO,
+            "vongole", "cozze", "molluschi", "crostacei", "gambero", "gamberi"),
+
+        rule(FoodCategory.FORMAGGIO,
+            "formaggio", "mozzarella", "parmigiano", "grana", "pecorino", "stracchino", "ricotta"),
+
+        rule(FoodCategory.PANE,
+            "pane", "panino", "rosetta", "michetta", "baguette"),
+
+        rule(FoodCategory.PIZZA_FOCACCIA,
+            "pizza", "focaccia", "impasto da forno"),
+
+        rule(FoodCategory.DOLCI,
+            "torta", "crostata", "tiramisu", "frittata", "omelette"),
+
         rule(FoodCategory.PASTA,
             "pasta", "spaghetti", "penne", "rigatoni", "fusilli", "farfalle", "linguine",
             "tagliatelle", "maccheroni"),
@@ -54,14 +73,20 @@ object FoodCategoryRules {
         rule(FoodCategory.PATATE,
             "pure", "patate", "patatine"),
 
-        rule(FoodCategory.VERDURE_E_LEGUMI,
-            "insalata", "verdura", "verdure", "contorno", "fagioli", "fagiolini", "piselli", "ceci",
-            "lenticchie", "spinaci", "zucchine", "melanzane", "peperoni", "carote", "broccoli",
-            "cavolfiore", "finocchi"),
+        rule(FoodCategory.VERDURE_FOGLIA,
+            "insalata", "spinaci", "bietole", "coste"),
+
+        rule(FoodCategory.VERDURE_COMPATTE,
+            "verdura", "verdure", "contorno", "zucchine", "melanzane", "peperoni", "carote",
+            "broccoli", "cavolfiore", "finocchi", "zucca"),
+
+        rule(FoodCategory.LEGUMI,
+            "fagioli", "fagiolini", "piselli", "ceci", "lenticchie"),
 
         rule(FoodCategory.TRASCURABILE,
-            "olio", "sale", "pepe", "aceto", "zucchero", "burro", "maionese", "ketchup", "senape",
-            "salsa", "condimento", "spolverata", "grattugiato", "parmigiano grattugiato"),
+            "olio", "sale", "pepe", "peperoncino", "prezzemolo", "aglio", "spezie", "aceto",
+            "zucchero", "burro", "maionese", "ketchup", "senape", "salsa", "condimento",
+            "spolverata", "grattugiato", "parmigiano grattugiato"),
     )
 
     private fun rule(categoria: FoodCategory, vararg keywords: String) =

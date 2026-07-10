@@ -139,7 +139,7 @@ fun FinalResultScreen(
                         Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    "${line.recognizedFood.nome} — ${line.recognizedFood.pesoStimatoG.toInt()}g",
+                                    "${line.recognizedFood.nome} — ${if (line.recognizedFood.isTrascurabile) "trascurabile" else "${line.recognizedFood.pesoStimatoG.toInt()}g"}",
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.weight(1f),
                                 )

@@ -12,12 +12,31 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.inference.model.ScaleAnchorType
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.graphics.Color
+import androidx.core.content.FileProvider
+import android.graphics.BitmapFactory
+import java.io.File
+import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.ui.text.style.TextOverflow
 
 /**
  * Schermata per visualizzare, aggiungere e rimuovere calibrazioni di scala (§2.2).
@@ -26,6 +45,7 @@ import com.ugocalc.app.ui.theme.UgoGrey
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewModel = hiltViewModel()) {
+    val context = LocalContext.current
     val calibrations = viewModel.calibrations
 
     var newName by remember { mutableStateOf("") }
@@ -34,6 +54,24 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
     var newHeight by remember { mutableStateOf("") }
     var newCapacity by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(ScaleAnchorType.STOVIGLIA_CALIBRATA) }
+    
+    var tempPhotoPath by remember { mutableStateOf<String?>(null) }
+    var savedPhotoPath by remember { mutableStateOf<String?>(null) }
+
+    val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
+        if (success) {
+            savedPhotoPath = tempPhotoPath
+        }
+        tempPhotoPath = null
+    }
+
+    fun launchCamera() {
+        val calibrationsDir = File(context.filesDir, "calibrations").apply { mkdirs() }
+        val file = File(calibrationsDir, "cal_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        tempPhotoPath = file.absolutePath
+        takePictureLauncher.launch(uri)
+    }
 
     Scaffold(
         topBar = {
@@ -82,6 +120,24 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                                         Text(text = "Capacità: $capacity ml", style = MaterialTheme.typography.bodySmall)
                                     }
                                 }
+                                
+                                cal.imagePath?.let { path ->
+                                    val bitmap = remember(path) { 
+                                        try { BitmapFactory.decodeFile(path) } catch (e: Exception) { null } 
+                                    }
+                                    if (bitmap != null) {
+                                        Image(
+                                            bitmap = bitmap.asImageBitmap(),
+                                            contentDescription = "Foto di riferimento",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .padding(horizontal = 8.dp)
+                                                .size(48.dp)
+                                                .clip(RoundedCornerShape(4.dp))
+                                        )
+                                    }
+                                }
+
                                 IconButton(onClick = { viewModel.deleteCalibration(cal.id) }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Elimina", tint = MaterialTheme.colorScheme.error)
                                 }
@@ -165,18 +221,61 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                         singleLine = true
                     )
 
+                    // Sezione Foto di Riferimento (§13 punto 4)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (savedPhotoPath == null) {
+                            OutlinedButton(
+                                onClick = ::launchCamera,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(Icons.Default.PhotoCamera, contentDescription = null)
+                                Spacer(Modifier.width(8.dp))
+                                Text("Aggiungi Foto Riferimento")
+                            }
+                        } else {
+                            val bitmap = remember(savedPhotoPath) {
+                                try { BitmapFactory.decodeFile(savedPhotoPath) } catch (e: Exception) { null }
+                            }
+                            if (bitmap != null) {
+                                Box(modifier = Modifier.weight(1f)) {
+                                    Image(
+                                        bitmap = bitmap.asImageBitmap(),
+                                        contentDescription = "Anteprima riferimento",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(80.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                    )
+                                    IconButton(
+                                        onClick = { savedPhotoPath = null },
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                            .size(24.dp)
+                                    ) {
+                                        Icon(Icons.Default.Close, contentDescription = "Rimuovi", tint = Color.White, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     Button(
                         onClick = {
                             val x = newValue.replace(",", ".").toDoubleOrNull() ?: return@Button
                             val y = newWidth.replace(",", ".").toDoubleOrNull()
                             val z = newHeight.replace(",", ".").toDoubleOrNull()
                             val cap = newCapacity.replace(",", ".").toDoubleOrNull()
-                            viewModel.addCalibration(selectedType, newName, x, y, z, cap)
+                            viewModel.addCalibration(selectedType, newName, x, y, z, cap, savedPhotoPath)
                             newName = ""
                             newValue = ""
                             newWidth = ""
                             newHeight = ""
                             newCapacity = ""
+                            savedPhotoPath = null
                         },
                         enabled = newName.isNotBlank() && newValue.isNotBlank(),
                         modifier = Modifier.padding(top = 16.dp).fillMaxWidth()

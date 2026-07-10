@@ -153,13 +153,16 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
                 }
             }
             Sensor.TYPE_GYROSCOPE -> {
+                val (rx, ry, rz) = event.values
+                val angularSpeed = sqrt(rx * rx + ry * ry + rz * rz)
+                currentMotionRadPerSec = angularSpeed.toDouble()
+
                 val timestampNs = event.timestamp
                 val lastNs = lastGyroTimestampNs
                 lastGyroTimestampNs = timestampNs
                 if (lastNs != null) {
                     val dtSeconds = (timestampNs - lastNs) / 1_000_000_000f
-                    val yawRateRadPerSec = event.values[2]
-                    turnedDeg += Math.toDegrees(yawRateRadPerSec.toDouble()).toFloat() * dtSeconds
+                    turnedDeg += Math.toDegrees(rz.toDouble()).toFloat() * dtSeconds
                 }
             }
             else -> return
@@ -168,8 +171,15 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         publishReading()
     }
 
+    private var currentMotionRadPerSec = 0.0
+
     private fun publishReading() {
-        LastReading.value = MeasuredAngle(pitchDeg = pitchDeg, turnDeg = turnedDeg, target = target)
+        LastReading.value = MeasuredAngle(
+            pitchDeg = pitchDeg,
+            turnDeg = turnedDeg,
+            target = target,
+            motionRadPerSec = currentMotionRadPerSec
+        )
     }
 
     private fun updateOverlayText() {
@@ -179,7 +189,11 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         val showTurnGuidance = target.turnDeg > 0f
         val turnDelta = target.turnDeg - turnedDeg
         val turnAligned = abs(turnDelta) <= PHOTO_ANGLE_TURN_TOLERANCE_DEG
-        val aligned = pitchAligned && (!showTurnGuidance || turnAligned)
+        
+        // M0 in Diretta (§16): mostra se il telefono è troppo in movimento per uno scatto nitido
+        val tooMuchMotion = currentMotionRadPerSec > 1.0 // soglia da QualityGate.DEFAULT_MOTION_MAX_RAD_PER_SEC
+        
+        val aligned = pitchAligned && (!showTurnGuidance || turnAligned) && !tooMuchMotion
 
         val pitchLine = "Inclinazione: ${"%.0f".format(pitchDeg)}° (target ${"%.0f".format(target.pitchDeg)}°)"
         val turnLine = if (showTurnGuidance) {
@@ -187,7 +201,13 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         } else {
             ""
         }
-        view.text = "${target.label}\n$pitchLine$turnLine"
+        val motionLine = if (tooMuchMotion) {
+            "\nMOVIMENTO: ${"%.1f".format(currentMotionRadPerSec)} rad/s (FERMO!)"
+        } else {
+            "\nMovimento: ${"%.1f".format(currentMotionRadPerSec)} rad/s"
+        }
+        
+        view.text = "${target.label}\n$pitchLine$turnLine$motionLine"
         view.setTextColor(if (aligned) ALIGNED_COLOR else MISALIGNED_COLOR)
     }
 
@@ -239,4 +259,9 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
 }
 
 /** Angolazione realmente misurata dai sensori al momento (approssimato) dello scatto, con il target che era stato suggerito. */
-data class MeasuredAngle(val pitchDeg: Float, val turnDeg: Float, val target: PhotoAngleTarget)
+data class MeasuredAngle(
+    val pitchDeg: Float,
+    val turnDeg: Float,
+    val target: PhotoAngleTarget,
+    val motionRadPerSec: Double = 0.0
+)

@@ -23,6 +23,7 @@ class ScaleCalibrationRepository @Inject constructor(
         widthCm: Double? = null,
         heightCm: Double? = null,
         capacityMl: Double? = null,
+        imagePath: String? = null,
     ) {
         calibrationDao.insert(
             ScaleCalibrationEntity(
@@ -31,12 +32,21 @@ class ScaleCalibrationRepository @Inject constructor(
                 valueCm = valueCm,
                 widthCm = widthCm,
                 heightCm = heightCm,
-                capacityMl = capacityMl
+                capacityMl = capacityMl,
+                imagePath = imagePath
             )
         )
     }
 
     suspend fun deleteCalibration(id: Long) {
+        val entity = calibrationDao.getById(id)
+        if (entity?.imagePath != null) {
+            try {
+                java.io.File(entity.imagePath).delete()
+            } catch (e: Exception) {
+                // Ignore failure to delete physical file
+            }
+        }
         calibrationDao.deleteById(id)
     }
 }

@@ -23,4 +23,6 @@ data class ScaleCalibrationEntity(
     val heightCm: Double? = null,
     /** Capacità in millilitri, usata solo per contenitori (bicchieri, tazze) nella strategia A CONTENITORE. */
     val capacityMl: Double? = null,
+    /** Percorso locale dell'immagine di riferimento scattata dall'utente (§13 punto 4): permette a M1 di fare matching visivo. */
+    val imagePath: String? = null,
 )

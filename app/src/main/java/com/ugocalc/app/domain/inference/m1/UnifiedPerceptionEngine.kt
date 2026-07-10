@@ -37,10 +37,25 @@ class UnifiedPerceptionEngine @Inject constructor(
         cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
     ): PerceptionOutcome {
-        val imageParts = executor.encodeImages(images, imageMimeType)
+        val pastoParts = executor.encodeImages(images, imageMimeType)
+        
+        // Raccolta immagini di calibrazione (§13 punto 4): caricate dai percorsi locali.
+        // Se un'immagine non è leggibile, la calibrazione viene comunque inviata nel prompt
+        // come testo, ma senza il supporto visivo.
+        val calibrazioneParts = calibrations.mapNotNull { cal ->
+            cal.imagePath?.let { path ->
+                try {
+                    java.io.File(path).readBytes()
+                } catch (e: Exception) {
+                    null
+                }
+            }
+        }.let { executor.encodeImages(it, imageMimeType) }
+
+        val allImageParts = pastoParts + calibrazioneParts
         val prompt = PerceptionPrompt.build(sessionMode, angleDescriptions, cameraMetadatas, calibrations)
         return try {
-            val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, imageParts)
+            val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, allImageParts)
             PerceptionOutcome.Riuscita(sceneGraph)
         } catch (e: AiCallException) {
             PerceptionOutcome.FallbackAV1(motivo = e.message ?: "errore sconosciuto nella chiamata al modello")

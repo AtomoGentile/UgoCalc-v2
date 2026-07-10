@@ -46,7 +46,10 @@ fun VisionResultsScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.matchingDone) {
-        if (uiState.matchingDone) onChoReceived()
+        if (uiState.matchingDone) {
+            onChoReceived()
+            viewModel.onMatchingDoneConsumed()
+        }
     }
 
     Scaffold(topBar = { TopAppBar(title = { Text("Risultati analisi") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
@@ -138,7 +141,7 @@ private fun ModelResultCard(
                     outcome.result.alimenti.forEach { food ->
                         val isCautious = food.nome in outcome.result.stimeCautelative
                         Text(
-                            "• ${food.nome} — ${food.pesoStimatoG.toInt()}g (${food.confidenza})",
+                            "• ${food.nome} — ${if (food.isTrascurabile) "trascurabile" else "${food.pesoStimatoG.toInt()}g"} (${food.confidenza})",
                             modifier = Modifier.padding(top = 4.dp),
                             color = if (isCautious) MaterialTheme.colorScheme.primary else Color.Unspecified,
                             fontWeight = if (isCautious) FontWeight.Bold else FontWeight.Normal,

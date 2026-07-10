@@ -46,6 +46,7 @@ fun PipelineOutcome.Verificato.toAnalysisTotals(): AnalysisTotals {
             pesoStimatoG = stima.pesoG,
             commento = stima.catenaCalcolo.sintesi,
             confidenza = stima.confidenza,
+            isTrascurabile = stima.strategia == com.ugocalc.app.domain.inference.model.EstimationStrategy.TRASCURABILE
         )
         val entry = abbinamenti[stima.nome]
         val match = if (entry != null) {

@@ -39,9 +39,10 @@ class ScaleCalibrationViewModel @Inject constructor(
         widthCm: Double? = null,
         heightCm: Double? = null,
         capacityMl: Double? = null,
+        imagePath: String? = null,
     ) {
         viewModelScope.launch {
-            repository.addCalibration(type, name, valueCm, widthCm, heightCm, capacityMl)
+            repository.addCalibration(type, name, valueCm, widthCm, heightCm, capacityMl, imagePath)
         }
     }
 

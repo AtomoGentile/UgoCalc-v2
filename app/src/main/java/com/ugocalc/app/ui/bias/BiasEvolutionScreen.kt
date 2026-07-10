@@ -251,13 +251,24 @@ private fun strategyLabel(raw: String) = when (raw) {
 
 private fun foodCategoryLabel(raw: String) = when (raw) {
     "PIATTI_COMPOSTI" -> "Piatti composti"
-    "BEVANDE_E_LIQUIDI" -> "Bevande e liquidi"
+    "BEVANDE" -> "Bevande"
+    "ZUPPE_MINESTRE" -> "Zuppe e minestre"
     "CONTABILE" -> "Contabile"
-    "BLOCCO_MISURABILE" -> "Blocco misurabile"
     "PASTA" -> "Pasta"
     "RISO_E_CEREALI" -> "Riso e cereali"
     "PATATE" -> "Patate"
-    "VERDURE_E_LEGUMI" -> "Verdure e legumi"
+    "VERDURE_FOGLIA" -> "Verdure a foglia"
+    "VERDURE_COMPATTE" -> "Verdure compatte"
+    "LEGUMI" -> "Legumi"
+    "FRUTTA" -> "Frutta"
+    "CARNE" -> "Carne"
+    "PESCE_FILETTO" -> "Pesce (filetto)"
+    "MOLLUSCHI_GUSCIO" -> "Molluschi con guscio"
+    "FORMAGGIO" -> "Formaggio"
+    "PANE" -> "Pane"
+    "PIZZA_FOCACCIA" -> "Pizza/Focaccia"
+    "DOLCI" -> "Dolci"
     "TRASCURABILE" -> "Trascurabile"
+    "ALTRO_BLOCCO" -> "Altro blocco"
     else -> raw
 }

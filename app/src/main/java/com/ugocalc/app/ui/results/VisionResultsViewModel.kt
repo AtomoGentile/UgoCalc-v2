@@ -86,4 +86,13 @@ class VisionResultsViewModel @Inject constructor(
             benchmarkRepository.recordV1NutritionCoefficients(sessionStore.session.value.sessionId, lines)
         }
     }
+
+    /**
+     * Da chiamare quando l'evento di navigazione verso i risultati finali è stato consumato dalla
+     * UI (§ bug fix): evita che tornando indietro da FinalResultScreen si venga immediatamente
+     * rimbalzati di nuovo in avanti perché matchingDone è ancora true.
+     */
+    fun onMatchingDoneConsumed() {
+        _uiState.value = _uiState.value.copy(matchingDone = false)
+    }
 }

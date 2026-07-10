@@ -11,6 +11,8 @@ data class RecognizedFood(
     val commento: String,
     val confidenza: Confidence,
     val decomposition: DecompositionInfo? = null,
+    /** Se vero, l'alimento è considerato trascurabile (es. spezie, condimenti minimi) e non pesa sul totale visivo. */
+    val isTrascurabile: Boolean = false,
 )
 
 @Serializable

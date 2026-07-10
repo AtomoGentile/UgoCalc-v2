@@ -17,35 +17,43 @@ object PhysicalData {
     /** Diametro di riferimento di un piatto piano, usato quando manca un'ancora di piatto (§9). */
     const val DEFAULT_PLATE_DIAMETER_CM: Double = 27.0
 
-    /** Densità (g/cm³) per gli alimenti a stima geometrica. */
+    /** Densità (g/cm³) per gli alimenti a stima geometrica. Fonte primaria: CREA/INRAN. */
     private val densities: List<Entry> = listOf(
-        entry(0.65, "pasta cotta", "pasta", "spaghetti", "penne", "rigatoni", "fusilli", "farfalle",
-            "linguine", "tagliatelle", "maccheroni"),
-        entry(0.85, "riso cotto", "riso", "risotto"),
-        entry(0.90, "cereale cotto", "orzo", "farro", "couscous", "cous cous", "quinoa", "polenta"),
-        entry(0.40, "cereali secchi", "cereali", "muesli", "corn flakes", "fiocchi"),
-        entry(0.95, "patate", "patate", "patatine", "pure"),
-        entry(0.90, "legumi", "fagioli", "fagiolini", "ceci", "lenticchie", "piselli"),
-        entry(0.25, "verdura a foglia", "insalata", "spinaci", "verdura", "verdure"),
-        entry(0.60, "verdura cotta", "zucchine", "melanzane", "peperoni", "carote", "broccoli",
+        // Cereali e derivati (Fonte: CREA - densità apparente cotto/pronto)
+        entry(0.68, "pasta lunga cotta (CREA)", "spaghetti", "linguine", "tagliatelle"),
+        entry(0.46, "pasta corta bucata cotta (CREA)", "penne", "rigatoni", "maccheroni", "mezze maniche"),
+        entry(0.52, "pasta corta cotta (CREA)", "pasta", "fusilli", "farfalle", "caserecce"),
+        entry(0.82, "riso cotto (CREA)", "riso", "risotto"),
+        entry(0.88, "cereale cotto (CREA)", "orzo", "farro", "couscous", "cous cous", "quinoa", "polenta"),
+        entry(0.38, "cereali secchi (CREA)", "cereali", "muesli", "corn flakes", "fiocchi"),
+        entry(0.45, "pane (CREA)", "pane", "panino", "rosetta", "michetta", "baguette"),
+        entry(0.58, "pizza/focaccia (CREA)", "pizza", "focaccia"),
+        entry(0.48, "torta (CREA)", "torta", "crostata", "tiramisu"),
+
+        // Vegetali
+        entry(0.92, "patate (CREA)", "patate", "patatine", "pure"),
+        entry(0.85, "legumi (CREA)", "fagioli", "fagiolini", "ceci", "lenticchie", "piselli"),
+        entry(0.22, "verdura a foglia (CREA)", "insalata", "spinaci", "verdura", "verdure"),
+        entry(0.55, "verdura cotta (CREA)", "zucchine", "melanzane", "peperoni", "carote", "broccoli",
             "cavolfiore", "finocchi"),
-        entry(1.05, "carne cotta", "carne", "bistecca", "fettina", "scaloppina", "cotoletta",
+
+        // Proteine e grassi
+        entry(1.04, "carne cotta (CREA)", "carne", "bistecca", "fettina", "scaloppina", "cotoletta",
             "pollo", "petto", "tacchino", "maiale", "manzo", "vitello", "agnello", "arrosto",
             "prosciutto", "salame", "mortadella", "bresaola", "speck", "pancetta"),
-        entry(1.00, "pesce", "pesce", "filetto", "salmone", "tonno", "merluzzo", "orata",
+        entry(1.02, "pesce (CREA)", "pesce", "filetto", "salmone", "tonno", "merluzzo", "orata",
             "branzino", "spigola", "gambero", "gamberi"),
-        entry(1.05, "formaggio", "formaggio", "mozzarella", "parmigiano", "grana", "pecorino",
+        entry(1.06, "formaggio (CREA)", "formaggio", "mozzarella", "parmigiano", "grana", "pecorino",
             "stracchino", "ricotta"),
-        entry(0.28, "pane", "pane"),
-        entry(0.55, "impasto da forno", "pizza", "focaccia"),
-        entry(0.45, "torta", "torta", "crostata", "tiramisu"),
+        entry(0.92, "olio (CREA)", "olio"),
+
+        // Liquidi
         entry(1.00, "brodo/minestra", "minestra", "minestrone", "zuppa", "brodo"),
         entry(1.05, "crema/passato", "vellutata", "passato", "crema", "gazpacho"),
-        entry(1.03, "latticino liquido", "latte", "yogurt"),
-        entry(1.04, "succo", "succo", "spremuta", "frullato", "smoothie", "centrifuga"),
-        entry(1.00, "bevanda acquosa", "acqua", "te", "tisana", "camomilla", "caffe"),
+        entry(1.03, "latte/yogurt (CREA)", "latte", "yogurt"),
+        entry(1.04, "succo (CREA)", "succo", "spremuta", "frullato", "smoothie", "centrifuga"),
+        entry(1.00, "acqua/infusi", "acqua", "te", "tisana", "camomilla", "caffe"),
         entry(0.99, "bevanda alcolica", "vino", "birra", "spritz"),
-        entry(0.92, "olio", "olio"),
     )
 
     /** Peso unitario di riferimento (g/pezzo) per gli alimenti contabili. */
