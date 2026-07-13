@@ -239,6 +239,11 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         super.onDestroy()
     }
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        Log.d(TAG, "onTaskRemoved: l'app è stata chiusa dal task manager, stop service")
+        stopSelf()
+    }
+
     companion object {
         /**
          * Ultima lettura sensori pubblicata dal service in esecuzione (`null` se non ancora

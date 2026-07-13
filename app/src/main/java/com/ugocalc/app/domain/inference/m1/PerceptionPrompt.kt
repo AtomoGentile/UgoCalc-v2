@@ -99,6 +99,13 @@ object PerceptionPrompt {
            - Se per un alimento non riesci a fornire nessuna misura utile, lascia "misure_grezze"
              vuoto piuttosto che inventare un numero. Non stimare MAI direttamente un peso in grammi.
 
+        4. LIMITI DI BUON SENSO (INTUIZIONE): Per ciascun alimento, fornisci un range di peso
+        plausibile (min/max in grammi) basandoti solo sulla tua intuizione statistica di modello
+        (quello che faresti in una stima "a occhio"). Questi valori NON verranno usati per il
+        calcolo finale, ma solo come "guardrail" per identificare errori macroscopici nelle misure
+        geometriche fornite al punto 3. Sii onesto: se un peperoncino non può pesare 100g, il suo
+        "peso_max_plausibile_g" deve essere ragionevolmente basso (es. 15g).
+
         Segnala infine, se presenti, le SOVRAPPOSIZIONI tra alimenti (es. "sugo sopra la pasta"):
         utili a valutare le porzioni occluse.
 
@@ -132,6 +139,10 @@ object PerceptionPrompt {
                 "larghezza_cm": number (opzionale),
                 "diametro_cm": number (opzionale),
                 "nota": "string (opzionale, breve nota libera di percezione)"
+              },
+              "limiti_buon_senso": {
+                "peso_min_plausibile_g": number,
+                "peso_max_plausibile_g": number
               },
               "confidenza": "alto" | "medio" | "basso"
             }

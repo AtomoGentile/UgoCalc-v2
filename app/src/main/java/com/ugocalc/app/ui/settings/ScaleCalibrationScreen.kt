@@ -8,6 +8,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -48,15 +49,15 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
     val context = LocalContext.current
     val calibrations = viewModel.calibrations
 
-    var newName by remember { mutableStateOf("") }
-    var newValue by remember { mutableStateOf("") }
-    var newWidth by remember { mutableStateOf("") }
-    var newHeight by remember { mutableStateOf("") }
-    var newCapacity by remember { mutableStateOf("") }
-    var selectedType by remember { mutableStateOf(ScaleAnchorType.STOVIGLIA_CALIBRATA) }
+    var newName by rememberSaveable { mutableStateOf("") }
+    var newValue by rememberSaveable { mutableStateOf("") }
+    var newWidth by rememberSaveable { mutableStateOf("") }
+    var newHeight by rememberSaveable { mutableStateOf("") }
+    var newCapacity by rememberSaveable { mutableStateOf("") }
+    var selectedType by rememberSaveable { mutableStateOf(ScaleAnchorType.STOVIGLIA_CALIBRATA) }
     
-    var tempPhotoPath by remember { mutableStateOf<String?>(null) }
-    var savedPhotoPath by remember { mutableStateOf<String?>(null) }
+    var tempPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
+    var savedPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
 
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
         if (success) {

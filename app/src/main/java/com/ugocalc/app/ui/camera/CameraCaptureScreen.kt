@@ -60,6 +60,9 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.exifinterface.media.ExifInterface
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.ui.components.LoadingOverlay
 import com.ugocalc.app.util.OverlayPermissionHelper
@@ -121,11 +124,21 @@ fun CameraCaptureScreen(
         context.stopService(Intent(context, CameraAngleOverlayService::class.java))
     }
 
-    // Rimozione di sicurezza se il Composable viene distrutto in modo inatteso: l'overlay non deve
-    // restare "appiccicato" sopra altre app se l'utente esce con back mentre la fotocamera di
-    // sistema è in primo piano (vedi anche il commento sul service in CameraAngleOverlayService).
-    DisposableEffect(Unit) {
-        onDispose { stopAngleOverlay() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                // Se torniamo in foreground e il service è ancora attivo, probabilmente l'utente
+                // è tornato senza scattare la foto (es. tasto Home o chiusura forzata).
+                // Lo fermiamo per sicurezza (§ bug segnalato).
+                stopAngleOverlay()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            stopAngleOverlay()
+        }
     }
 
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
@@ -167,7 +180,23 @@ fun CameraCaptureScreen(
     }
 
     // Indice (nella sessione) dello scatto che si sta per fare, per scegliere il target giusto in
-    // PHOTO_ANGLE_TARGETS: va salvato perché sopravvive alla richiesta permesso camera/overlay, che
+    // PHOTO_ANGLE_TARGETS: cerchiamo il primo target non ancora coperto dalle foto già scattate
+    // (§ bug riportato: "l'app non si ricorda da che angolazioni ho fatto la foto").
+    fun getNextTargetIndex(): Int {
+        val images = uiState.capturedImages
+        val usedLabels = images.mapNotNull { it.measuredAngle?.target?.label }.toSet()
+        val firstUnused = PHOTO_ANGLE_TARGETS.indexOfFirst { it.label !in usedLabels }
+        
+        // Se non abbiamo dati sugli angoli (es. permesso overlay negato) o se abbiamo già coperto
+        // tutti i target suggeriti, procediamo semplicemente per conteggio.
+        return if (firstUnused == -1 || usedLabels.size < images.size) {
+            images.size
+        } else {
+            firstUnused
+        }
+    }
+
+    // Va salvato perché sopravvive alla richiesta permesso camera/overlay, che
     // apre un'altra Activity e può far ricreare questa in mezzo.
     var pendingPhotoIndex by rememberSaveable { mutableStateOf<Int?>(null) }
 
@@ -186,7 +215,7 @@ fun CameraCaptureScreen(
     // affidabile nell'Intent di ritorno — si rilancia comunque lo scatto, con o senza overlay a
     // seconda di quanto l'utente ha effettivamente concesso.
     val overlayPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        val index = pendingPhotoIndex ?: uiState.capturedImages.size
+        val index = pendingPhotoIndex ?: getNextTargetIndex()
         pendingPhotoIndex = null
         launchSystemCameraForIndex(index)
     }
@@ -197,7 +226,7 @@ fun CameraCaptureScreen(
     // Android recenti) lo rifiutano con SecurityException e l'app crasha. Se l'utente non è mai
     // passato da Impostazioni > Permessi, va richiesto qui, al primo utilizzo effettivo.
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        val index = pendingPhotoIndex ?: uiState.capturedImages.size
+        val index = pendingPhotoIndex ?: getNextTargetIndex()
         if (granted) {
             if (OverlayPermissionHelper.hasOverlayPermission(context)) {
                 pendingPhotoIndex = null
@@ -216,7 +245,7 @@ fun CameraCaptureScreen(
     }
 
     fun ensureCameraPermissionThenLaunch() {
-        val index = uiState.capturedImages.size
+        val index = getNextTargetIndex()
         when {
             !isCameraPermissionGranted(context) -> {
                 pendingPhotoIndex = index

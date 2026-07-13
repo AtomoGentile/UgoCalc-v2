@@ -30,7 +30,7 @@ data class SceneGraph(
 ) {
     companion object {
         /** Versione corrente dello schema SceneGraph attesa da prompt M1 e pipeline. */
-        const val SCHEMA_VERSION = 1
+        const val SCHEMA_VERSION = 2
     }
 }
 
@@ -65,6 +65,17 @@ enum class ScaleAnchorType {
 }
 
 /**
+ * Range di peso plausibile per un alimento basato sull'intuizione statistica dell'IA (piano V2 §4,
+ * §5 M4). È il "buon senso" della V1 iniettato nella V2: serve a M4 come guardrail per rigettare
+ * calcoli geometrici di M3 palesemente assurdi (es. peperoncino da 123g).
+ */
+@Serializable
+data class PlausibilityLimits(
+    @SerialName("peso_min_plausibile_g") val pesoMinG: Double,
+    @SerialName("peso_max_plausibile_g") val pesoMaxG: Double,
+)
+
+/**
  * Un alimento percepito da M1. Porta il nome canonico, eventuali alternative di identificazione
  * (che M4 confronta per l'ambiguità sui carboidrati), il grado di occlusione e le misure grezze da
  * cui M3 calcolerà il peso.
@@ -76,6 +87,8 @@ data class PerceivedFood(
     @SerialName("alternative_identificazione") val alternativeIdentificazione: List<String> = emptyList(),
     @SerialName("occlusione") val occlusione: OcclusionDegree = OcclusionDegree.NESSUNA,
     @SerialName("misure_grezze") val misureGrezze: RawMeasurements,
+    /** Range di peso plausibile basato sull'intuizione dell'IA (stile V1), usato da M4 come guardrail per M3. */
+    @SerialName("limiti_buon_senso") val limitiBuonSenso: PlausibilityLimits? = null,
     val confidenza: Confidence,
 )
 

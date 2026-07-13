@@ -39,7 +39,7 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         RecipeEntity::class,
         RecipeIngredientEntity::class,
     ],
-    version = 12, // Incrementato a 12 per gestire la migrazione distruttiva (automatic fallback)
+    version = 13, // Incrementato a 13 per gestire la migrazione distruttiva (automatic fallback) dopo cambio schema
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

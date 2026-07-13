@@ -206,12 +206,55 @@ class V2AnalysisPipeline(
         arbitratoMotivoMancato: String? = null,
     ): PipelineOutcome.Verificato {
         val (sceneFinale, stimeFinali, risoluzioni) = risolviAmbiguitaResidua(scene, stime)
+        val stimeGarantite = applicaGuardrailBuonSenso(sceneFinale, stimeFinali, verifica)
         val verificaFinale = if (risoluzioni.isEmpty()) verifica else verifica.copy(ambiguitaRisolta = risoluzioni)
-        val abbinamenti = matchNutrition(model, stimeFinali)
-        val nutrizione = NutritionCalculator.calculate(stimeFinali, abbinamenti)
-        val outcome = PipelineOutcome.Verificato(sceneFinale, stimeFinali, verificaFinale, nutrizione, arbitratoMotivoMancato, abbinamenti = abbinamenti)
+        val abbinamenti = matchNutrition(model, stimeGarantite)
+        val nutrizione = NutritionCalculator.calculate(stimeGarantite, abbinamenti)
+        val outcome = PipelineOutcome.Verificato(sceneFinale, stimeGarantite, verificaFinale, nutrizione, arbitratoMotivoMancato, abbinamenti = abbinamenti)
         val telemetryId = recordTelemetry(outcome, model, sessionMode)
         return outcome.copy(telemetryId = telemetryId)
+    }
+
+    /**
+     * Il "Garante del Buon Senso" (§4, §5 M4): se dopo M3 (e l'eventuale arbitrato M5) il peso
+     * calcolato geometricamente resta fuori dal range di plausibilità intuito dall'IA in M1,
+     * applichiamo una correzione di sicurezza. Evita i "mostri numerici" (es. peperoncino da 123g)
+     * quando le misure visive sballano macroscopicamente.
+     */
+    private fun applicaGuardrailBuonSenso(
+        scene: SceneGraph,
+        stime: List<WeightEstimate>,
+        verifica: VerificationReport
+    ): List<WeightEstimate> {
+        val nomiFlaggati = verifica.flaggati
+            .filter { it.motivo.contains("intuizione AI") }
+            .map { it.nomeAlimento }
+            .toSet()
+        if (nomiFlaggati.isEmpty()) return stime
+
+        return stime.map { stima ->
+            if (stima.nome !in nomiFlaggati) return@map stima
+            val food = scene.alimenti.find { it.nome == stima.nome } ?: return@map stima
+            val limiti = food.limitiBuonSenso ?: return@map stima
+
+            if (stima.pesoG > limiti.pesoMaxG) {
+                stima.copy(
+                    pesoG = limiti.pesoMaxG,
+                    catenaCalcolo = stima.catenaCalcolo.copy(
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoG.toInt()}g), limitato a ${limiti.pesoMaxG.toInt()}g]"
+                    )
+                )
+            } else if (stima.pesoG < limiti.pesoMinG) {
+                stima.copy(
+                    pesoG = limiti.pesoMinG,
+                    catenaCalcolo = stima.catenaCalcolo.copy(
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoG.toInt()}g), portato a ${limiti.pesoMinG.toInt()}g]"
+                    )
+                )
+            } else {
+                stima
+            }
+        }
     }
 
     /**

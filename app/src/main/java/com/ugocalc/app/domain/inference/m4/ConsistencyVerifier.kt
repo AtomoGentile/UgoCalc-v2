@@ -38,15 +38,38 @@ class ConsistencyVerifier {
         val flaggati = mutableListOf<FlaggedItem>()
 
         // --- Vincolo fisico: peso entro un intervallo tipico ---
-        val pesiFuori = estimates.filter { it.pesoG < PESO_MIN_G || it.pesoG > PESO_MAX_G }
+        val pesiFuoriTipico = estimates.filter { it.pesoG < PESO_MIN_G || it.pesoG > PESO_MAX_G }
         controlli += ConstraintCheck(
             nome = "peso entro intervallo tipico",
-            superato = pesiFuori.isEmpty(),
-            dettaglio = if (pesiFuori.isEmpty()) "tutti tra $PESO_MIN_G e $PESO_MAX_G g"
-            else pesiFuori.joinToString { "${it.nome}=${it.pesoG.toInt()}g" },
+            superato = pesiFuoriTipico.isEmpty(),
+            dettaglio = if (pesiFuoriTipico.isEmpty()) "tutti tra $PESO_MIN_G e $PESO_MAX_G g"
+            else pesiFuoriTipico.joinToString { "${it.nome}=${it.pesoG.toInt()}g" },
         )
-        pesiFuori.forEach {
+        pesiFuoriTipico.forEach {
             flaggati += FlaggedItem(it.nome, "peso ${it.pesoG.toInt()} g fuori dall'intervallo tipico", FlagType.VINCOLO_FISICO)
+        }
+
+        // --- Vincolo di BUON SENSO (INTUIZIONE AI): confronto M3 vs M1 (§4, §5 M4) ---
+        val pesiFuoriIntuizione = estimates.filter { est ->
+            val limiti = foodByName[est.nome]?.limitiBuonSenso ?: return@filter false
+            est.pesoG < limiti.pesoMinG || est.pesoG > limiti.pesoMaxG
+        }
+        controlli += ConstraintCheck(
+            nome = "buon senso (intuizione AI)",
+            superato = pesiFuoriIntuizione.isEmpty(),
+            dettaglio = if (pesiFuoriIntuizione.isEmpty()) "coerente con l'intuizione"
+            else pesiFuoriIntuizione.joinToString { est ->
+                val l = foodByName[est.nome]!!.limitiBuonSenso!!
+                "${est.nome}: calcolato ${est.pesoG.toInt()}g vs plausibile ${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g"
+            }
+        )
+        pesiFuoriIntuizione.forEach { est ->
+            val l = foodByName[est.nome]!!.limitiBuonSenso!!
+            flaggati += FlaggedItem(
+                est.nome,
+                "calcolo geometrico (${est.pesoG.toInt()}g) incoerente con l'intuizione AI (${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g)",
+                FlagType.VINCOLO_FISICO
+            )
         }
 
         // --- Vincolo fisico: densità superficiale del piatto (solo alimenti distesi) ---
