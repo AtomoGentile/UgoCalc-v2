@@ -26,6 +26,7 @@ object PerceptionPrompt {
         angleDescriptions: List<String?> = emptyList(),
         cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
+        pastoImageCount: Int = 0,
     ): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
         PERCEZIONE UNIFICATA della scena: ancoraggio di scala, inventario degli alimenti e misure
@@ -34,7 +35,7 @@ object PerceptionPrompt {
         modello come te non è affidabile nell'aritmetica né nella coerenza numerica tra più stime:
         il tuo compito è percepire e descrivere, non calcolare.
 
-        Ti vengono fornite una o più fotografie dello STESSO pasto, scattate seguendo SEMPRE questo
+        Ti vengono fornite ${if (pastoImageCount > 0) "$pastoImageCount foto" else "una o più foto"} dello STESSO pasto, scattate seguendo SEMPRE questo
         protocollo fisso (non casuale, puoi contarci): la PRIMA foto è ripresa dall'alto, con il
         telefono pressoché parallelo al piatto (inclinazione ~90°) — usala come riferimento
         principale per la forma del piatto e per "frazione_piatto", perché da questa angolazione la
@@ -48,7 +49,7 @@ object PerceptionPrompt {
         Considerale insieme come un'unica scena da analizzare: non trattarle come pasti distinti né
         duplicare gli alimenti già contati.
         ${angleReadingsBlock(angleDescriptions, cameraMetadatas)}
-        ${calibrationsBlock(calibrations)}
+        ${calibrationsBlock(calibrations, pastoImageCount)}
 
         IMMAGINI DI RIFERIMENTO: Oltre alle foto del pasto, ti sono state fornite delle immagini di
         riferimento per le calibrazioni dell'utente elencate sopra (se presenti). Usale per fare
@@ -195,10 +196,11 @@ object PerceptionPrompt {
      * Calibrazioni persistenti dell'utente (§13 punto 4): se M1 riconosce uno di questi oggetti,
      * deve usare il nome esatto in "descrizione" e la dimensione reale fornita qui.
      */
-    private fun calibrationsBlock(calibrations: List<ScaleCalibrationEntity>): String {
+    private fun calibrationsBlock(calibrations: List<ScaleCalibrationEntity>, pastoImageCount: Int): String {
         if (calibrations.isEmpty()) return ""
-        val righe = calibrations.map {
-            "- '${it.name}' (${it.type}): dimensione reale ${it.valueCm} cm" + (it.capacityMl?.let { ml -> ", capacità $ml ml" } ?: "")
+        val righe = calibrations.mapIndexed { index, cal ->
+            val imageRef = if (cal.imagePath != null) " (vedi Immagine di riferimento ${pastoImageCount + index + 1})" else ""
+            "- '${cal.name}' (${cal.type})$imageRef: dimensione reale ${cal.valueCm} cm" + (cal.capacityMl?.let { ml -> ", capacità $ml ml" } ?: "")
         }
         return "\nL'utente ha già calibrato i seguenti oggetti di riferimento. Se ne riconosci uno, usa il suo nome esatto nel campo 'descrizione' e riporta il valore di centimetri indicato:\n" +
             righe.joinToString("\n")

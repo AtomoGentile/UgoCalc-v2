@@ -53,7 +53,13 @@ class UnifiedPerceptionEngine @Inject constructor(
         }.let { executor.encodeImages(it, imageMimeType) }
 
         val allImageParts = pastoParts + calibrazioneParts
-        val prompt = PerceptionPrompt.build(sessionMode, angleDescriptions, cameraMetadatas, calibrations)
+        val prompt = PerceptionPrompt.build(
+            sessionMode = sessionMode,
+            angleDescriptions = angleDescriptions,
+            cameraMetadatas = cameraMetadatas,
+            calibrations = calibrations,
+            pastoImageCount = images.size
+        )
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, allImageParts)
             PerceptionOutcome.Riuscita(sceneGraph)

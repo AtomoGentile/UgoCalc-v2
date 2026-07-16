@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -18,6 +19,7 @@ data class BiasEvolutionUiState(
     val loading: Boolean = true,
     val consentGiven: Boolean = false,
     val v2ShadowModeEnabled: Boolean = false,
+    val v2VisibleModeEnabled: Boolean = false,
     /** Esito della decisione automatica (§13 punto 1, §20): il motore visibile in produzione, non più uno switch manuale. */
     val v2Promoted: Boolean = false,
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
@@ -43,15 +45,17 @@ class BiasEvolutionViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(
                 consentGiven = settings.biasDataConsentGiven,
                 v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
+                v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
             )
+            refresh()
         }.launchIn(viewModelScope)
-        refresh()
     }
 
     private fun refresh() {
         viewModelScope.launch {
             val corrections = biasCorrectionRepository.getAllCorrectionsWithUsageStats()
-            val v2Promoted = benchmarkRepository.evaluatePromotion().promoteV2
+            val settings = settingsRepository.settings.first()
+            val v2Promoted = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2
             _uiState.value = _uiState.value.copy(corrections = corrections, v2Promoted = v2Promoted, loading = false)
         }
     }
@@ -62,5 +66,9 @@ class BiasEvolutionViewModel @Inject constructor(
 
     fun setV2ShadowModeEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setV2ShadowModeEnabled(enabled) }
+    }
+
+    fun setV2VisibleModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setV2VisibleModeEnabled(enabled) }
     }
 }

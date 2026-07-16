@@ -133,8 +133,8 @@ class CameraCaptureViewModel @Inject constructor(
         val settings = settingsRepository.settings.first()
         val model = models.firstOrNull()
         // Non più uno switch manuale (§13 punto 1, §20): il benchmark pesato decide se la V2 ha
-        // già superato la V1 sul CHO, su un numero sufficiente di pasti pesati.
-        val v2VisibleEnabled = benchmarkRepository.evaluatePromotion().promoteV2 && model != null
+        // già superato la V1 sul CHO. DEBUG: l'utente può forzare l'uso della V2 dalle impostazioni bias.
+        val v2VisibleEnabled = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2 && model != null
         val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
         if (v2Result != null) {
             sessionStore.setV2Result(v2Result.outcome, v2Result.totals, v2Result.stime, v2Result.ambiguita)

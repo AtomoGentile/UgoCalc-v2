@@ -144,8 +144,16 @@ class BenchmarkRepository @Inject constructor(
      * migliore o pari a quella della V1 — il CHO è l'unità che conta davvero per l'utente, più
      * significativa del solo errore di peso per alimento. Sotto la soglia minima, o se manca la
      * metrica per uno dei due motori, resta su V1 per prudenza (dati insufficienti per decidere).
+     *
+     * DEBUG: Se [forceV2] è true (Impostazioni > BIAS), la promozione è forzata ignorando le metriche.
      */
-    suspend fun evaluatePromotion(minMeals: Int = 30): PromotionDecision {
+    suspend fun evaluatePromotion(minMeals: Int = 30, forceV2: Boolean = false): PromotionDecision {
+        if (forceV2) {
+            val meals = listMealsWithGroundTruth()
+            val v1 = computeEngineStats(meals, v1 = true)
+            val v2 = computeEngineStats(meals, v1 = false)
+            return PromotionDecision(true, meals.size, minMeals, v1, v2)
+        }
         val meals = listMealsWithGroundTruth()
         val v1 = computeEngineStats(meals, v1 = true)
         val v2 = computeEngineStats(meals, v1 = false)

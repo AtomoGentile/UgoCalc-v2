@@ -54,16 +54,29 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
     private var turnedDeg = 0f
     private var target: PhotoAngleTarget = PHOTO_ANGLE_TARGETS.first()
 
+    private var lastGx = 0f
+    private var lastGy = 0f
+    private var lastGz = 0f
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent != null) {
+            val oldTarget = target
             target = PhotoAngleTarget(
                 pitchDeg = intent.getFloatExtra(EXTRA_PITCH_DEG, target.pitchDeg),
                 turnDeg = intent.getFloatExtra(EXTRA_TURN_DEG, target.turnDeg),
                 label = intent.getStringExtra(EXTRA_LABEL) ?: target.label,
             )
             Log.d(TAG, "onStartCommand: target=$target")
+            
+            // Se il target è cambiato (es. passati da Foto 2 a Foto 3), azzeriamo la rotazione 
+            // misurata: ogni step di rotazione intorno al piatto è relativo alla posizione di 
+            // partenza di quello scatto (§13 punto 7, PhotoAngleTargets).
+            if (target.turnDeg != oldTarget.turnDeg || target.label != oldTarget.label) {
+                turnedDeg = 0f
+                lastGyroTimestampNs = null
+            }
         }
         // Azzerata qui, non in onDestroy: il chiamante legge LastReading subito dopo lo scatto,
         // prima che il service precedente sia stato fermato — se non la azzerassimo all'avvio,
@@ -146,6 +159,9 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         when (event.sensor.type) {
             Sensor.TYPE_ACCELEROMETER -> {
                 val (gx, gy, gz) = event.values
+                lastGx = gx
+                lastGy = gy
+                lastGz = gz
                 val gNorm = sqrt(gx * gx + gy * gy + gz * gz)
                 if (gNorm > 0f) {
                     val flatDeviationRad = acos((abs(gz) / gNorm).coerceIn(-1f, 1f))
@@ -162,7 +178,20 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
                 lastGyroTimestampNs = timestampNs
                 if (lastNs != null) {
                     val dtSeconds = (timestampNs - lastNs) / 1_000_000_000f
-                    turnedDeg += Math.toDegrees(rz.toDouble()).toFloat() * dtSeconds
+                    
+                    // Correzione asse di rotazione (§13 punto 7): la rotazione "intorno al piatto" 
+                    // avviene intorno all'asse verticale della gravità, non intorno all'asse Z 
+                    // del telefono (che cambia inclinazione). Proiettiamo la velocità angolare 
+                    // misurata (rx, ry, rz) sul vettore gravità corrente (lastGx, lastGy, lastGz).
+                    val gNorm = sqrt(lastGx * lastGx + lastGy * lastGy + lastGz * lastGz)
+                    if (gNorm > 0f) {
+                        val omegaV = (rx * lastGx + ry * lastGy + rz * lastGz) / gNorm
+                        // Android gyro: antiorario positivo. Per la bussola/rotazione utente
+                        // girare a destra (orario) aumenta l'angolo. Usando += omegaV
+                        // (che è -rz quando il telefono è piatto e rivolto verso l'alto),
+                        // otteniamo un incremento per rotazioni orarie intorno al piatto.
+                        turnedDeg += Math.toDegrees(omegaV.toDouble()).toFloat() * dtSeconds
+                    }
                 }
             }
             else -> return

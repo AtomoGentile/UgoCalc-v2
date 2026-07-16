@@ -99,18 +99,33 @@ fun BiasEvolutionScreen(
                         Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
                     }
                     Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                        Text("Motore visibile: decisione automatica", fontWeight = FontWeight.Bold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                                Text("Motore visibile: forza V2", fontWeight = FontWeight.Bold)
+                                Text(
+                                    "Forza l'uso della V2 anche se il benchmark non ha ancora raggiunto la soglia di precisione " +
+                                        "o il numero minimo di pasti pesati (§13 punto 1).",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = UgoGrey,
+                                )
+                            }
+                            Switch(checked = uiState.v2VisibleModeEnabled, onCheckedChange = { viewModel.setV2VisibleModeEnabled(it) })
+                        }
                         Text(
-                            "Non è più uno switch manuale: il risultato che vedi dopo lo scatto passa da solo " +
-                                "alla V2 quando il benchmark (\"Benchmark V1 vs V2\" sotto) mostra che supera la " +
+                            "Decisione automatica",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        Text(
+                            "Il sistema passa da solo alla V2 quando il benchmark (\"Benchmark V1 vs V2\" sotto) mostra che supera la " +
                                 "V1 sul CHO, su un numero sufficiente di pasti pesati. Finché non succede, resti " +
-                                "sulla V1. Se la V2 non riesce comunque (foto scadenti, errore di rete o di " +
-                                "formato), l'analisi ricade sulla V1 nella stessa sessione.",
+                                "sulla V1 (a meno di non forzarla sopra).",
                             style = MaterialTheme.typography.bodySmall,
                             color = UgoGrey,
                         )
                         Text(
-                            if (uiState.v2Promoted) "Oggi in uso: V2" else "Oggi in uso: V1",
+                            if (uiState.v2Promoted) "STATO ATTUALE: V2 PROMOSSA" else "STATO ATTUALE: V1 (V2 non ancora pronta)",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.Bold,
                             color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,

@@ -37,17 +37,33 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "2.1.0",
+            highlights = listOf(
+                "Promozione motore V2: il nuovo motore di inferenza può ora essere impostato come predefinito per le analisi (visible mode).",
+                "Gestione Calibrazioni Scala: nuova sezione per salvare le dimensioni di piatti, stoviglie e riferimenti corporei (Impostazioni > Calibrazioni scala).",
+                "Apprendimento automatico (Bias Correction): il ciclo è ora chiuso. Inserendo il peso vero del pasto dopo l'analisi, l'app impara a correggere sistematicamente le stime future.",
+                "Decomposizione piatti composti: integrazione con il database ricette per scorporare i carboidrati di lasagne, panini e piatti occlusi.",
+                "Modalità Casa/Ristorante: switch rapido in Homepage con supporto a temi colore personalizzati per ogni contesto (Impostazioni > Accessibilità).",
+                "Dashboard Benchmark: visualizzazione quantitativa del miglioramento della precisione tra V1 e V2 basata sui tuoi pasti reali.",
+                "Backup completo: esportazione e ripristino estesi a record V2, calibrazioni e storico di apprendimento."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.1.0",
+                perceptionPrompt = "1.1.0",
+                physicalData = "1.1.0",
+                biasCalculator = "1.1.0",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.0.0",
             highlights = listOf(
-                "Introduzione del motore di inferenza V2 (modalità shadow): V2 esegue una pipeline M0→M8 in background per raccogliere telemetria e valutare la qualità delle stime senza sostituire immediatamente V1 nella UI.",
-                "Valutazione automatica dei benchmark: aggiunto BenchmarkReportWorker che aggrega i pasti con ground truth e valuta la promozione di V2 basata sulla percentuale di pasti con errore CHO entro 10g.",
-                "Promozione automatica: se le metriche soddisfano i criteri, V2 viene promossa a 'visible mode' tramite la nuova impostazione persistente v2VisibleModeEnabled.",
-                "Integrazione Hilt + WorkManager: HiltWorkerFactory registrato in Application per permettere l'iniezione nei Worker; WorkManager fornito via un modulo DI.",
-                "Logica di promozione estratta in BenchmarkPromotionHandler per facilitare i test unitari e la manutenzione.",
-                "Scheduling: il worker di valutazione è schedulato come lavoro periodico (giornaliero) e usa enqueueUniquePeriodicWork per evitare duplicati.",
-                "Nuova impostazione persistente: v2VisibleModeEnabled (Settings) per abilitare V2 come motore visibile all'utente.",
-                "Test: aggiunti unit test per la logica di promozione (BenchmarkPromotionHandlerTest).",
-                "Bug fix e refactor minori: migliorata l'integrazione delle preferenze e isolata la logica di promotion per evitare effetti collaterali in fase di test."
+                "Introduzione del motore di inferenza V2 (modalità shadow): esecuzione in background per telemetria e valutazione qualità.",
+                "Valutazione automatica benchmark: nuovo worker per l'aggregazione delle metriche di precisione.",
+                "Integrazione Hilt + WorkManager: architettura robusta per i processi in background.",
+                "Promozione automatica: logica basata sulla percentuale di pasti con errore CHO contenuto.",
+                "Supporto Firebase App Distribution per aggiornamenti rapidi del canale tester."
             ),
             moduleVersions = ModuleVersions(
                 inferenceEngine = "2.0.0",
@@ -55,6 +71,14 @@ object Changelog {
                 physicalData = "1.0.0",
                 biasCalculator = "1.0.0",
             ),
+        ),
+        ChangelogEntry(
+            version = "1.0.0",
+            highlights = listOf(
+                "Versione iniziale di UgoCalc: stima carboidrati tramite visione artificiale singola.",
+                "Abbinamento tabelle nutrizionali locali e ricerca online (OpenFoodFacts).",
+                "Gestione cronologia, preferiti e backup base."
+            )
         ),
     )
 }

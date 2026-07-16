@@ -107,6 +107,15 @@ fun VisionResultsScreen(
                         onClick = { viewModel.receiveCho() },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                     ) { Text("Ricevi i CHO") }
+
+                    if (!uiState.usingV2Engine) {
+                        androidx.compose.material3.TextButton(
+                            onClick = { viewModel.saveWeightsOnly() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("Salva solo pesi (senza CHO)", color = Color.Gray)
+                        }
+                    }
                 }
             }
 

@@ -312,6 +312,23 @@ class GeminiCompletionClient @Inject constructor(
         putJsonObject("generationConfig") {
             put("responseMimeType", "application/json")
         }
+        // Disabilita i filtri di sicurezza per evitare falsi positivi sulle foto di cibo 
+        // (es. coltelli o forme ambigue) che bloccano l'intera risposta (§5 M1).
+        putJsonArray("safetySettings") {
+            val categories = listOf(
+                "HARM_CATEGORY_HARASSMENT",
+                "HARM_CATEGORY_HATE_SPEECH",
+                "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                "HARM_CATEGORY_DANGEROUS_CONTENT",
+                "HARM_CATEGORY_CIVIC_INTEGRITY"
+            )
+            categories.forEach { category ->
+                addJsonObject {
+                    put("category", category)
+                    put("threshold", "BLOCK_NONE")
+                }
+            }
+        }
     }
 
     private fun extractText(rawResponseBody: String): String {
