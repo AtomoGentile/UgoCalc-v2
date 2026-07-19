@@ -28,7 +28,6 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.model.OfficialFileType
 import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -61,7 +60,7 @@ class BackupRepository @Inject constructor(
 ) {
     suspend fun exportAll(): String {
         val history = historyDao.getAllOnce()
-        val historyIndexById = history.withIndex().associate { (index, entity) -> entity.id to index }
+        val historyIndexById = history.indices.associateBy({ history[it].id }) { it }
 
         val v2Records = v2AnalysisRecordDao.getAll().map {
             V2AnalysisRecordDto(

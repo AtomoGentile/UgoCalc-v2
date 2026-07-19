@@ -11,7 +11,6 @@ import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import kotlin.math.abs
 import kotlin.math.pow
@@ -27,7 +26,7 @@ import javax.inject.Singleton
  * bias stabile. Interamente automatico: nessuna decisione dell'owner nel loop (§8, "Questo è il
  * meccanismo di auto-miglioramento del sistema").
  *
- * [consentGiven] è sempre esplicito a carico del chiamante (mai letto da qui): questa classe non
+ * `consentGiven` è sempre esplicito a carico del chiamante (mai letto da qui): questa classe non
  * dipende da [SettingsRepository] per restare testabile senza un Context Android. Il consenso
  * dell'utente (Impostazioni > richiesta trattamento dati per l'identificazione del bias) va
  * verificato dal chiamante prima di invocare [recalculate] o [currentFactor] — con consenso non
@@ -68,15 +67,15 @@ class BiasCorrectionRepository @Inject constructor(
         val observations = observationsFor(sessionMode.name, strategy.name, aiModelId, foodCategory)
 
         val result = BiasCorrectionCalculator.calculate(observations)
-        if (result is BiasCorrectionResult.Applicabile) {
+        (result as? BiasCorrectionResult.Applicabile)?.let { applicable ->
             biasCorrectionDao.upsert(
                 BiasCorrectionEntity(
                     sessionMode = sessionMode.name,
                     strategy = strategy.name,
                     aiModelId = aiModelId,
                     foodCategory = foodCategory.name,
-                    factor = result.fattore,
-                    sampleCount = result.campione,
+                    factor = applicable.fattore,
+                    sampleCount = applicable.campione,
                     updatedAtEpochMillis = System.currentTimeMillis(),
                 ),
             )
@@ -100,10 +99,10 @@ class BiasCorrectionRepository @Inject constructor(
         for (segment in segments) {
             val sessionMode = SessionMode.entries.firstOrNull { it.name == segment.sessionMode } ?: continue
             val records = analysisDao.getWithGroundTruth(sessionMode.name, segment.aiModelId)
-            val presentCombos = records.flatMap { record ->
+            val presentCombos = records.asSequence().flatMap { record ->
                 json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
                     .map { estimate -> estimate.strategia to FoodCategoryRouter.categorize(estimate.nome) }
-            }.distinct()
+            }.distinct().toList()
             for ((strategy, foodCategory) in presentCombos) {
                 recalculate(sessionMode, strategy, segment.aiModelId, foodCategory, consentGiven)
             }
@@ -146,7 +145,7 @@ class BiasCorrectionRepository @Inject constructor(
         return records.flatMap { record ->
             val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
             val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-            estimates.filter { it.strategia.name == strategy && FoodCategoryRouter.categorize(it.nome) == foodCategory }.mapNotNull { estimate ->
+            estimates.filter { (it.strategia.name == strategy) && (FoodCategoryRouter.categorize(it.nome) == foodCategory) }.mapNotNull { estimate ->
                 groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
             }
         }

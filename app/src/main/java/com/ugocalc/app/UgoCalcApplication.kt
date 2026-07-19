@@ -3,7 +3,6 @@ package com.ugocalc.app
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.os.Build
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import dagger.hilt.android.HiltAndroidApp
 import androidx.hilt.work.HiltWorkerFactory
@@ -47,7 +46,6 @@ class UgoCalcApplication : Application(), Configuration.Provider {
     }
 
     private fun createNotificationChannel() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
         val channel = NotificationChannel(
             ANALYSIS_NOTIFICATION_CHANNEL_ID,
             "Analisi completate",

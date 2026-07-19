@@ -136,6 +136,7 @@ class V2AnalysisPipeline(
         imageMimeType: String,
         sessionMode: SessionMode,
         model: AiModel,
+        calibrations: List<ScaleCalibrationEntity>? = null,
     ): PipelineOutcome {
         val ingestion = qualityGate.assess(photos.map { it.quality })
         if (ingestion.tutteScadenti) return PipelineOutcome.NessunaFotoValida(ingestion.scartate)
@@ -148,8 +149,8 @@ class V2AnalysisPipeline(
         val angoliValidi = fotoValide.map { it.quality.angleDescription }
         val metadataValidi = fotoValide.map { it.quality.cameraMetadata }
 
-        val calibrations = getCalibrations()
-        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, metadataValidi, calibrations)) {
+        val activeCalibrations = calibrations ?: getCalibrations()
+        val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, metadataValidi, activeCalibrations)) {
             is PerceptionOutcome.FallbackAV1 -> return PipelineOutcome.FallbackAV1(esito.motivo)
             is PerceptionOutcome.Riuscita -> esito.sceneGraph
         }

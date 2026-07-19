@@ -9,12 +9,12 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import android.widget.TextView
+import com.ugocalc.app.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlin.math.abs
 import kotlin.math.acos
@@ -70,10 +70,15 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             )
             Log.d(TAG, "onStartCommand: target=$target")
             
-            // Se il target è cambiato (es. passati da Foto 2 a Foto 3), azzeriamo la rotazione 
-            // misurata: ogni step di rotazione intorno al piatto è relativo alla posizione di 
-            // partenza di quello scatto (§13 punto 7, PhotoAngleTargets).
-            if (target.turnDeg != oldTarget.turnDeg || target.label != oldTarget.label) {
+            // Se passiamo dalla foto dall'alto (Foto 1) alla prima foto inclinata (Foto 2),
+            // o se ripartiamo da capo, azzeriamo la rotazione: la Foto 2 definisce lo zero (0°)
+            // per tutto il giro intorno al piatto (§ richiesta utente).
+            if ((oldTarget.pitchDeg == 90f) && (target.pitchDeg != 90f)) {
+                turnedDeg = 0f
+                lastGyroTimestampNs = null
+            }
+            // Se la nuova etichetta contiene "Foto 1" o "Foto 2", resettiamo comunque per sicurezza
+            if (target.label.contains("Foto 1") || target.label.contains("Foto 2")) {
                 turnedDeg = 0f
                 lastGyroTimestampNs = null
             }
@@ -100,12 +105,7 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         }
         windowManager = manager
 
-        val overlayType = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-        } else {
-            @Suppress("DEPRECATION")
-            WindowManager.LayoutParams.TYPE_PHONE
-        }
+        val overlayType = WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
 
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.WRAP_CONTENT,
@@ -140,7 +140,7 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
 
     private fun startSensors() {
         if (sensorManager != null) return
-        val manager = getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+        val manager = getSystemService(SENSOR_SERVICE) as? SensorManager
         if (manager == null) {
             Log.d(TAG, "startSensors: SensorManager non disponibile")
             return
@@ -162,7 +162,7 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
                 lastGx = gx
                 lastGy = gy
                 lastGz = gz
-                val gNorm = sqrt(gx * gx + gy * gy + gz * gz)
+                val gNorm = sqrt((gx * gx) + (gy * gy) + (gz * gz))
                 if (gNorm > 0f) {
                     val flatDeviationRad = acos((abs(gz) / gNorm).coerceIn(-1f, 1f))
                     pitchDeg = 90f - Math.toDegrees(flatDeviationRad.toDouble()).toFloat()
@@ -207,7 +207,7 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             pitchDeg = pitchDeg,
             turnDeg = turnedDeg,
             target = target,
-            motionRadPerSec = currentMotionRadPerSec
+            motionRadPerSec = currentMotionRadPerSec,
         )
     }
 
@@ -224,19 +224,23 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
         
         val aligned = pitchAligned && (!showTurnGuidance || turnAligned) && !tooMuchMotion
 
-        val pitchLine = "Inclinazione: ${"%.0f".format(pitchDeg)}° (target ${"%.0f".format(target.pitchDeg)}°)"
-        val turnLine = if (showTurnGuidance) {
-            "\nRotazione: ${"%.0f".format(turnedDeg)}° (target ${"%.0f".format(target.turnDeg)}°)"
-        } else {
-            ""
-        }
-        val motionLine = if (tooMuchMotion) {
-            "\nMOVIMENTO: ${"%.1f".format(currentMotionRadPerSec)} rad/s (FERMO!)"
-        } else {
-            "\nMovimento: ${"%.1f".format(currentMotionRadPerSec)} rad/s"
+        val text = buildString {
+            append(target.label)
+            append("\n")
+            append(getString(R.string.overlay_pitch_format, pitchDeg, target.pitchDeg))
+            if (showTurnGuidance) {
+                append("\n")
+                append(getString(R.string.overlay_turn_format, turnedDeg, target.turnDeg))
+            }
+            append("\n")
+            if (tooMuchMotion) {
+                append(getString(R.string.overlay_motion_too_much, currentMotionRadPerSec))
+            } else {
+                append(getString(R.string.overlay_motion_format, currentMotionRadPerSec))
+            }
         }
         
-        view.text = "${target.label}\n$pitchLine$turnLine$motionLine"
+        view.text = text
         view.setTextColor(if (aligned) ALIGNED_COLOR else MISALIGNED_COLOR)
     }
 
@@ -297,5 +301,5 @@ data class MeasuredAngle(
     val pitchDeg: Float,
     val turnDeg: Float,
     val target: PhotoAngleTarget,
-    val motionRadPerSec: Double = 0.0
+    val motionRadPerSec: Double = 0.0,
 )

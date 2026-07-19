@@ -169,7 +169,10 @@ fun UgoCalcNavHost(navController: NavHostController) {
             route = Routes.HISTORY_DETAIL,
             arguments = listOf(navArgument("historyId") { type = NavType.StringType }),
         ) {
-            HistoryDetailScreen(onBack = safeBack)
+            HistoryDetailScreen(
+                onBack = safeBack,
+                onOpenV2Details = { recordId -> navController.navigate(Routes.v2ResultRoute(recordId)) }
+            )
         }
 
         composable(Routes.BIAS_EVOLUTION) {
@@ -178,6 +181,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenGroundTruthEntry = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
                 onOpenBenchmarkGroundTruthEntry = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
                 onOpenBenchmarkDashboard = { navController.navigate(Routes.BENCHMARK_DASHBOARD) },
+                onOpenV2Details = { recordId -> navController.navigate(Routes.v2ResultRoute(recordId)) },
             )
         }
         composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = safeBack) }
@@ -248,7 +252,16 @@ fun UgoCalcNavHost(navController: NavHostController) {
             TableEditorScreen(onBack = safeBack)
         }
 
-        composable(Routes.V2_RESULT) { V2ResultScreen(onBack = safeBack) }
+        composable(
+            route = Routes.V2_RESULT,
+            arguments = listOf(navArgument("recordId") { 
+                type = NavType.StringType
+                nullable = true
+                defaultValue = null
+            })
+        ) { 
+            V2ResultScreen(onBack = safeBack) 
+        }
         composable(Routes.AMBIGUITY_RESOLUTION) { AmbiguityResolutionScreen(onBack = safeBack) }
     }
 }

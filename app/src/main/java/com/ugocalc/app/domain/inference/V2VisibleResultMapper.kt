@@ -22,6 +22,7 @@ fun PipelineOutcome.Verificato.toModelVisionSuccess(model: AiModel): ModelVision
             nome = stima.nome,
             pesoStimatoG = stima.pesoG,
             commento = stima.catenaCalcolo.sintesi,
+            ragionamento = stima.ragionamento,
             confidenza = stima.confidenza,
         )
     }
@@ -32,6 +33,7 @@ fun PipelineOutcome.Verificato.toModelVisionSuccess(model: AiModel): ModelVision
     }
     val result = VisionAnalysisResult(
         alimenti = alimenti,
+        ragionamento = sceneGraph.ragionamento,
         confidenzaGlobale = confidenzaGlobale,
         fattoriIncertezza = verifica.flaggati.map { it.motivo },
         stimeCautelative = verifica.ambiguitaRisolta.map { it.nomeScelto },

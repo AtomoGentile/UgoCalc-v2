@@ -34,9 +34,9 @@ import com.ugocalc.app.ui.theme.UgoGrey
 @Composable
 fun AmbiguityResolutionScreen(
     onBack: () -> Unit,
-    viewModel: V2ResultViewModel = hiltViewModel() // Riusiamo lo stesso ViewModel semplice
+    viewModel: V2ResultViewModel = hiltViewModel(), // Riusiamo lo stesso ViewModel semplice
 ) {
-    val session by viewModel.session.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -64,7 +64,7 @@ fun AmbiguityResolutionScreen(
                 HorizontalDivider()
             }
 
-            if (session.v2AmbiguitaRisolte.isEmpty()) {
+            if (uiState.ambiguities.isEmpty()) {
                 item {
                     Text(
                         "Nessun'ambiguità è stata rilevata o risolta in questa analisi.",
@@ -74,7 +74,7 @@ fun AmbiguityResolutionScreen(
                     )
                 }
             } else {
-                items(session.v2AmbiguitaRisolte) { risoluzione ->
+                items(uiState.ambiguities) { risoluzione ->
                     AmbiguityResolutionCard(risoluzione)
                     HorizontalDivider()
                 }

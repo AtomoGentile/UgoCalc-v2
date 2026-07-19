@@ -2,10 +2,12 @@ package com.ugocalc.app.ui.bias
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.data.repository.V2TelemetryRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +25,7 @@ data class BiasEvolutionUiState(
     /** Esito della decisione automatica (§13 punto 1, §20): il motore visibile in produzione, non più uno switch manuale. */
     val v2Promoted: Boolean = false,
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
+    val recentV2Records: List<V2AnalysisRecordEntity> = emptyList(),
 )
 
 /**
@@ -36,6 +39,7 @@ class BiasEvolutionViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val biasCorrectionRepository: BiasCorrectionRepository,
     private val benchmarkRepository: BenchmarkRepository,
+    private val telemetryRepository: V2TelemetryRepository,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(BiasEvolutionUiState())
     val uiState: StateFlow<BiasEvolutionUiState> = _uiState
@@ -54,9 +58,15 @@ class BiasEvolutionViewModel @Inject constructor(
     private fun refresh() {
         viewModelScope.launch {
             val corrections = biasCorrectionRepository.getAllCorrectionsWithUsageStats()
+            val recentV2 = telemetryRepository.getAllRecords().take(10)
             val settings = settingsRepository.settings.first()
             val v2Promoted = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2
-            _uiState.value = _uiState.value.copy(corrections = corrections, v2Promoted = v2Promoted, loading = false)
+            _uiState.value = _uiState.value.copy(
+                corrections = corrections, 
+                recentV2Records = recentV2,
+                v2Promoted = v2Promoted, 
+                loading = false
+            )
         }
     }
 

@@ -21,6 +21,8 @@ data class SceneGraph(
      * invece di passare in silenzio. M2 rifiuta (errore gestito) le versioni non riconosciute.
      */
     @SerialName("schema_version") val schemaVersion: Int,
+    /** Spiegazione testuale del ragionamento fatto dall'IA per analizzare la scena nel suo complesso (§ richiesta utente). */
+    val ragionamento: String = "",
     /** Ancore di scala individuate nella scena, ciascuna con fonte e confidenza (§5 M1, §8). */
     val ancore: List<ScaleAnchor>,
     /** Inventario canonico degli alimenti, con misure grezze e occlusioni. */
@@ -30,7 +32,7 @@ data class SceneGraph(
 ) {
     companion object {
         /** Versione corrente dello schema SceneGraph attesa da prompt M1 e pipeline. */
-        const val SCHEMA_VERSION = 2
+        const val SCHEMA_VERSION = 3
     }
 }
 
@@ -83,6 +85,8 @@ data class PlausibilityLimits(
 @Serializable
 data class PerceivedFood(
     val nome: String,
+    /** Spiegazione testuale del perché è stato identificato così o delle misure scelte (§ richiesta utente). */
+    val ragionamento: String = "",
     /** Identificazioni alternative plausibili; se cambiano molto i CHO, M4 le segnala come ambigue. */
     @SerialName("alternative_identificazione") val alternativeIdentificazione: List<String> = emptyList(),
     @SerialName("occlusione") val occlusione: OcclusionDegree = OcclusionDegree.NESSUNA,

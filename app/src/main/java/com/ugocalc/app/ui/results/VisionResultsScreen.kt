@@ -147,6 +147,15 @@ private fun ModelResultCard(
                 }
                 is ModelVisionOutcome.Success -> {
                     Text("Confidenza globale: ${outcome.result.confidenzaGlobale}", style = MaterialTheme.typography.bodySmall)
+                    if (outcome.result.ragionamento.isNotEmpty()) {
+                        Text(
+                            outcome.result.ragionamento,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                            color = Color.Gray,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
                     outcome.result.alimenti.forEach { food ->
                         val isCautious = food.nome in outcome.result.stimeCautelative
                         Text(
@@ -163,6 +172,14 @@ private fun ModelResultCard(
                             )
                         }
                         Text(food.commento, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        if (food.ragionamento.isNotEmpty()) {
+                            Text(
+                                food.ragionamento,
+                                style = MaterialTheme.typography.bodySmall,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                color = Color.Gray.copy(alpha = 0.8f),
+                            )
+                        }
                         food.decomposition?.let { d ->
                             Text(
                                 "Decomposed from '${d.recipeName}' — ${(d.percentageOfRecipe * 100).toInt()}%",

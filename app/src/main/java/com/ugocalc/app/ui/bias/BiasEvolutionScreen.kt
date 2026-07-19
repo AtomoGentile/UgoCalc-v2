@@ -50,6 +50,7 @@ fun BiasEvolutionScreen(
     onOpenGroundTruthEntry: () -> Unit,
     onOpenBenchmarkGroundTruthEntry: () -> Unit,
     onOpenBenchmarkDashboard: () -> Unit,
+    onOpenV2Details: (Long) -> Unit,
     viewModel: BiasEvolutionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -166,6 +167,46 @@ fun BiasEvolutionScreen(
                     HorizontalDivider()
                 }
             }
+
+            if (uiState.recentV2Records.isNotEmpty()) {
+                item {
+                    Text(
+                        "Ultime analisi V2",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+                    )
+                }
+                items(uiState.recentV2Records) { record ->
+                    V2RecordSummaryRow(record, onOpenV2Details)
+                    HorizontalDivider()
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun V2RecordSummaryRow(record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity, onClick: (Long) -> Unit) {
+    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
+    Card(
+        onClick = { onClick(record.id) },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                "${dateFormat.format(Date(record.analyzedAtEpochMillis))} - ${record.sessionMode}",
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Modello: ${record.aiModelId}",
+                style = MaterialTheme.typography.bodySmall,
+                color = UgoGrey
+            )
+            Text(
+                "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
+                style = MaterialTheme.typography.bodySmall,
+                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+            )
         }
     }
 }

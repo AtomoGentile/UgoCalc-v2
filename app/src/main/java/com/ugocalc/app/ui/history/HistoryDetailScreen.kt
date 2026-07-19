@@ -30,6 +30,7 @@ import com.ugocalc.app.ui.components.ugoTopAppBarColors
 @Composable
 fun HistoryDetailScreen(
     onBack: () -> Unit,
+    onOpenV2Details: (Long) -> Unit,
     viewModel: HistoryDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -53,6 +54,15 @@ fun HistoryDetailScreen(
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp),
                         )
+                    }
+
+                    uiState.v2Record?.let { record ->
+                        androidx.compose.material3.Button(
+                            onClick = { onOpenV2Details(record.id) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                        ) {
+                            Text("Mostra analisi V2 (Shadow)")
+                        }
                     }
                 }
             }

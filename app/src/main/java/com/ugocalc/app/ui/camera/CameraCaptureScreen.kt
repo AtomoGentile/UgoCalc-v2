@@ -23,13 +23,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Check
+import com.ugocalc.app.ui.theme.UgoGrey
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -63,6 +67,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.ui.components.LoadingOverlay
 import com.ugocalc.app.util.OverlayPermissionHelper
@@ -149,7 +154,7 @@ fun CameraCaptureScreen(
         stopAngleOverlay()
         val file = pendingCapturePath?.let(::File)
         pendingCapturePath = null
-        if (success && file != null) {
+        if (success && (file != null)) {
             // Nessuna decodifica/ricompressione: i byte del JPEG scritto dalla fotocamera di
             // sistema restano intatti (anche verso le API AI) — la rotazione (se il tag EXIF la
             // richiede) viene applicata solo alle Bitmap mostrate in anteprima, vedi PhotoGallery
@@ -184,7 +189,7 @@ fun CameraCaptureScreen(
     // (§ bug riportato: "l'app non si ricorda da che angolazioni ho fatto la foto").
     fun getNextTargetIndex(): Int {
         val images = uiState.capturedImages
-        val usedLabels = images.mapNotNull { it.measuredAngle?.target?.label }.toSet()
+        val usedLabels = images.asSequence().mapNotNull { it.measuredAngle?.target?.label }.toSet()
         val firstUnused = PHOTO_ANGLE_TARGETS.indexOfFirst { it.label !in usedLabels }
         
         // Se non abbiamo dati sugli angoli (es. permesso overlay negato) o se abbiamo già coperto
@@ -278,12 +283,14 @@ fun CameraCaptureScreen(
                     onRemove = {
                         viewModel.removePhoto(currentZoomIndex)
                         zoomIndex = null
-                    },
-                    onClose = { zoomIndex = null },
-                )
+                    }
+                ) { zoomIndex = null }
             } else {
                 PhotoGallery(
                     images = images.map { it.bytes },
+                    availableCalibrations = uiState.availableCalibrations,
+                    selectedCalibrationIds = uiState.selectedCalibrationIds,
+                    onToggleCalibration = { viewModel.toggleCalibrationSelection(it) },
                     onAddAnother = ::ensureCameraPermissionThenLaunch,
                     onSelect = { index -> zoomIndex = index },
                     onConfirm = { viewModel.confirmPhotos(selectedModels) },
@@ -316,6 +323,9 @@ fun CameraCaptureScreen(
 @Composable
 private fun PhotoGallery(
     images: List<ByteArray>,
+    availableCalibrations: List<ScaleCalibrationEntity> = emptyList(),
+    selectedCalibrationIds: Set<Long> = emptySet(),
+    onToggleCalibration: (Long) -> Unit = {},
     onAddAnother: () -> Unit,
     onSelect: (Int) -> Unit,
     onConfirm: () -> Unit,
@@ -334,12 +344,43 @@ private fun PhotoGallery(
             modifier = Modifier.fillMaxWidth().height(116.dp),
         ) {
             itemsIndexed(images) { index, bytes ->
-                PhotoThumbnail(imageBytes = bytes, onClick = { onSelect(index) })
+                PhotoThumbnail(imageBytes = bytes) { onSelect(index) }
             }
             if (images.size < MAX_PHOTOS) {
                 item { AddPhotoTile(onClick = onAddAnother) }
             }
         }
+
+        if (availableCalibrations.isNotEmpty()) {
+            Text(
+                "Elementi di calibrazione visibili",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
+            )
+            Text(
+                "Seleziona manualmente quali dei tuoi oggetti calibrati sono presenti nelle foto per una scala più precisa.",
+                style = MaterialTheme.typography.bodySmall,
+                color = UgoGrey,
+                modifier = Modifier.padding(bottom = 8.dp),
+            )
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                items(availableCalibrations) { cal ->
+                    val selected = cal.id in selectedCalibrationIds
+                    FilterChip(
+                        selected = selected,
+                        onClick = { onToggleCalibration(cal.id) },
+                        label = { Text(cal.name) },
+                        leadingIcon = if (selected) {
+                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
+                        } else null,
+                    )
+                }
+            }
+        }
+
         Row(
             modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -398,7 +439,7 @@ private fun AddPhotoTile(onClick: () -> Unit) {
 @Composable
 private fun PhotoZoomReview(imageBytes: ByteArray, onRemove: () -> Unit, onClose: () -> Unit) {
     val bitmap = remember(imageBytes) { decodeUprightBitmapForDisplay(imageBytes) }
-    var scale by remember(imageBytes) { mutableStateOf(1f) }
+    var scale by remember(imageBytes) { androidx.compose.runtime.mutableFloatStateOf(1f) }
     var offset by remember(imageBytes) { mutableStateOf(Offset.Zero) }
     var containerSize by remember(imageBytes) { mutableStateOf(IntSize.Zero) }
 
@@ -457,7 +498,7 @@ private fun exifRotationDegrees(imageBytes: ByteArray): Int = try {
         ExifInterface.ORIENTATION_ROTATE_270 -> 270
         else -> 0
     }
-} catch (e: Exception) {
+} catch (_: Exception) {
     0
 }
 
@@ -495,7 +536,7 @@ private fun decodeUprightBitmap(imageBytes: ByteArray, maxDimensionPx: Int): Bit
     BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
 
     var sampleSize = 1
-    while (boundsOptions.outWidth / sampleSize > maxDimensionPx || boundsOptions.outHeight / sampleSize > maxDimensionPx) {
+    while ((boundsOptions.outWidth / sampleSize > maxDimensionPx) || (boundsOptions.outHeight / sampleSize > maxDimensionPx)) {
         sampleSize *= 2
     }
 

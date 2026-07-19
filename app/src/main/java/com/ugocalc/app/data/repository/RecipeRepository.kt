@@ -10,7 +10,7 @@ import javax.inject.Singleton
 
 @Singleton
 class RecipeRepository @Inject constructor(
-    private val recipeDao: RecipeDao
+    private val recipeDao: RecipeDao,
 ) {
     val allRecipes: Flow<List<Recipe>> = recipeDao.getAll().map { list ->
         list.map { toDomain(it) }
@@ -18,12 +18,6 @@ class RecipeRepository @Inject constructor(
 
     suspend fun getRecipeById(id: Long): Recipe? {
         val entity = recipeDao.getById(id) ?: return null
-        val ingredients = recipeDao.getIngredientsForRecipe(entity.id).map { toDomain(it) }
-        return toDomain(entity, ingredients)
-    }
-
-    suspend fun findByName(name: String): Recipe? {
-        val entity = recipeDao.findByName(name) ?: return null
         val ingredients = recipeDao.getIngredientsForRecipe(entity.id).map { toDomain(it) }
         return toDomain(entity, ingredients)
     }
@@ -51,10 +45,6 @@ class RecipeRepository @Inject constructor(
         }
         recipeDao.insertIngredients(ingredients)
         return recipeId
-    }
-
-    suspend fun deleteRecipe(id: Long) {
-        recipeDao.deleteById(id)
     }
 
     private fun toDomain(entity: RecipeEntity, ingredients: List<RecipeIngredient> = emptyList()) = Recipe(

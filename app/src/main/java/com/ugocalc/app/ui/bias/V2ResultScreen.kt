@@ -35,9 +35,9 @@ import com.ugocalc.app.ui.theme.UgoGrey
 @Composable
 fun V2ResultScreen(
     onBack: () -> Unit,
-    viewModel: V2ResultViewModel = hiltViewModel()
+    viewModel: V2ResultViewModel = hiltViewModel(),
 ) {
-    val session by viewModel.session.collectAsState()
+    val uiState by viewModel.uiState.collectAsState()
 
     Scaffold(
         topBar = {
@@ -61,10 +61,19 @@ fun V2ResultScreen(
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(vertical = 12.dp)
                 )
+                if (uiState.reasoning.isNotEmpty()) {
+                    Text(
+                        "RAGIONAMENTO AI:\n${uiState.reasoning}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                }
                 HorizontalDivider()
             }
 
-            if (session.v2Stime.isEmpty()) {
+            if (uiState.v2Stime.isEmpty()) {
                 item {
                     Text(
                         "Nessun dato V2 disponibile per questa sessione.",
@@ -74,7 +83,7 @@ fun V2ResultScreen(
                     )
                 }
             } else {
-                items(session.v2Stime) { stima ->
+                items(uiState.v2Stime) { stima ->
                     V2WeightEstimateCard(stima)
                     HorizontalDivider()
                 }
@@ -92,6 +101,15 @@ private fun V2WeightEstimateCard(stima: WeightEstimate) {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(stima.nome, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            if (stima.ragionamento.isNotEmpty()) {
+                Text(
+                    stima.ragionamento,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    color = UgoGrey,
+                    modifier = Modifier.padding(vertical = 4.dp)
+                )
+            }
             Text(
                 "Strategia: ${stima.strategia.name}",
                 style = MaterialTheme.typography.bodySmall,

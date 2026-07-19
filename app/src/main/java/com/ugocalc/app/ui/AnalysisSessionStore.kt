@@ -40,6 +40,8 @@ class AnalysisSessionStore @Inject constructor() {
         val usingV2Engine: Boolean = false,
         /** Pesi finali calcolati da M3 (V2), inclusa la catena di calcolo completa per la trasparenza (§13 punto 1). */
         val v2Stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate> = emptyList(),
+        /** Calibrazioni selezionate manualmente dall'utente per questa sessione (§ richiesta utente). */
+        val selectedCalibrationIds: Set<Long> = emptySet(),
         /** Risoluzioni di ambiguità effettuate da M4 (§13 punto 2). */
         val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
         /** Alimento trovato dallo scanner codici a barre (§ richiesta utente), in attesa che ManualFoodEntryScreen lo raccolga. */
@@ -64,22 +66,24 @@ class AnalysisSessionStore @Inject constructor() {
 
     fun setReferenceModelId(modelId: String) = _session.update { it.copy(referenceModelId = modelId) }
 
+    fun setSelectedCalibrationIds(ids: Set<Long>) = _session.update { it.copy(selectedCalibrationIds = ids) }
+
     fun setTotals(totals: AnalysisTotals) = _session.update { it.copy(totals = totals) }
 
     /**
      * Esito completo della pipeline V2 (piano V2 §13 punto 1): a differenza di [setVisionOutcomes]
      * seguito da "Ricevi i CHO", M6/M7 hanno già calcolato l'abbinamento nutrizionale dentro la
-     * pipeline, quindi peso e totali si impostano nello stesso aggiornamento e [usingV2Engine]
-     * segnala a [com.ugocalc.app.ui.results.VisionResultsViewModel.receiveCho] di non rifare il
+     * pipeline, quindi peso e totali si impostano nello stesso aggiornamento e il flag
+     * `usingV2Engine` in `Session` segnala a [com.ugocalc.app.ui.results.VisionResultsViewModel.receiveCho] di non rifare il
      * matching.
      */
     fun setV2Result(
         outcome: ModelVisionOutcome.Success, 
         totals: AnalysisTotals, 
         stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
-        ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList()
-    ) = _session.update {
-        it.copy(
+        ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
+    ) = _session.update { current ->
+        current.copy(
             visionOutcomes = listOf(outcome),
             referenceModelId = outcome.model.id,
             totals = totals,

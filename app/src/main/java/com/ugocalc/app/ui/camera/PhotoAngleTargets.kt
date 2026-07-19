@@ -11,15 +11,16 @@ data class PhotoAngleTarget(
 
 /**
  * 5 scatti pensati per dare a M3 più viste geometriche dello stesso piatto: uno dall'alto (area e
- * forma), poi quattro a 45° girando intorno al piatto di 90° alla volta, per stimare altezza/volume
- * da lati diversi e ridurre le occlusioni rispetto a un singolo punto di vista.
+ * forma), poi quattro a 45° girando intorno al piatto di 90° alla volta (0°, 90°, 180°, 270°), per
+ * stimare altezza/volume da lati diversi e ridurre le occlusioni rispetto a un singolo punto di
+ * vista (§ richiesta utente).
  */
 val PHOTO_ANGLE_TARGETS = listOf(
-    PhotoAngleTarget(pitchDeg = 90f, turnDeg = 0f, label = "Foto 1 — dall'alto"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 0f, label = "Foto 2 — inclinato a 45°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 3 — gira intorno al piatto, poi 45°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 4 — gira ancora, poi 45°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 5 — gira ancora, poi 45°"),
+    PhotoAngleTarget(pitchDeg = 90f, turnDeg = 0f, label = "Foto 1 — dall'alto (visione aerea)"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 0f, label = "Foto 2 — inclinato 0°"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 3 — inclinato 90°"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 180f, label = "Foto 4 — inclinato 180°"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 270f, label = "Foto 5 — inclinato 270°"),
 )
 
 const val PHOTO_ANGLE_PITCH_TOLERANCE_DEG = 3f

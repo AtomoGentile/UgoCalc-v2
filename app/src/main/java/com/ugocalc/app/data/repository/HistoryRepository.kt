@@ -19,7 +19,7 @@ class HistoryRepository @Inject constructor(
     suspend fun getById(id: Long): AnalysisHistoryEntity? = historyDao.getById(id)
 
     /** Pulsante "Salva" (§2.4 punto 7): salva l'analisi corrente in Cronologia. */
-    suspend fun saveAnalysis(foodTitle: String, totals: AnalysisTotals, modelDisplayNames: List<String>): Long {
+    suspend fun saveAnalysis(foodTitle: String, totals: AnalysisTotals, modelDisplayNames: List<String>, sessionId: String? = null): Long {
         val entity = AnalysisHistoryEntity(
             foodTitle = foodTitle,
             analyzedAtEpochMillis = System.currentTimeMillis(),
@@ -27,6 +27,7 @@ class HistoryRepository @Inject constructor(
             totalGrassiG = totals.totalGrassiG,
             modelDisplayNamesJson = json.encodeToString(modelDisplayNames),
             detailsJson = json.encodeToString(totals.lines),
+            sessionId = sessionId,
         )
         return historyDao.insert(entity)
     }

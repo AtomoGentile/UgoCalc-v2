@@ -105,7 +105,7 @@ class VisionResultsViewModel @Inject constructor(
             CalculatedFoodLine(
                 recognizedFood = food,
                 match = null,
-                tableEntry = null
+                tableEntry = null,
             )
         }
         sessionStore.setTotals(AnalysisTotals(lines))

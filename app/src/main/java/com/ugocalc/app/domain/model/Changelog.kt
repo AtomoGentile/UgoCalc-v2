@@ -37,6 +37,24 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "2.2.0",
+            highlights = listOf(
+                "Ispezione V2 Shadow: dalla Cronologia o dalla sezione BIAS è ora possibile vedere il dettaglio tecnico e il ragionamento AI anche per le analisi effettuate in background (shadow mode).",
+                "Selezione manuale calibrazioni: aggiunta la possibilità di selezionare manualmente quali stoviglie o riferimenti calibrati sono presenti nelle foto, per una precisione di scala millimetrica.",
+                "Spiegabilità AI (Ragionamento): l'intelligenza artificiale ora fornisce una spiegazione testuale del suo ragionamento globale sulla scena e per ogni singolo alimento identificato.",
+                "Guida Giroscopio ottimizzata: ricalibrata la livella overlay per richiedere angolazioni precise (0°, 90°, 180°, 270°) e giro completo intorno al piatto semplificato (zero relativo alla prima foto).",
+                "Stabilità database: aggiornato lo schema interno per supportare i nuovi collegamenti tra V1 e V2 senza perdite di dati."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.2.0",
+                perceptionPrompt = "1.2.0",
+                physicalData = "1.1.0",
+                biasCalculator = "1.1.0",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.1.0",
             highlights = listOf(
                 "Promozione motore V2: il nuovo motore di inferenza può ora essere impostato come predefinito per le analisi (visible mode).",

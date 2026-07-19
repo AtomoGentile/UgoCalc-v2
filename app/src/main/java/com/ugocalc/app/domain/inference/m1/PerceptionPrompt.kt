@@ -68,6 +68,10 @@ object PerceptionPrompt {
 
         Esegui questi tre compiti:
 
+        0. RAGIONAMENTO GLOBALE: spiega brevemente (in 2-3 frasi) cosa vedi nelle foto, come hai
+        integrato le diverse viste e se ci sono state difficoltà particolari (es. scarsa luce,
+        sovrapposizioni complesse).
+
         1. ANCORAGGIO DI SCALA: per ciascuna ancora individuata, restituisci il tipo, una breve
         descrizione, la dimensione reale in centimetri SOLO se nota con ragionevole certezza
         (altrimenti ometti il campo) e una confidenza onesta. IMPORTANTE: se nella scena è presente
@@ -78,12 +82,14 @@ object PerceptionPrompt {
         l'unico modo per cui chi userà questa misura possa calcolarne l'area reale.
 
         2. INVENTARIO ALIMENTI: elenca ogni alimento visibile, con nome canonico specifico e
-        standardizzato (es. "pasta penne" non "pasta", "petto di pollo" non "carne"). Se non sei
-        sicuro al 100% dell'identificazione, elenca in "alternative_identificazione" le alternative
-        plausibili (es. ["riso basmati"] per un alimento identificato come "riso in bianco"): NON
-        scegliere semplicemente l'alternativa più probabile e basta, servono a valle per decidere se
-        l'ambiguità cambia sensibilmente i carboidrati. Segnala il grado di occlusione (nessuna,
-        parziale, elevata) e una confidenza onesta sull'identificazione.
+        standardizzato (es. "pasta penne" non "pasta", "petto di pollo" non "carne"). In
+        "ragionamento", spiega perché hai identificato l'alimento in questo modo e cosa hai notato
+        sulla sua preparazione o stato (es. "pasta con sugo di pomodoro denso", "mela sbucciata").
+        Se non sei sicuro al 100% dell'identificazione, elenca in "alternative_identificazione" le
+        alternative plausibili (es. ["riso basmati"] per un alimento identificato come "riso in
+        bianco"): NON scegliere semplicemente l'alternativa più probabile e basta, servono a valle
+        per decidere se l'ambiguità cambia sensibilmente i carboidrati. Segnala il grado di
+        occlusione (nessuna, parziale, elevata) e una confidenza onesta sull'identificazione.
 
         3. MISURE GREZZE (MAI GRAMMI): per ciascun alimento, in base a come si presenta, fornisci
         SOLO le misure osservabili pertinenti, lasciando gli altri campi assenti:
@@ -115,6 +121,7 @@ object PerceptionPrompt {
 
         {
           "schema_version": $CURRENT_SCHEMA_VERSION,
+          "ragionamento": "string (spiegazione globale dell'analisi)",
           "ancore": [
             {
               "tipo": "stoviglia_calibrata" | "riferimento_corporeo" | "oggetto_universale" | "stima_generica",
@@ -126,6 +133,7 @@ object PerceptionPrompt {
           "alimenti": [
             {
               "nome": "string",
+              "ragionamento": "string (perché questo alimento e note visive)",
               "alternative_identificazione": ["string"],
               "occlusione": "nessuna" | "parziale" | "elevata",
               "misure_grezze": {

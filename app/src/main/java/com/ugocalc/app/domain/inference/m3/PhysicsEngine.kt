@@ -42,7 +42,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
             EstimationStrategy.A_CONTENITORE -> container(food)
             EstimationStrategy.BLOCCO_MISURABILE -> block(food)
             EstimationStrategy.COMPOSTO_OCCLUSO -> composite(food)
-            EstimationStrategy.TRASCURABILE -> negligible(food)
+            EstimationStrategy.TRASCURABILE -> negligible()
         }
         val u = uncertainty(food, strategy, scale, raw)
         val peso = if (biasFactor != null) raw.pesoG * biasFactor else raw.pesoG
@@ -50,7 +50,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
             raw.chain.copy(
                 valori = raw.chain.valori + ("fattore_correzione" to biasFactor),
                 fonti = raw.chain.fonti + CalculationSource("fattore_correzione", biasFactor, "bias appreso (§8)"),
-                sintesi = "${raw.chain.sintesi} — corretto ×${biasFactor} da bias appreso",
+                sintesi = "${raw.chain.sintesi} — corretto ×$biasFactor da bias appreso",
             )
         } else {
             raw.chain
@@ -61,6 +61,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
         )
         return WeightEstimate(
             nome = food.nome,
+            ragionamento = food.ragionamento,
             strategia = strategy,
             pesoG = peso,
             intervallo = interval,
@@ -117,7 +118,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
                 sintesi = "${g(peso)} g — ${pct(frazione)} di piatto Ø${g(d)}, alt ${cm(altezza)} cm, ${dens.fonte}",
             ),
             usoDefaultFisico = dens.isDefault,
-            usoFallbackMisura = m.frazionePiatto == null || m.altezzaCm == null || m.riempimento == null,
+            usoFallbackMisura = (m.frazionePiatto == null) || (m.altezzaCm == null) || (m.riempimento == null),
         )
     }
 
@@ -140,7 +141,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
                     CalculationSource("capacità", cap.valore, cap.fonte),
                     CalculationSource("densità", dens.valore, dens.fonte),
                 ),
-                sintesi = "${g(peso)} g — ${cap.fonte} ${cap.valore.let { g(it) }} ml al ${pct(frazione)}, ${dens.fonte}",
+                sintesi = "${g(peso)} g — ${cap.fonte} ${g(cap.valore)} ml al ${pct(frazione)}, ${dens.fonte}",
             ),
             usoDefaultFisico = cap.isDefault || dens.isDefault,
             usoFallbackMisura = m.frazioneRiempimento == null || m.contenitore == null,
@@ -175,7 +176,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
         )
     }
 
-    private fun negligible(food: PerceivedFood): RawEstimate = RawEstimate(
+    private fun negligible(): RawEstimate = RawEstimate(
         pesoG = TRASCURABILE_G,
         chain = CalculationChain(
             formula = "valore fisso di riferimento",
@@ -282,7 +283,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
 
 /**
  * Contesto di scala per M3: il diametro del piatto usato per le stime "distese" e una valutazione
- * complessiva della qualità della scala. Risolto dalle ancore dello [SceneGraph] (§8) o ripiegato
+ * complessiva della qualità della scala. Risolto dalle ancore dello [com.ugocalc.app.domain.inference.model.SceneGraph] (§8) o ripiegato
  * su valori di default con qualità bassa quando nessuna ancora è disponibile (§9).
  */
 data class ScaleContext(

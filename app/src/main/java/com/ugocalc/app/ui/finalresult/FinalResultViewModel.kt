@@ -91,7 +91,7 @@ class FinalResultViewModel @Inject constructor(
      * Correzione manuale di un abbinamento (§ ricerca tra i cibi del database): l'utente ha
      * cercato e scelto direttamente la voce di tabella corretta, quindi il nuovo abbinamento è
      * per definizione certo — sostituisce quello (sbagliato o assente) trovato dall'AI. I totali
-     * si ricalcolano automaticamente perché [init] resta in ascolto di `sessionStore.session`.
+     * si ricalcolano automaticamente perché il ViewModel resta in ascolto di `sessionStore.session`.
      */
     fun applyManualMatch(lineIndex: Int, entry: NormalizedFoodEntry) {
         val totals = _uiState.value.totals ?: return
@@ -113,7 +113,7 @@ class FinalResultViewModel @Inject constructor(
     /**
      * L'utente corregge il nome e/o il peso che l'AI ha riconosciuto (es. l'AI dice "pane" ma è
      * "pasta", o "165g" era in realtà "220g"). Un'unica funzione invece di due chiamate separate:
-     * entrambe le modifiche vanno applicate allo stesso [original] e salvate con un solo
+     * entrambe le modifiche vanno applicate all'oggetto originale e salvate con un solo
      * `sessionStore.setTotals`, altrimenti una seconda chiamata che rilegge `_uiState.value.totals`
      * subito dopo la prima rischierebbe di leggere lo stato precedente (lo StateFlow di
      * [AnalysisSessionStore] si ripropaga a `_uiState` in modo asincrono) e sovrascrivere la prima
@@ -129,13 +129,13 @@ class FinalResultViewModel @Inject constructor(
         val original = totals.lines[lineIndex]
 
         val trimmedName = newName.trim()
-        val nameChanged = trimmedName.isNotBlank() && trimmedName != original.recognizedFood.nome
+        val nameChanged = (trimmedName.isNotBlank()) && (trimmedName != original.recognizedFood.nome)
         val weightChanged = newGrams != null && newGrams > 0.0 && newGrams != original.recognizedFood.pesoStimatoG
         if (!nameChanged && !weightChanged) return
 
         val updatedRecognizedFood = original.recognizedFood.copy(
             nome = if (nameChanged) trimmedName else original.recognizedFood.nome,
-            pesoStimatoG = if (weightChanged) newGrams!! else original.recognizedFood.pesoStimatoG,
+            pesoStimatoG = if (weightChanged) newGrams else original.recognizedFood.pesoStimatoG,
         )
         val updatedLine = if (nameChanged) {
             // Il nome cambiato invalida l'abbinamento precedente, riguardava un alimento diverso.
@@ -223,8 +223,14 @@ class FinalResultViewModel @Inject constructor(
     /** Pulsante "Salva" (§2.4 punto 7). */
     fun save() {
         val totals = _uiState.value.totals ?: return
+        val session = sessionStore.session.value
         viewModelScope.launch {
-            val historyId = historyRepository.saveAnalysis(_uiState.value.foodTitle, totals, _uiState.value.modelNames)
+            val historyId = historyRepository.saveAnalysis(
+                foodTitle = _uiState.value.foodTitle,
+                totals = totals,
+                modelDisplayNames = _uiState.value.modelNames,
+                sessionId = session.sessionId,
+            )
             if (_uiState.value.favoriteRequested) {
                 val nextOrder = favoritesRepository.observeFavorites().first().size
                 favoritesRepository.addFavorite(historyId, _uiState.value.foodTitle, nextOrder)

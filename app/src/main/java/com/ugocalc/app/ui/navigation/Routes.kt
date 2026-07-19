@@ -15,7 +15,8 @@ object Routes {
     const val GROUND_TRUTH_ENTRY = "ground_truth_entry"
     const val BENCHMARK_GROUND_TRUTH_ENTRY = "benchmark_ground_truth_entry"
     const val BENCHMARK_DASHBOARD = "benchmark_dashboard"
-    const val V2_RESULT = "v2_result"
+    const val V2_RESULT = "v2_result?recordId={recordId}"
+    fun v2ResultRoute(recordId: Long? = null) = if (recordId == null) "v2_result" else "v2_result?recordId=$recordId"
     const val AMBIGUITY_RESOLUTION = "ambiguity_resolution"
 
     const val SETTINGS = "settings"

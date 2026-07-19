@@ -4,7 +4,9 @@ import android.content.Context
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.repository.BenchmarkRepository
+import com.ugocalc.app.data.repository.ScaleCalibrationRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.di.ShadowAnalysisScope
 import com.ugocalc.app.domain.inference.PipelineOutcome
@@ -53,7 +55,27 @@ private fun buildAngleDescription(photo: CapturedPhoto): String? {
  * campione sensore prima dello scatto — in quel caso M1 riceve solo il protocollo generico, senza
  * il valore misurato per questa foto specifica.
  */
-data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long, val measuredAngle: MeasuredAngle? = null)
+data class CapturedPhoto(val bytes: ByteArray, val capturedAtEpochMillis: Long, val measuredAngle: MeasuredAngle? = null) {
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        if (javaClass != other?.javaClass) return false
+
+        other as CapturedPhoto
+
+        if (!bytes.contentEquals(other.bytes)) return false
+        if (capturedAtEpochMillis != other.capturedAtEpochMillis) return false
+        if (measuredAngle != other.measuredAngle) return false
+
+        return true
+    }
+
+    override fun hashCode(): Int {
+        var result = bytes.contentHashCode()
+        result = 31 * result + capturedAtEpochMillis.hashCode()
+        result = 31 * result + (measuredAngle?.hashCode() ?: 0)
+        return result
+    }
+}
 
 data class V2AnalysisResultInternal(
     val outcome: ModelVisionOutcome.Success,
@@ -67,6 +89,8 @@ data class CameraUiState(
     val isAnalyzing: Boolean = false,
     val analysisDone: Boolean = false,
     val qualityWarning: String? = null,
+    val availableCalibrations: List<ScaleCalibrationEntity> = emptyList(),
+    val selectedCalibrationIds: Set<Long> = emptySet(),
 )
 
 @HiltViewModel
@@ -77,13 +101,27 @@ class CameraCaptureViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val v2PipelineFactory: V2AnalysisPipelineFactory,
     private val benchmarkRepository: BenchmarkRepository,
+    private val scaleCalibrationRepository: ScaleCalibrationRepository,
     private val gyroscopeTracker: GyroscopeMotionTracker,
-    @ApplicationContext private val context: Context,
-    @ShadowAnalysisScope private val shadowScope: CoroutineScope,
+    @param:ApplicationContext private val context: Context,
+    @param:ShadowAnalysisScope private val shadowScope: CoroutineScope,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState
+
+    init {
+        viewModelScope.launch {
+            scaleCalibrationRepository.observeAll().collect { calibs ->
+                _uiState.update { it.copy(availableCalibrations = calibs) }
+            }
+        }
+        viewModelScope.launch {
+            sessionStore.session.collect { session ->
+                _uiState.update { it.copy(selectedCalibrationIds = session.selectedCalibrationIds) }
+            }
+        }
+    }
 
     /** Scatto avvenuto: si aggiunge alla galleria di foto di questa sessione (più scatti per un'analisi più efficace). */
     fun onPhotoCaptured(imageBytes: ByteArray, capturedAtEpochMillis: Long, measuredAngle: MeasuredAngle? = null) {
@@ -100,6 +138,12 @@ class CameraCaptureViewModel @Inject constructor(
     /** L'utente chiude l'avviso di foto scadenti e torna alla galleria per rifare gli scatti. */
     fun dismissQualityWarning() {
         _uiState.update { it.copy(qualityWarning = null) }
+    }
+
+    fun toggleCalibrationSelection(id: Long) {
+        val current = _uiState.value.selectedCalibrationIds
+        val next = if (id in current) current - id else current + id
+        sessionStore.setSelectedCalibrationIds(next)
     }
 
     /** Tutte le foto confermate → invio al Passaggio 1 per ciascun modello selezionato (§2.4 punto 3). */
@@ -134,8 +178,8 @@ class CameraCaptureViewModel @Inject constructor(
         val model = models.firstOrNull()
         // Non più uno switch manuale (§13 punto 1, §20): il benchmark pesato decide se la V2 ha
         // già superato la V1 sul CHO. DEBUG: l'utente può forzare l'uso della V2 dalle impostazioni bias.
-        val v2VisibleEnabled = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2 && model != null
-        val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model!!) else null
+            val v2VisibleEnabled = (benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2) && model != null
+            val v2Result = if (v2VisibleEnabled) runV2Visible(capturedPhotos, model) else null
         if (v2Result != null) {
             sessionStore.setV2Result(v2Result.outcome, v2Result.totals, v2Result.stime, v2Result.ambiguita)
             _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
@@ -179,7 +223,11 @@ class CameraCaptureViewModel @Inject constructor(
                 )
                 SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
             }
-            val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+            val selectedIds = sessionStore.session.value.selectedCalibrationIds
+            val calibrations = if (selectedIds.isEmpty()) null else {
+                scaleCalibrationRepository.observeAll().first().filter { it.id in selectedIds }
+            }
+            val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
             if (outcome !is PipelineOutcome.Verificato) {
                 Log.w("CameraCaptureVM", "V2 failed or requested fallback: $outcome")
                 return@runCatching null
@@ -224,7 +272,7 @@ class CameraCaptureViewModel @Inject constructor(
      * chiamate AI di V2 (M1 + M6) abbiano finito. Avvolto per intero in [runCatching]: un fallimento
      * qui (rete, quota, parsing) non deve mai emergere in UI né interrompere il flusso V1.
      *
-     * Il [sessionId] della sessione corrente viene passato alla pipeline (§13 punto 5): collega il
+     * Il session ID della sessione corrente viene passato alla pipeline (§13 punto 5): collega il
      * record di telemetria M8 al pasto tracciato nel benchmark, dove [recordV1EstimateForBenchmarkIfEnabled]
      * ha già salvato la stima V1 sulle stesse foto.
      */
@@ -243,7 +291,11 @@ class CameraCaptureViewModel @Inject constructor(
                     )
                     SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
                 }
-                val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model)
+                val selectedIds = sessionStore.session.value.selectedCalibrationIds
+                val calibrations = if (selectedIds.isEmpty()) null else {
+                    scaleCalibrationRepository.observeAll().first().filter { it.id in selectedIds }
+                }
+                val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
                 if (outcome is PipelineOutcome.Verificato && outcome.telemetryId >= 0) {
                     benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
                 }

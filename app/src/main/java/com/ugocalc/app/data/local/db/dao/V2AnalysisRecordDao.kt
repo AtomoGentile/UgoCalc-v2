@@ -21,6 +21,9 @@ interface V2AnalysisRecordDao {
     @Query("SELECT * FROM v2_analysis_records WHERE id = :id")
     suspend fun getById(id: Long): V2AnalysisRecordEntity?
 
+    @Query("SELECT * FROM v2_analysis_records WHERE sessionId = :sessionId ORDER BY analyzedAtEpochMillis DESC LIMIT 1")
+    suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity?
+
     /** Righe con ground truth: la base dei fattori di correzione appresi per (modalità, strategia, modello) (§8). */
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL AND sessionMode = :sessionMode AND aiModelId = :aiModelId ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity>

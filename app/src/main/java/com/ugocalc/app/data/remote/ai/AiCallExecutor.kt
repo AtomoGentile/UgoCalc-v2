@@ -13,10 +13,10 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiProviderType
 import kotlinx.coroutines.delay
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Infrastruttura HTTP-agnostica-dal-prompt condivisa dai 3 Passaggi AI della V1 ([AiOrchestrator])
@@ -88,10 +88,10 @@ class AiCallExecutor @Inject constructor(
                 return block()
             } catch (e: MalformedJsonException) {
                 lastError = e
-                if (attempt < maxAttempts - 1) delay(1500)
+                if (attempt < (maxAttempts - 1)) delay(1500.milliseconds)
             } catch (e: ServiceUnavailableException) {
                 lastError = e
-                if (attempt < maxAttempts - 1) delay(3000)
+                if (attempt < (maxAttempts - 1)) delay(3000.milliseconds)
             }
         }
         throw lastError!!

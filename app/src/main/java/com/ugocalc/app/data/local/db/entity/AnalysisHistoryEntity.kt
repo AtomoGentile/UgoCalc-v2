@@ -12,4 +12,6 @@ data class AnalysisHistoryEntity(
     val totalGrassiG: Double,
     val modelDisplayNamesJson: String,
     val detailsJson: String,
+    /** Id di sessione condiviso con i record V2 e il benchmark (§ richiesta utente). */
+    val sessionId: String? = null,
 )

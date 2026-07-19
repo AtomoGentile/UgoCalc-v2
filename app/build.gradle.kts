@@ -1,4 +1,3 @@
-import com.google.firebase.appdistribution.gradle.firebaseAppDistribution
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -6,8 +5,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.dagger.hilt.android")
-    id("org.jetbrains.kotlin.kapt")
-    id("org.jetbrains.kotlin.plugin.serialization") version "2.2.0"
+    id("com.google.devtools.ksp")
+    id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
     id("com.google.gms.google-services")
     id("com.google.firebase.appdistribution")
 }
@@ -20,8 +19,8 @@ android {
         applicationId = "com.ugocalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "2.1.0"
+        versionCode = 4
+        versionName = "2.2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -29,7 +28,8 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            firebaseAppDistribution {
+            // Accessing the extension directly by name to avoid resolution issues
+            extensions.configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension>("firebaseAppDistribution") {
                 releaseNotesFile = "release_notes.txt"
                 groups = "tester"
             }
@@ -70,12 +70,10 @@ kotlin {
 }
 
 // Cartella dove Room esporta lo schema del database ad ogni build (utile per verificare le
-// migrazioni manuali in Migrations.kt): senza questo, kapt avvisa che exportSchema non può
+// migrazioni manuali in Migrations.kt): senza questo, ksp avvisa che exportSchema non può
 // scrivere da nessuna parte.
-kapt {
-    arguments {
-        arg("room.schemaLocation", "$projectDir/schemas")
-    }
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
 }
 
 dependencies {
@@ -95,21 +93,21 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Hilt
-    implementation("com.google.dagger:hilt-android:2.57.1")
-    kapt("com.google.dagger:hilt-android-compiler:2.57.1")
+    implementation("com.google.dagger:hilt-android:2.51.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.51.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
     // Room
-    implementation("androidx.room:room-runtime:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
-    kapt("androidx.room:room-compiler:2.8.4")
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
     // Networking
     implementation("com.squareup.retrofit2:retrofit:2.11.0")
     implementation("com.squareup.retrofit2:converter-kotlinx-serialization:2.11.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
     // Lo scatto foto delega alla fotocamera di sistema (Intent standard, vedi CameraCaptureScreen):
     // niente più CameraX, il produttore del telefono gestisce già meglio zoom/lenti/focus/qualità.
@@ -118,17 +116,17 @@ dependencies {
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     // File parsing: Office formats (doc/docx/xlsx)
-    implementation("org.apache.poi:poi:5.2.5")
-    implementation("org.apache.poi:poi-ooxml:5.2.5") {
+    implementation("org.apache.poi:poi:5.5.1")
+    implementation("org.apache.poi:poi-ooxml:5.5.1") {
         exclude(group = "org.apache.xmlbeans", module = "xmlbeans")
     }
-    implementation("org.apache.poi:poi-scratchpad:5.2.5")
-    implementation("org.apache.xmlbeans:xmlbeans:5.2.0")
+    implementation("org.apache.poi:poi-scratchpad:5.5.1")
+    implementation("org.apache.xmlbeans:xmlbeans:5.3.0")
     // PDF text extraction
     implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // Security (encrypted storage for API keys)
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // Firma JWT RS256 per il flusso OAuth2 "JWT Bearer" dei service account Google Cloud
     // (autenticazione Vertex AI per Gemini, vedi VertexAiTokenProvider). Libreria pura Java,
@@ -140,7 +138,7 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.2.1")
 
     // Image loading
-    implementation("io.coil-kt:coil-compose:2.6.0")
+    implementation("io.coil-kt:coil-compose:2.7.0")
 
     // Scanner codici a barre (§ richiesta utente): UI di scansione pronta fornita da Google Play
     // Services, niente CameraX da integrare a mano — coerente con la scelta già fatta per lo
@@ -148,13 +146,13 @@ dependencies {
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
     // Firebase (App Distribution + Analytics optional)
-    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
-    implementation("com.google.firebase:firebase-analytics-ktx")
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-analytics")
 
     // WorkManager (background notification when app in background)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.hilt:hilt-work:1.2.0")
-    kapt("androidx.hilt:hilt-compiler:1.2.0")
+    ksp("androidx.hilt:hilt-compiler:1.2.0")
 
     // Tests
     testImplementation("junit:junit:4.13.2")

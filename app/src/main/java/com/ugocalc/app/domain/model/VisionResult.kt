@@ -9,6 +9,8 @@ data class RecognizedFood(
     val nome: String,
     @SerialName("peso_stimato_g") val pesoStimatoG: Double,
     val commento: String,
+    /** Ragionamento dell'IA sull'identificazione e lo stato di questo alimento (§ richiesta utente). */
+    val ragionamento: String = "",
     val confidenza: Confidence,
     val decomposition: DecompositionInfo? = null,
     /** Se vero, l'alimento è considerato trascurabile (es. spezie, condimenti minimi) e non pesa sul totale visivo. */
@@ -27,6 +29,8 @@ data class DecompositionInfo(
 @Serializable
 data class VisionAnalysisResult(
     val alimenti: List<RecognizedFood>,
+    /** Ragionamento globale dell'IA sulla scena (§ richiesta utente). */
+    val ragionamento: String = "",
     val confidenzaGlobale: Confidence,
     val fattoriIncertezza: List<String> = emptyList(),
     val avvertenze: String = "",

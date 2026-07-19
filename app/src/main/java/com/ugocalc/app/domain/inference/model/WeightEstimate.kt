@@ -16,6 +16,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WeightEstimate(
     val nome: String,
+    /** Ragionamento visivo dell'IA ricevuto da M1 (§ richiesta utente). */
+    val ragionamento: String = "",
     val strategia: EstimationStrategy,
     @SerialName("peso_g") val pesoG: Double,
     @SerialName("intervallo") val intervallo: ConfidenceInterval,

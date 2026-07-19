@@ -54,6 +54,12 @@ class V2TelemetryRepository @Inject constructor(
     /** Analisi V2 ancora senza ground truth: la lista che l'utente può scegliere di correggere con un peso vero (§13 punto 3). */
     suspend fun listPendingGroundTruth(): List<V2AnalysisRecordEntity> = dao.getAllWithoutGroundTruth()
 
+    suspend fun getAllRecords(): List<V2AnalysisRecordEntity> = dao.getAll()
+
+    suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? = dao.getBySessionId(sessionId)
+
+    suspend fun getById(id: Long): V2AnalysisRecordEntity? = dao.getById(id)
+
     /** Per la scorciatoia "Registra peso vero" a fine analisi (§13 punto 3): true se questa sessione ha prodotto un record V2 ancora senza ground truth. */
     suspend fun hasPendingGroundTruth(sessionId: String): Boolean = dao.getPendingBySessionId(sessionId) != null
 
