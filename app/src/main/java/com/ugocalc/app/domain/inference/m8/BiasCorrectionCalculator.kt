@@ -16,8 +16,8 @@ object BiasCorrectionCalculator {
     /** Numero minimo di osservazioni prima di fidarsi di un bias (§8 "pattern stabili"). */
     const val MIN_SAMPLE_COUNT = 5
 
-    /** Frazione minima di osservazioni concordi sul segno dello scarto: sotto questa soglia è fluttuazione, non bias. */
-    const val MIN_SIGN_AGREEMENT = 0.8
+    /** Frazione minima di osservazioni concordi sul segno dello scarto: disattivata per ora (§ richiesta utente). */
+    const val MIN_SIGN_AGREEMENT = 0.0
 
     /**
      * [observations] deve contenere solo dati dello stesso identico segmento. Il fattore, quando

@@ -1,5 +1,6 @@
 package com.ugocalc.app.domain.inference.m1
 
+import android.util.Log
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.remote.ai.AiCallExecutor
 import com.ugocalc.app.data.remote.ai.client.AiCallException
@@ -62,6 +63,13 @@ class UnifiedPerceptionEngine @Inject constructor(
         )
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, allImageParts)
+            
+            // Log M1: identità e conteggio pezzi (§ richiesta utente)
+            sceneGraph.alimenti.forEach { food ->
+                val pezziInfo = food.misureGrezze.conteggio?.let { " (pezzi: $it)" } ?: ""
+                Log.d("M1", "Rilevato: ${food.nome}$pezziInfo")
+            }
+
             PerceptionOutcome.Riuscita(sceneGraph)
         } catch (e: AiCallException) {
             PerceptionOutcome.FallbackAV1(motivo = e.message ?: "errore sconosciuto nella chiamata al modello")
