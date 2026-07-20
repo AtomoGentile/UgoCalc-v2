@@ -109,7 +109,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
                     "diametro_piatto_cm" to d,
                     "altezza_cm" to altezza,
                     "riempimento" to riemp,
-                    "densita" to dens.valore,
+                    "densità" to dens.valore,
                 ),
                 fonti = listOf(
                     CalculationSource("densità", dens.valore, dens.fonte),
@@ -135,7 +135,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
                 valori = mapOf(
                     "capacita_ml" to cap.valore,
                     "frazione_riempimento" to frazione,
-                    "densita" to dens.valore,
+                    "densità" to dens.valore,
                 ),
                 fonti = listOf(
                     CalculationSource("capacità", cap.valore, cap.fonte),
@@ -150,16 +150,22 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
 
     private fun block(food: PerceivedFood): RawEstimate {
         val m = food.misureGrezze
+        val count = m.conteggio ?: 1
         val dens = data.density(food.nome)
         val (volume, formaUsata, mancano) = blockVolume(m)
-        val peso = volume * dens.valore
+        val peso = count * volume * dens.valore
+        val sintesiPrefix = if (count > 1) "$count × " else ""
         return RawEstimate(
             pesoG = peso,
             chain = CalculationChain(
-                formula = "$formaUsata × densità",
-                valori = mapOf("volume_cm3" to volume, "densita" to dens.valore),
+                formula = "${if (count > 1) "conteggio × " else ""}$formaUsata × densità",
+                valori = mapOf(
+                    "conteggio" to count.toDouble(),
+                    "volume_cm3" to volume,
+                    "densità" to dens.valore
+                ),
                 fonti = listOf(CalculationSource("densità", dens.valore, dens.fonte)),
-                sintesi = "${g(peso)} g — $formaUsata ${g(volume)} cm³, ${dens.fonte}",
+                sintesi = "${g(peso)} g — $sintesiPrefix$formaUsata ${g(volume)} cm³, ${dens.fonte}",
             ),
             usoDefaultFisico = dens.isDefault,
             usoFallbackMisura = mancano,
@@ -194,7 +200,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
         val h = m.altezzaCm
         return when {
             // Cilindro: diametro + altezza
-            (forma.contains("cilindr") || (m.diametroCm != null && m.lunghezzaCm == null)) &&
+            (forma.contains("cilindro") || (m.diametroCm != null && m.lunghezzaCm == null)) &&
                 m.diametroCm != null && h != null -> {
                 val r = m.diametroCm / 2.0
                 Triple(PI * r * r * h, "cilindro", false)

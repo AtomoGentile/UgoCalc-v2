@@ -85,6 +85,12 @@ object PerceptionPrompt {
         standardizzato (es. "pasta penne" non "pasta", "petto di pollo" non "carne"). In
         "ragionamento", spiega perché hai identificato l'alimento in questo modo e cosa hai notato
         sulla sua preparazione o stato (es. "pasta con sugo di pomodoro denso", "mela sbucciata").
+        IMPORTANTE: Se l'alimento è composto da più ingredienti mescolati (non solo sovrapposti,
+        ma integrati, es. "insalata di riso", "macedonia"), usa questo criterio: se gli
+        ingredienti hanno profili di carboidrati diversi, vanno elencati come voci separate anche
+        se sono fisicamente mescolati (es. elenca "riso", "piselli", "prosciutto" separatamente).
+        IMPORTANTE: Se l'alimento è composto da pezzi distinti (contabile), specifica sempre
+        esplicitamente nel ragionamento quanti pezzi hai individuato (es. "vedo 4 polpette medie").
         Se non sei sicuro al 100% dell'identificazione, elenca in "alternative_identificazione" le
         alternative plausibili (es. ["riso basmati"] per un alimento identificato come "riso in
         bianco"): NON scegliere semplicemente l'alternativa più probabile e basta, servono a valle
@@ -94,15 +100,15 @@ object PerceptionPrompt {
         3. MISURE GREZZE (MAI GRAMMI): per ciascun alimento, in base a come si presenta, fornisci
         SOLO le misure osservabili pertinenti, lasciando gli altri campi assenti:
            - CONTABILE (pezzi distinti: frutta intera, polpette, biscotti, fette): "conteggio"
-             (numero di pezzi contati).
+             (numero di pezzi contati). Sii molto preciso: se vedi dei pezzi, contali tutti.
            - DISTESO sul piatto (pasta, riso, insalate, contorni): "frazione_piatto" (0..1, frazione
              di superficie del piatto coperta), "altezza_cm" (spessore del cumulo), "riempimento"
              (0..1, quanto è compatto/pieno il cumulo, distinto dalla superficie coperta).
            - IN UN CONTENITORE (latte, minestre, yogurt, succhi): "contenitore" (tipo riconosciuto:
              bicchiere, tazza, ciotola, scodella...), "frazione_riempimento" (0..1).
-           - BLOCCO misurabile (carne, pesce, torte, formaggio, pane a fetta): "forma"
-             (parallelepipedo, cilindro, cuneo...) e le dimensioni pertinenti a quella forma tra
-             "lunghezza_cm", "larghezza_cm", "diametro_cm".
+           - BLOCCO misurabile (carne, pesce, torte, formaggio, pane a fetta): "conteggio"
+             (opzionale, se sono più pezzi identici), "forma" (parallelepipedo, cilindro, cuneo...)
+             e le dimensioni di un singolo pezzo tra "lunghezza_cm", "larghezza_cm", "diametro_cm".
            - Se per un alimento non riesci a fornire nessuna misura utile, lascia "misure_grezze"
              vuoto piuttosto che inventare un numero. Non stimare MAI direttamente un peso in grammi.
 
@@ -110,8 +116,9 @@ object PerceptionPrompt {
         plausibile (min/max in grammi) basandoti solo sulla tua intuizione statistica di modello
         (quello che faresti in una stima "a occhio"). Questi valori NON verranno usati per il
         calcolo finale, ma solo come "guardrail" per identificare errori macroscopici nelle misure
-        geometriche fornite al punto 3. Sii onesto: se un peperoncino non può pesare 100g, il suo
-        "peso_max_plausibile_g" deve essere ragionevolmente basso (es. 15g).
+        geometriche fornite al punto 3. Sii onesto ma NON eccessivamente restrittivo: se la scena
+        suggerisce una porzione fuori standard o molto abbondante, lascia che i limiti lo
+        riflettano invece di forzare valori medi.
 
         Segnala infine, se presenti, le SOVRAPPOSIZIONI tra alimenti (es. "sugo sopra la pasta"):
         utili a valutare le porzioni occluse.

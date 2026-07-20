@@ -32,7 +32,7 @@ data class SceneGraph(
 ) {
     companion object {
         /** Versione corrente dello schema SceneGraph attesa da prompt M1 e pipeline. */
-        const val SCHEMA_VERSION = 3
+        const val SCHEMA_VERSION = 4
     }
 }
 
@@ -111,7 +111,7 @@ enum class OcclusionDegree {
  */
 @Serializable
 data class RawMeasurements(
-    /** Contabile: numero di pezzi contati. */
+    /** Contabile/Blocco: numero di pezzi contati. */
     @SerialName("conteggio") val conteggio: Int? = null,
 
     /** Distesa: frazione della superficie del piatto coperta [0..1]. */
