@@ -109,6 +109,9 @@ object PerceptionPrompt {
            - BLOCCO misurabile (carne, pesce, torte, formaggio, pane a fetta): "conteggio"
              (opzionale, se sono più pezzi identici), "forma" (parallelepipedo, cilindro, cuneo...)
              e le dimensioni di un singolo pezzo tra "lunghezza_cm", "larghezza_cm", "diametro_cm".
+             ATTENZIONE: Se scegli la forma 'cilindro', il 'diametro_cm' deve essere quello del
+             cibo, NON quello del piatto. Non confondere mai la dimensione del contenitore con
+             quella del contenuto.
            - Se per un alimento non riesci a fornire nessuna misura utile, lascia "misure_grezze"
              vuoto piuttosto che inventare un numero. Non stimare MAI direttamente un peso in grammi.
 

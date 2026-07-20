@@ -37,6 +37,26 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "2.3.0",
+            highlights = listOf(
+                "Miglioramento Routing Strategie: risolto un errore che causava la classificazione errata della pasta condita (es. 'pasta al tonno') come blocco geometrico. Ora la pasta ha sempre la precedenza.",
+                "Precisione Volumi (M1): istruita l'IA a non confondere mai il diametro del piatto con quello del cibo per le stime a cilindro, evitando sovrastime macroscopiche.",
+                "Sincronizzazione Guardrail: corretto un bug visivo dove l'intervallo di confidenza non si aggiornava quando il peso veniva limitato dai controlli di sicurezza (buon senso).",
+                "Gestione Ingredienti Misti: l'IA ora scompone automaticamente piatti mescolati (es. insalata di riso, macedonia) se gli ingredienti hanno profili di carboidrati diversi.",
+                "Supporto Multi-pezzo per Blocchi: aggiunta la possibilità di segnalare più pezzi identici (es. fette di pane) mantenendo la precisione della misura geometrica del singolo pezzo.",
+                "Allentamento Bias Calculator: rimossi i vincoli restrittivi di concordanza del segnale per permettere un'applicazione più fluida dei fattori di correzione appresi.",
+                "Logging Diagnostico: aggiunto il conteggio dei pezzi rilevati direttamente nei log di sistema per un debug più rapido della percezione visiva."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.3.0",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.1.0",
+                biasCalculator = "1.2.0",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.2.0",
             highlights = listOf(
                 "Ispezione V2 Shadow: dalla Cronologia o dalla sezione BIAS è ora possibile vedere il dettaglio tecnico e il ragionamento AI anche per le analisi effettuate in background (shadow mode).",

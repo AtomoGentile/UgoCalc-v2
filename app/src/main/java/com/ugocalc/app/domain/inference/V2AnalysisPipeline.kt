@@ -239,15 +239,25 @@ class V2AnalysisPipeline(
             val limiti = food.limitiBuonSenso ?: return@map stima
 
             if (stima.pesoG > limiti.pesoMaxG) {
+                val u = stima.intervallo.ampiezzaRelativa // Mantiene la stessa incertezza relativa
                 stima.copy(
                     pesoG = limiti.pesoMaxG,
+                    intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
+                        minG = (limiti.pesoMaxG * (1 - u)).coerceAtLeast(0.0),
+                        maxG = limiti.pesoMaxG * (1 + u)
+                    ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
                         sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoG.toInt()}g), limitato a ${limiti.pesoMaxG.toInt()}g]"
                     )
                 )
             } else if (stima.pesoG < limiti.pesoMinG) {
+                val u = stima.intervallo.ampiezzaRelativa
                 stima.copy(
                     pesoG = limiti.pesoMinG,
+                    intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
+                        minG = (limiti.pesoMinG * (1 - u)).coerceAtLeast(0.0),
+                        maxG = limiti.pesoMinG * (1 + u)
+                    ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
                         sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoG.toInt()}g), portato a ${limiti.pesoMinG.toInt()}g]"
                     )

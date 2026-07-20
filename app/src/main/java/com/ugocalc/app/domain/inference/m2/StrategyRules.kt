@@ -27,6 +27,19 @@ object StrategyRules {
             "piadina", "burrito", "kebab", "sushi", "involtino", "involtini", "arancino", "arancini",
             "ragu", "ragout", "sugo", "bolognese", "pesto", "carbonara"),
 
+        // --- Distesa sul piatto (superficie × altezza × riempimento × densità) ---
+        // Posta in alto perché molte parole di questa categoria (es. pasta, riso) sono i "vettori"
+        // principali del pasto e devono avere la precedenza su condimenti o ingredienti secondari
+        // che potrebbero attivare altre strategie (es. "pasta al tonno" -> deve essere DISTESA,
+        // non BLOCCO per via di "tonno").
+        rule(EstimationStrategy.DISTESA_SUL_PIATTO,
+            "pasta", "spaghetti", "penne", "rigatoni", "fusilli", "farfalle", "linguine",
+            "tagliatelle", "maccheroni", "riso", "risotto", "orzo", "farro", "couscous", "cous cous",
+            "quinoa", "polenta", "pure", "patate", "patatine", "insalata", "verdura", "verdure",
+            "contorno", "fagioli", "fagiolini", "piselli", "ceci", "lenticchie", "spinaci",
+            "zucchine", "melanzane", "peperoni", "carote", "broccoli", "cavolfiore", "finocchi",
+            "cereali", "muesli", "corn flakes", "fiocchi"),
+
         // --- A contenitore (liquidi / semiliquidi in bicchiere, tazza, ciotola, scodella) ---
         rule(EstimationStrategy.A_CONTENITORE,
             "latte", "yogurt", "succo", "spremuta", "frullato", "smoothie", "centrifuga",
@@ -51,15 +64,6 @@ object StrategyRules {
             "formaggio", "mozzarella", "parmigiano", "grana", "pecorino", "stracchino", "ricotta",
             "torta", "crostata", "tiramisu", "pane", "pizza", "focaccia", "prosciutto", "salame",
             "mortadella", "bresaola", "speck", "frittata", "omelette", "pancetta"),
-
-        // --- Distesa sul piatto (superficie × altezza × riempimento × densità) ---
-        rule(EstimationStrategy.DISTESA_SUL_PIATTO,
-            "pasta", "spaghetti", "penne", "rigatoni", "fusilli", "farfalle", "linguine",
-            "tagliatelle", "maccheroni", "riso", "risotto", "orzo", "farro", "couscous", "cous cous",
-            "quinoa", "polenta", "pure", "patate", "patatine", "insalata", "verdura", "verdure",
-            "contorno", "fagioli", "fagiolini", "piselli", "ceci", "lenticchie", "spinaci",
-            "zucchine", "melanzane", "peperoni", "carote", "broccoli", "cavolfiore", "finocchi",
-            "cereali", "muesli", "corn flakes", "fiocchi"),
 
         // --- Trascurabile (valore fisso, dichiarato incerto) ---
         rule(EstimationStrategy.TRASCURABILE,
