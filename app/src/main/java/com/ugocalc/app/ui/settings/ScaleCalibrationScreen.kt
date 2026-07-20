@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +39,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.text.style.TextOverflow
+import coil.compose.AsyncImage
 
 /**
  * Schermata per visualizzare, aggiungere e rimuovere calibrazioni di scala (§2.2).
@@ -55,6 +57,7 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
     var newHeight by rememberSaveable { mutableStateOf("") }
     var newCapacity by rememberSaveable { mutableStateOf("") }
     var selectedType by rememberSaveable { mutableStateOf(ScaleAnchorType.STOVIGLIA_CALIBRATA) }
+    var editingId by rememberSaveable { mutableStateOf<Long?>(null) }
     
     var tempPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
     var savedPhotoPath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -123,20 +126,28 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                                 }
                                 
                                 cal.imagePath?.let { path ->
-                                    val bitmap = remember(path) { 
-                                        try { BitmapFactory.decodeFile(path) } catch (e: Exception) { null } 
-                                    }
-                                    if (bitmap != null) {
-                                        Image(
-                                            bitmap = bitmap.asImageBitmap(),
-                                            contentDescription = "Foto di riferimento",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .padding(horizontal = 8.dp)
-                                                .size(48.dp)
-                                                .clip(RoundedCornerShape(4.dp))
-                                        )
-                                    }
+                                    AsyncImage(
+                                        model = path,
+                                        contentDescription = "Foto di riferimento",
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .padding(horizontal = 8.dp)
+                                            .size(48.dp)
+                                            .clip(RoundedCornerShape(4.dp))
+                                    )
+                                }
+
+                                IconButton(onClick = {
+                                    editingId = cal.id
+                                    newName = cal.name
+                                    newValue = cal.valueCm.toString()
+                                    newWidth = cal.widthCm?.toString() ?: ""
+                                    newHeight = cal.heightCm?.toString() ?: ""
+                                    newCapacity = cal.capacityMl?.toString() ?: ""
+                                    selectedType = if (cal.type == ScaleAnchorType.RIFERIMENTO_CORPOREO.name) ScaleAnchorType.RIFERIMENTO_CORPOREO else ScaleAnchorType.STOVIGLIA_CALIBRATA
+                                    savedPhotoPath = cal.imagePath
+                                }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Modifica", tint = MaterialTheme.colorScheme.primary)
                                 }
 
                                 IconButton(onClick = { viewModel.deleteCalibration(cal.id) }) {
@@ -148,14 +159,36 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                 }
             }
 
-            // Form di inserimento nuova calibrazione
+            // Form di inserimento o modifica
             Surface(
                 tonalElevation = 4.dp,
                 shadowElevation = 8.dp,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(modifier = Modifier.padding(16.dp).padding(bottom = 8.dp)) {
-                    Text("Aggiungi nuova (X x Y x Z)", style = MaterialTheme.typography.titleSmall)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (editingId == null) "Aggiungi nuova (X x Y x Z)" else "Modifica calibrazione",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        if (editingId != null) {
+                            TextButton(onClick = {
+                                editingId = null
+                                newName = ""
+                                newValue = ""
+                                newWidth = ""
+                                newHeight = ""
+                                newCapacity = ""
+                                savedPhotoPath = null
+                            }) {
+                                Text("Annulla")
+                            }
+                        }
+                    }
                     
                     Spacer(modifier = Modifier.height(8.dp))
                     
@@ -237,28 +270,23 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                                 Text("Aggiungi Foto Riferimento")
                             }
                         } else {
-                            val bitmap = remember(savedPhotoPath) {
-                                try { BitmapFactory.decodeFile(savedPhotoPath) } catch (e: Exception) { null }
-                            }
-                            if (bitmap != null) {
-                                Box(modifier = Modifier.weight(1f)) {
-                                    Image(
-                                        bitmap = bitmap.asImageBitmap(),
-                                        contentDescription = "Anteprima riferimento",
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(80.dp)
-                                            .clip(RoundedCornerShape(8.dp))
-                                    )
-                                    IconButton(
-                                        onClick = { savedPhotoPath = null },
-                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
-                                            .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
-                                            .size(24.dp)
-                                    ) {
-                                        Icon(Icons.Default.Close, contentDescription = "Rimuovi", tint = Color.White, modifier = Modifier.size(16.dp))
-                                    }
+                            Box(modifier = Modifier.weight(1f)) {
+                                AsyncImage(
+                                    model = savedPhotoPath,
+                                    contentDescription = "Anteprima riferimento",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(80.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                )
+                                IconButton(
+                                    onClick = { savedPhotoPath = null },
+                                    modifier = Modifier.align(Alignment.TopEnd).padding(4.dp)
+                                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(20.dp))
+                                        .size(24.dp)
+                                ) {
+                                    Icon(Icons.Default.Close, contentDescription = "Rimuovi", tint = Color.White, modifier = Modifier.size(16.dp))
                                 }
                             }
                         }
@@ -270,7 +298,15 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                             val y = newWidth.replace(",", ".").toDoubleOrNull()
                             val z = newHeight.replace(",", ".").toDoubleOrNull()
                             val cap = newCapacity.replace(",", ".").toDoubleOrNull()
-                            viewModel.addCalibration(selectedType, newName, x, y, z, cap, savedPhotoPath)
+                            
+                            val eid = editingId
+                            if (eid == null) {
+                                viewModel.addCalibration(selectedType, newName, x, y, z, cap, savedPhotoPath)
+                            } else {
+                                viewModel.updateCalibration(eid, selectedType, newName, x, y, z, cap, savedPhotoPath)
+                                editingId = null
+                            }
+                            
                             newName = ""
                             newValue = ""
                             newWidth = ""
@@ -281,7 +317,7 @@ fun ScaleCalibrationScreen(onBack: () -> Unit, viewModel: ScaleCalibrationViewMo
                         enabled = newName.isNotBlank() && newValue.isNotBlank(),
                         modifier = Modifier.padding(top = 16.dp).fillMaxWidth()
                     ) {
-                        Text("Salva Calibrazione")
+                        Text(if (editingId == null) "Salva Calibrazione" else "Aggiorna Calibrazione")
                     }
                 }
             }

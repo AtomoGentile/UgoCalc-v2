@@ -28,6 +28,10 @@ interface V2AnalysisRecordDao {
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL AND sessionMode = :sessionMode AND aiModelId = :aiModelId ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity>
 
+    /** Tutte le righe con ground truth (§ segnalazione utente "stuttering fortissimo"): evita N query per ricalcolare tutte le statistiche della vista BIAS. */
+    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
+    suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity>
+
     /** Righe ancora senza ground truth: da mostrare all'utente per registrare un peso vero (§13 punto 3). */
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity>

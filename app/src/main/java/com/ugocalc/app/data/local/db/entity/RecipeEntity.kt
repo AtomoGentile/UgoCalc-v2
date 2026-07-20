@@ -12,6 +12,7 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "recipes")
 data class RecipeEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val sessionMode: String = "CASA",
     val name: String,
     val description: String = "",
 )

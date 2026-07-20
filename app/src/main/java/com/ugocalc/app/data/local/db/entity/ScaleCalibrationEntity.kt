@@ -11,6 +11,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "scale_calibrations")
 data class ScaleCalibrationEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    /** Modalità in cui è stata salvata (CASA o RISTORANTE). */
+    val sessionMode: String = "CASA",
     /** Nome dell'enum [com.ugocalc.app.domain.inference.model.ScaleAnchorType]. */
     val type: String,
     /** Nome descrittivo dato dall'utente (es. "Piatto piano bianco", "Mio dito indice"). */

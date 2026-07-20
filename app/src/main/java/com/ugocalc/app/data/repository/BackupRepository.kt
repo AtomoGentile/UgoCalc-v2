@@ -6,6 +6,8 @@ import com.ugocalc.app.data.backup.FavoriteDto
 import com.ugocalc.app.data.backup.FoodEntryDto
 import com.ugocalc.app.data.backup.HistoryEntryDto
 import com.ugocalc.app.data.backup.ImportValidation
+import com.ugocalc.app.data.backup.RecipeDto
+import com.ugocalc.app.data.backup.RecipeIngredientDto
 import com.ugocalc.app.data.backup.ScaleCalibrationDto
 import com.ugocalc.app.data.backup.TableDto
 import com.ugocalc.app.data.backup.UgoCalcBackupArchive
@@ -15,6 +17,7 @@ import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.RecipeDao
 import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
@@ -23,6 +26,8 @@ import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
+import com.ugocalc.app.data.local.db.entity.RecipeEntity
+import com.ugocalc.app.data.local.db.entity.RecipeIngredientEntity
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.model.OfficialFileType
@@ -56,6 +61,7 @@ class BackupRepository @Inject constructor(
     private val favoriteShortcutDao: FavoriteShortcutDao,
     private val v2AnalysisRecordDao: V2AnalysisRecordDao,
     private val scaleCalibrationDao: ScaleCalibrationDao,
+    private val recipeDao: RecipeDao,
     private val json: Json,
 ) {
     suspend fun exportAll(): String {
@@ -79,12 +85,28 @@ class BackupRepository @Inject constructor(
             )
         }
 
-        val scaleCalibrations = scaleCalibrationDao.getAll().first().map {
+        val scaleCalibrations = scaleCalibrationDao.getAllOnce().map {
             ScaleCalibrationDto(
+                sessionMode = it.sessionMode,
                 type = it.type,
                 name = it.name,
                 valueCm = it.valueCm,
+                widthCm = it.widthCm,
+                heightCm = it.heightCm,
                 capacityMl = it.capacityMl,
+                imagePath = it.imagePath,
+            )
+        }
+
+        val recipes = recipeDao.getAllOnce().map { recipe ->
+            val ingredients = recipeDao.getIngredientsForRecipe(recipe.id).map {
+                RecipeIngredientDto(name = it.name, percentage = it.percentage)
+            }
+            RecipeDto(
+                sessionMode = recipe.sessionMode,
+                name = recipe.name,
+                description = recipe.description,
+                ingredients = ingredients
             )
         }
 
@@ -153,6 +175,7 @@ class BackupRepository @Inject constructor(
             tables = tables,
             biasCorrections = biasCorrections,
             favorites = favorites,
+            recipes = recipes,
         )
         return json.encodeToString(archive)
     }
@@ -181,6 +204,7 @@ class BackupRepository @Inject constructor(
                 tablesCount = archive.tables.size,
                 biasCorrectionsCount = archive.biasCorrections.size,
                 favoritesCount = archive.favorites.size,
+                recipesCount = archive.recipes.size,
             ),
         )
     }
@@ -232,11 +256,35 @@ class BackupRepository @Inject constructor(
         archive.scaleCalibrations.forEach {
             scaleCalibrationDao.insert(
                 ScaleCalibrationEntity(
+                    sessionMode = it.sessionMode,
                     type = it.type,
                     name = it.name,
                     valueCm = it.valueCm,
+                    widthCm = it.widthCm,
+                    heightCm = it.heightCm,
                     capacityMl = it.capacityMl,
+                    imagePath = it.imagePath,
                 ),
+            )
+        }
+
+        recipeDao.deleteAll()
+        archive.recipes.forEach { recipeDto ->
+            val newRecipeId = recipeDao.insertRecipe(
+                RecipeEntity(
+                    sessionMode = recipeDto.sessionMode,
+                    name = recipeDto.name,
+                    description = recipeDto.description,
+                )
+            )
+            recipeDao.insertIngredients(
+                recipeDto.ingredients.map {
+                    RecipeIngredientEntity(
+                        recipeId = newRecipeId,
+                        name = it.name,
+                        percentage = it.percentage,
+                    )
+                }
             )
         }
 

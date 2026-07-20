@@ -47,13 +47,75 @@ class BiasCorrectionRepository @Inject constructor(
      */
     suspend fun getAllCorrections(): List<BiasCorrectionEntity> = biasCorrectionDao.getAll()
 
-    suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> =
-        getAllCorrections().map { correction ->
+    /**
+     * Caricamento ottimizzato delle statistiche (§ segnalazione utente "stuttering fortissimo"):
+     * carica tutti i record con ground truth una sola volta invece di rieseguire N query (una per
+     * ogni riga di correzione) e ri-parsare i JSON per ogni riga — su decine di categorie, questo
+     * riduce il tempo di elaborazione da diversi secondi a pochi millisecondi.
+     */
+    suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> {
+        val corrections = getAllCorrections()
+        if (corrections.isEmpty()) return emptyList()
+
+        // Cache locale dei record parsati per questa sessione di calcolo
+        val allGroundTruthRecords = analysisDao.getWithGroundTruthAll()
+            .map { record ->
+                val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+                val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
+                ParsedRecord(record.sessionMode, record.aiModelId, estimates, groundTruth)
+            }
+
+        return corrections.map { correction ->
+            val observations = allGroundTruthRecords
+                .filter { it.sessionMode == correction.sessionMode && it.aiModelId == correction.aiModelId }
+                .flatMap { record ->
+                    record.estimates
+                        .filter { it.strategia.name == correction.strategy && FoodCategoryRouter.categorize(it.nome).name == correction.foodCategory }
+                        .mapNotNull { estimate ->
+                            record.groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
+                        }
+                }
+
             BiasCorrectionWithUsageStats(
                 correction = correction,
-                usageStats = usageStatsFor(correction),
+                usageStats = if (observations.isNotEmpty()) computeUsageStats(observations, correction.factor) else null,
             )
         }
+    }
+
+    private data class ParsedRecord(
+        val sessionMode: String,
+        val aiModelId: String,
+        val estimates: List<WeightEstimate>,
+        val groundTruth: Map<String, Double>
+    )
+
+    private fun computeUsageStats(observations: List<BiasObservation>, factor: Double): BiasCorrectionUsageStats {
+        val rawErrors = observations.map { it.pesoStimatoG - it.pesoVeroG }
+        val correctedEstimates = observations.map { it.pesoStimatoG * factor }
+        val correctedErrors = correctedEstimates.zip(observations).map { (corrected, observation) ->
+            corrected - observation.pesoVeroG
+        }
+        val squaredErrors = rawErrors.map { it.pow(2) }
+        val correctedSquaredErrors = correctedErrors.map { it.pow(2) }
+
+        return BiasCorrectionUsageStats(
+            observationCount = observations.size,
+            meanEstimatedWeightG = observations.map { it.pesoStimatoG }.average(),
+            meanGroundTruthWeightG = observations.map { it.pesoVeroG }.average(),
+            meanCorrectedWeightG = correctedEstimates.average(),
+            meanAppliedCorrectionG = correctedEstimates.zip(observations).map { (corrected, observation) ->
+                corrected - observation.pesoStimatoG
+            }.average(),
+            meanErrorG = rawErrors.average(),
+            meanAbsoluteErrorG = rawErrors.map { abs(it) }.average(),
+            meanSquaredErrorG2 = squaredErrors.average(),
+            rootMeanSquaredErrorG = sqrt(squaredErrors.average()),
+            correctedMeanErrorG = correctedErrors.average(),
+            correctedMeanAbsoluteErrorG = correctedErrors.map { abs(it) }.average(),
+            correctedRootMeanSquaredErrorG = sqrt(correctedSquaredErrors.average()),
+        )
+    }
 
     /** Fattore corrente per il segmento, se esiste (§8: consumato da M3 nella catena di calcolo). Null se il consenso non è dato, dati insufficienti o bias instabile. */
     suspend fun currentFactor(sessionMode: SessionMode, strategy: EstimationStrategy, aiModelId: String, foodCategory: FoodCategory, consentGiven: Boolean): Double? {

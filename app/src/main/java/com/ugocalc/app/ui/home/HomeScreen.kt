@@ -4,14 +4,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.platform.LocalConfiguration
+import android.content.res.Configuration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -46,6 +56,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -94,7 +105,12 @@ fun HomeScreen(
                 selectedIconColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
             )
             ModalDrawerSheet(modifier = Modifier.width(240.dp)) {
-                Text("UgoCalc", style = androidx.compose.material3.MaterialTheme.typography.titleLarge, modifier = Modifier.padding(16.dp))
+                Text(
+                    "UgoCalc",
+                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(16.dp)
+                )
                 NavigationDrawerItem(
                     label = { Text("Analisi", fontWeight = FontWeight.Bold) },
                     selected = true,
@@ -125,6 +141,25 @@ fun HomeScreen(
                     colors = itemColors,
                     onClick = { scope.launch { drawerState.close() }; onNavigateToSettings() },
                 )
+                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                Column(
+                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = com.ugocalc.app.R.drawable.ugocalc_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                    )
+                    Text(
+                        "Versione ${com.ugocalc.app.BuildConfig.VERSION_NAME}",
+                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        color = UgoGrey,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
             }
         },
     ) {
@@ -154,79 +189,70 @@ fun HomeScreen(
                 )
             },
         ) { padding: PaddingValues ->
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Top,
-            ) {
-                Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
-                    AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
-                        val preferred = uiState.preferredModels
-                        if (preferred.isNotEmpty()) {
-                            viewModel.startAnalysisWithPreferredModels()
-                            onNavigateDirectlyToCamera(preferred.map { it.id })
-                        } else {
-                            viewModel.startNewAnalysis()
-                            onNavigateToModelSelection()
-                        }
-                    })
-                }
+            val configuration = LocalConfiguration.current
+            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-                OutlinedButton(
-                    enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                    onClick = {
-                        viewModel.startNewAnalysis()
-                        onNavigateToManualEntry()
-                    },
-                    modifier = Modifier.padding(bottom = 16.dp),
-                ) { Text("Aggiungi alimenti manualmente") }
-
-                if (uiState.analyzeButtonState == AnalyzeButtonState.DISABLED_NO_TABLE) {
-                    Text(
-                        text = "Carica una tabella di valori ufficiali nelle Impostazioni per iniziare",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(bottom = 16.dp),
-                    )
-                } else if (uiState.analyzeButtonState == AnalyzeButtonState.ENABLED_OFFLINE) {
-                    Text(
-                        text = "Nessuna connessione: nessun modello sarà selezionabile finché non torni online",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(bottom = 16.dp),
-                    )
-                }
-
-                // "In basso ma non troppo" (§ richiesta utente): subito sotto ai controlli di
-                // analisi principali, non in fondo del tutto dove finirebbe nascosto sotto i
-                // preferiti quando la lista è lunga.
-                OutlinedButton(
-                    enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                    onClick = onNavigateToBarcodeScan,
-                    modifier = Modifier.padding(bottom = 16.dp),
+            if (isLandscape) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(32.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                    Text("Scansiona codice a barre")
-                }
+                    AnalyzeButton(
+                        state = uiState.analyzeButtonState,
+                        // Margine extra a sinistra in landscape (§ richiesta utente): evita che il
+                        // pulsantone finisca proprio sotto la selfie cam o il punch-hole.
+                        modifier = Modifier.padding(start = 32.dp).size(180.dp),
+                        onClick = {
+                            val preferred = uiState.preferredModels
+                            if (preferred.isNotEmpty()) {
+                                viewModel.startAnalysisWithPreferredModels()
+                                onNavigateDirectlyToCamera(preferred.map { it.id })
+                            } else {
+                                viewModel.startNewAnalysis()
+                                onNavigateToModelSelection()
+                            }
+                        }
+                    )
 
-                if (uiState.favoritesEnabled) {
-                    IconButton(
-                        onClick = { showAddFavoriteDialog = true },
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState()),
+                        horizontalAlignment = Alignment.Start
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Aggiungi preferito dal database")
-                    }
-                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                        items(uiState.favorites) { favorite ->
-                            // Bug fix: card più compatta (§ segnalazione utente "falli più
-                            // compatti"): nome ed macro sulla stessa riga invece di impilati, meno
-                            // padding, così se ne vedono di più senza scorrere.
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 2.dp)
-                                    .clickable {
+                        OutlinedButton(
+                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                            onClick = {
+                                viewModel.startNewAnalysis()
+                                onNavigateToManualEntry()
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        ) { Text("Aggiungi alimenti manualmente") }
+
+                        OutlinedButton(
+                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                            onClick = onNavigateToBarcodeScan,
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Scansiona codice a barre")
+                        }
+
+                        if (uiState.favoritesEnabled) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Preferiti", style = MaterialTheme.typography.titleMedium)
+                                IconButton(onClick = { showAddFavoriteDialog = true }) {
+                                    Icon(Icons.Default.Add, contentDescription = "Aggiungi")
+                                }
+                            }
+                            uiState.favorites.forEach { favorite ->
+                                FavoriteCard(
+                                    favorite = favorite,
+                                    onClick = {
                                         if (favorite.comboGrams != null) {
                                             viewModel.useComboFavoriteDirectly(favorite)
                                             onFavoriteReadyForResult()
@@ -236,29 +262,89 @@ fun HomeScreen(
                                                 onFavoriteNeedsQuantity()
                                             }
                                         }
-                                    },
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                                ) {
-                                    Text(
-                                        favorite.label,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                        modifier = Modifier.weight(1f).padding(end = 8.dp),
-                                    )
-                                    Text(
-                                        if (favorite.isPerHundredGrams) {
-                                            "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g/100g"
-                                        } else {
-                                            "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g"
-                                        },
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                }
+                                    }
+                                )
                             }
+                        }
+                    }
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(24.dp)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Top,
+                ) {
+                    Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
+                        AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
+                            val preferred = uiState.preferredModels
+                            if (preferred.isNotEmpty()) {
+                                viewModel.startAnalysisWithPreferredModels()
+                                onNavigateDirectlyToCamera(preferred.map { it.id })
+                            } else {
+                                viewModel.startNewAnalysis()
+                                onNavigateToModelSelection()
+                            }
+                        })
+                    }
+
+                    OutlinedButton(
+                        enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                        onClick = {
+                            viewModel.startNewAnalysis()
+                            onNavigateToManualEntry()
+                        },
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    ) { Text("Aggiungi alimenti manualmente") }
+
+                    if (uiState.analyzeButtonState == AnalyzeButtonState.DISABLED_NO_TABLE) {
+                        Text(
+                            text = "Carica una tabella di valori ufficiali nelle Impostazioni per iniziare",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        )
+                    } else if (uiState.analyzeButtonState == AnalyzeButtonState.ENABLED_OFFLINE) {
+                        Text(
+                            text = "Nessuna connessione: nessun modello sarà selezionabile finché non torni online",
+                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        )
+                    }
+
+                    OutlinedButton(
+                        enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                        onClick = onNavigateToBarcodeScan,
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                        Text("Scansiona codice a barre")
+                    }
+
+                    if (uiState.favoritesEnabled) {
+                        IconButton(
+                            onClick = { showAddFavoriteDialog = true },
+                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                        ) {
+                            Icon(Icons.Default.Add, contentDescription = "Aggiungi preferito dal database")
+                        }
+                        uiState.favorites.forEach { favorite ->
+                            FavoriteCard(
+                                favorite = favorite,
+                                onClick = {
+                                    if (favorite.comboGrams != null) {
+                                        viewModel.useComboFavoriteDirectly(favorite)
+                                        onFavoriteReadyForResult()
+                                    } else {
+                                        scope.launch {
+                                            viewModel.openFavoriteForQuantityEntry(favorite)
+                                            onFavoriteNeedsQuantity()
+                                        }
+                                    }
+                                }
+                            )
                         }
                     }
                 }
@@ -278,14 +364,45 @@ fun HomeScreen(
 }
 
 @Composable
-private fun AnalyzeButton(state: AnalyzeButtonState, onClick: () -> Unit) {
+private fun FavoriteCard(favorite: FavoriteDisplay, onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .clickable { onClick() },
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        ) {
+            Text(
+                favorite.label,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+            )
+            Text(
+                if (favorite.isPerHundredGrams) {
+                    "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g/100g"
+                } else {
+                    "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g"
+                },
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnalyzeButton(state: AnalyzeButtonState, modifier: Modifier = Modifier, onClick: () -> Unit) {
     val color = when (state) {
         AnalyzeButtonState.ENABLED_ONLINE -> androidx.compose.material3.MaterialTheme.colorScheme.primary
         AnalyzeButtonState.ENABLED_OFFLINE -> androidx.compose.material3.MaterialTheme.colorScheme.error
         AnalyzeButtonState.DISABLED_NO_TABLE -> UgoGrey
     }
     Box(
-        modifier = Modifier
+        modifier = modifier
             .size(160.dp)
             .background(color, CircleShape)
             .clickable(enabled = state != AnalyzeButtonState.DISABLED_NO_TABLE) { onClick() },

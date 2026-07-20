@@ -16,6 +16,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.flowOn
 import java.util.Calendar
 import javax.inject.Inject
 
@@ -84,7 +86,9 @@ class HistoryViewModel @Inject constructor(
     val chartEntries: StateFlow<List<AnalysisHistoryEntity>> = combine(history, _chartInterval) { entries, interval ->
         val cutoff = interval.days?.let { System.currentTimeMillis() - it * 24L * 60 * 60 * 1000 }
         entries.filter { cutoff == null || it.analyzedAtEpochMillis >= cutoff }.sortedBy { it.analyzedAtEpochMillis }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setChartInterval(interval: HistoryChartInterval) {
         _chartInterval.value = interval
@@ -95,15 +99,23 @@ class HistoryViewModel @Inject constructor(
 
     /** Cronologia filtrata (§ richiesta utente): quella mostrata nell'elenco, indipendente dall'intervallo del grafico. */
     val filteredHistory: StateFlow<List<AnalysisHistoryEntity>> = combine(history, _filters) { entries, filters ->
+        val calendar = Calendar.getInstance()
         entries.filter { entry ->
             val afterFrom = filters.dateFromMillis?.let { entry.analyzedAtEpochMillis >= it } ?: true
             val beforeTo = filters.dateToMillis?.let { entry.analyzedAtEpochMillis <= it } ?: true
             val inChoRange = entry.totalChoG.toFloat() in filters.choRange
-            val hour = Calendar.getInstance().apply { timeInMillis = entry.analyzedAtEpochMillis }.get(Calendar.HOUR_OF_DAY).toFloat()
+            
+            val hour = if (filters.hourRange != 0f..24f) {
+                calendar.timeInMillis = entry.analyzedAtEpochMillis
+                calendar.get(Calendar.HOUR_OF_DAY).toFloat()
+            } else 12f
+            
             val inHourRange = hour in filters.hourRange
             afterFrom && beforeTo && inChoRange && inHourRange
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+    .flowOn(Dispatchers.Default)
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setDateFrom(millis: Long?) = _filters.update { it.copy(dateFromMillis = millis) }
     fun setDateTo(millis: Long?) = _filters.update { it.copy(dateToMillis = millis) }

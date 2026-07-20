@@ -23,6 +23,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -77,41 +79,45 @@ class HomeViewModel @Inject constructor(
                 isOnline -> AnalyzeButtonState.ENABLED_ONLINE
                 else -> AnalyzeButtonState.ENABLED_OFFLINE
             }
-        }.onEach { state -> _uiState.value = _uiState.value.copy(analyzeButtonState = state) }
-            .launchIn(viewModelScope)
+        }
+        .flowOn(Dispatchers.Default)
+        .onEach { state -> _uiState.value = _uiState.value.copy(analyzeButtonState = state) }
+        .launchIn(viewModelScope)
 
-        favoritesRepository.observeFavorites().onEach { favorites ->
-            val resolved = favorites.mapNotNull { favorite ->
-                val historyEntryId = favorite.historyEntryId
-                val comboGrams = favorite.comboGrams
-                val comboCho = favorite.comboChoPer100g
-                val comboGrassi = favorite.comboGrassiPer100g
-                when {
-                    historyEntryId != null -> {
-                        val history = historyRepository.getById(historyEntryId) ?: return@mapNotNull null
-                        FavoriteDisplay(favorite.id, favorite.label, history.totalChoG, history.totalGrassiG, history.id)
+        favoritesRepository.observeFavorites()
+            .flowOn(Dispatchers.Default)
+            .onEach { favorites ->
+                val resolved = favorites.mapNotNull { favorite ->
+                    val historyEntryId = favorite.historyEntryId
+                    val comboGrams = favorite.comboGrams
+                    val comboCho = favorite.comboChoPer100g
+                    val comboGrassi = favorite.comboGrassiPer100g
+                    when {
+                        historyEntryId != null -> {
+                            val history = historyRepository.getById(historyEntryId) ?: return@mapNotNull null
+                            FavoriteDisplay(favorite.id, favorite.label, history.totalChoG, history.totalGrassiG, history.id)
+                        }
+                        comboCho != null && comboGrassi != null && comboGrams != null -> FavoriteDisplay(
+                            id = favorite.id,
+                            label = favorite.label,
+                            choG = comboCho * comboGrams / 100.0,
+                            grassiG = comboGrassi * comboGrams / 100.0,
+                            historyEntryId = null,
+                            comboGrams = comboGrams,
+                        )
+                        comboCho != null && comboGrassi != null -> FavoriteDisplay(
+                            id = favorite.id,
+                            label = favorite.label,
+                            choG = comboCho,
+                            grassiG = comboGrassi,
+                            historyEntryId = null,
+                            isPerHundredGrams = true,
+                        )
+                        else -> null
                     }
-                    comboCho != null && comboGrassi != null && comboGrams != null -> FavoriteDisplay(
-                        id = favorite.id,
-                        label = favorite.label,
-                        choG = comboCho * comboGrams / 100.0,
-                        grassiG = comboGrassi * comboGrams / 100.0,
-                        historyEntryId = null,
-                        comboGrams = comboGrams,
-                    )
-                    comboCho != null && comboGrassi != null -> FavoriteDisplay(
-                        id = favorite.id,
-                        label = favorite.label,
-                        choG = comboCho,
-                        grassiG = comboGrassi,
-                        historyEntryId = null,
-                        isPerHundredGrams = true,
-                    )
-                    else -> null
                 }
-            }
-            _uiState.value = _uiState.value.copy(favorites = resolved)
-        }.launchIn(viewModelScope)
+                _uiState.value = _uiState.value.copy(favorites = resolved)
+            }.launchIn(viewModelScope)
 
         // Offline, o senza API key configurata, un modello preferito non è comunque utilizzabile:
         // in quel caso non si salta la scelta modello, si lascia il flusso normale (che mostra

@@ -42,7 +42,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
         },
-        getCalibrations = { scaleCalibrationRepository.observeAll().first() },
+        getCalibrations = { sessionMode -> scaleCalibrationRepository.observeAll(sessionMode).first() },
         resolveAmbiguity = { candidati ->
             // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni
             // candidato prende il CHO/100g della prima voce trovata nelle tabelle dell'utente.

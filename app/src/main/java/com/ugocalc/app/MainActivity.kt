@@ -46,6 +46,7 @@ class MainActivity : ComponentActivity() {
                 val isRistorante = settings.activeSessionMode == SessionMode.RISTORANTE
                 UgoCalcTheme(
                     appTheme = settings.theme,
+                    isRistorante = isRistorante,
                     textScale = settings.textScale,
                     primaryColor = (if (isRistorante) settings.primaryColorRistoranteArgb else settings.primaryColorArgb)?.let { Color(it) },
                     secondaryColor = (if (isRistorante) settings.secondaryColorRistoranteArgb else settings.secondaryColorArgb)?.let { Color(it) },
@@ -74,7 +75,7 @@ class MainActivity : ComponentActivity() {
                 androidx.compose.foundation.layout.Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Color(0xFF121212)) // Colore di sfondo default (UgoCalc dark)
+                        .background(Color(0xFF001F1A)) // Colore di sfondo default (UgoCalc dark)
                 )
             }
         }

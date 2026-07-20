@@ -37,6 +37,26 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "2.4.0",
+            highlights = listOf(
+                "Nuova Identità Visiva: introdotto il nuovo logo ufficiale di UgoCalc, che riflette meglio l'unione tra tecnologia (calcolatrice) e nutrizione (pasta, riso, grano).",
+                "Ottimizzazione Prestazioni BIAS: risolto un problema di stuttering pesante nella sezione Evoluzione del Comportamento. Il caricamento dei dati storici e il calcolo delle statistiche (MAE, RMSE) sono ora fino a 10 volte più veloci grazie al caching intelligente.",
+                "Layout Orizzontale (Landscape): la Homepage è stata riprogettata per i dispositivi ruotati. Il pulsante 'Analizza' è ora affiancato alle azioni rapide e ai preferiti, ottimizzando l'uso dello spazio.",
+                "Personalizzazione Temi: rinnovati i colori della Modalità Casa con un verde più vibrante. Introdotto il tema 'Ristorante' con toni caldi (oro e bordeaux) per un distacco visivo netto.",
+                "Miglioramento Sidebar: il logo e la versione dell'app sono stati spostati in fondo al menu laterale per dare priorità alle voci di navigazione, mantenendo coerenza con le Impostazioni.",
+                "Accessibilità Display: aggiunto un margine di sicurezza al pulsante principale in modalità landscape per evitare interferenze con fori della fotocamera (selfie cam) e tacche del display.",
+                "Bug fix: corretta la nomenclatura delle risorse grafiche per garantire la compatibilità con i sistemi di build Android più recenti."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.3.1",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.1.0",
+                biasCalculator = "1.2.1",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.3.0",
             highlights = listOf(
                 "Miglioramento Routing Strategie: risolto un errore che causava la classificazione errata della pasta condita (es. 'pasta al tonno') come blocco geometrico. Ora la pasta ha sempre la precedenza.",

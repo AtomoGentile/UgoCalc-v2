@@ -174,3 +174,11 @@ val MIGRATION_9_10 = object : Migration(9, 10) {
         db.execSQL("CREATE INDEX IF NOT EXISTS index_recipe_ingredients_recipeId ON recipe_ingredients(recipeId)")
     }
 }
+
+/** Migrazione 14 -> 15: aggiunge `sessionMode` a ricette e calibrazioni per la separazione Casa/Ristorante. */
+val MIGRATION_14_15 = object : Migration(14, 15) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE scale_calibrations ADD COLUMN sessionMode TEXT NOT NULL DEFAULT 'CASA'")
+        db.execSQL("ALTER TABLE recipes ADD COLUMN sessionMode TEXT NOT NULL DEFAULT 'CASA'")
+    }
+}

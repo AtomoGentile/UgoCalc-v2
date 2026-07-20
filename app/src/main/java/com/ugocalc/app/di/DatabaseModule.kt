@@ -12,6 +12,7 @@ import com.ugocalc.app.data.local.db.MIGRATION_6_7
 import com.ugocalc.app.data.local.db.MIGRATION_7_8
 import com.ugocalc.app.data.local.db.MIGRATION_8_9
 import com.ugocalc.app.data.local.db.MIGRATION_9_10
+import com.ugocalc.app.data.local.db.MIGRATION_14_15
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.dao.BenchmarkMealDao
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
@@ -37,7 +38,11 @@ object DatabaseModule {
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
+            .addMigrations(
+                MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
+                MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
+                MIGRATION_9_10, MIGRATION_14_15
+            )
             .fallbackToDestructiveMigration()
             .build()
 

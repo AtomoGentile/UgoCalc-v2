@@ -42,26 +42,53 @@ enum class AppFontFamily(val label: String) {
     val fontWeight: FontWeight? get() = if (this == MONOSPACE) FontWeight.Bold else null
 }
 
-val UgoGreen = Color(0xFF2E7D32)
+val UgoGreen = Color(0xFF2E7D32) // Verde più acceso e vibrante (§ richiesta utente)
 val UgoRed = Color(0xFFC62828)
 val UgoGrey = Color(0xFF9E9E9E)
 /** Colore grassi nel grafico a torta CHO/grassi (§ schermata finale), distinto dal verde primario (CHO). */
 val UgoAmber = Color(0xFFF57C00)
+val UgoGold = Color(0xFFFBC02D)
+val UgoLime = Color(0xFF8BC34A)
+
+// Colori Ristorante (§ richiesta utente "colori diversi"): toni caldi, oro e bordeaux
+val RistoranteGold = Color(0xFFBF9B30)
+val RistoranteWine = Color(0xFF722F37)
+val RistoranteCream = Color(0xFFFFFDD0)
 
 private val LightColors = lightColorScheme(
     primary = UgoGreen,
-    secondary = Color(0xFF66BB6A),
-    tertiary = Color(0xFFEF6C00),
+    secondary = Color(0xFF689F38), // Lime più saturo per staccare dal primario
+    tertiary = UgoGold,
     error = UgoRed,
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF81C784),
-    secondary = Color(0xFF4CAF50),
-    tertiary = Color(0xFFFFB74D),
+    primary = Color(0xFF66BB6A), // Verde acceso anche in dark mode
+    secondary = Color(0xFF9CCC65),
+    tertiary = Color(0xFFFFF176),
     error = Color(0xFFEF9A9A),
-    background = Color(0xFF121212),
-    surface = Color(0xFF121212),
+    background = Color(0xFF001F1A),
+    surface = Color(0xFF001F1A),
+    onBackground = Color.White,
+    onSurface = Color.White,
+)
+
+private val RistoranteLightColors = lightColorScheme(
+    primary = RistoranteGold,
+    secondary = RistoranteWine,
+    tertiary = Color(0xFF8D6E63),
+    error = UgoRed,
+    background = RistoranteCream,
+    surface = RistoranteCream,
+)
+
+private val RistoranteDarkColors = darkColorScheme(
+    primary = Color(0xFFFFD54F),
+    secondary = Color(0xFFD32F2F),
+    tertiary = Color(0xFFA1887F),
+    error = Color(0xFFEF9A9A),
+    background = Color(0xFF2D2926),
+    surface = Color(0xFF2D2926),
     onBackground = Color.White,
     onSurface = Color.White,
 )
@@ -152,6 +179,7 @@ private fun ColorScheme.withCustomColors(
 @Composable
 fun UgoCalcTheme(
     appTheme: AppTheme = AppTheme.SYSTEM,
+    isRistorante: Boolean = false, // Nuova flag per switch temi (§ richiesta utente)
     textScale: Float = 1.0f,
     primaryColor: Color? = null,
     secondaryColor: Color? = null,
@@ -168,7 +196,12 @@ fun UgoCalcTheme(
         AppTheme.DARK -> true
         AppTheme.SYSTEM -> isSystemInDarkTheme()
     }
-    val baseColors = if (useDark) DarkColors else LightColors
+    val baseColors = when {
+        isRistorante && useDark -> RistoranteDarkColors
+        isRistorante -> RistoranteLightColors
+        useDark -> DarkColors
+        else -> LightColors
+    }
     val colors = baseColors.withCustomColors(useDark, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor)
     val baseTypography = MaterialTheme.typography
     fun scaled(size: androidx.compose.ui.unit.TextUnit) = (size.value * textScale).sp

@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.repository.Recipe
 import com.ugocalc.app.data.repository.RecipeIngredient
 import com.ugocalc.app.data.repository.RecipeRepository
+import com.ugocalc.app.data.repository.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -21,7 +23,8 @@ data class RecipeEditUiState(
 
 @HiltViewModel
 class RecipeEditViewModel @Inject constructor(
-    private val repository: RecipeRepository
+    private val repository: RecipeRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _uiState = mutableStateOf(RecipeEditUiState())
@@ -73,13 +76,14 @@ class RecipeEditViewModel @Inject constructor(
 
         _uiState.value = current.copy(isSaving = true)
         viewModelScope.launch {
+            val mode = settingsRepository.settings.first().activeSessionMode
             val recipe = Recipe(
                 id = current.id,
                 name = current.name,
                 description = current.description,
                 ingredients = current.ingredients
             )
-            repository.addRecipe(recipe)
+            repository.addRecipe(recipe, mode)
             _uiState.value = _uiState.value.copy(isSaving = false)
             onSaved()
         }

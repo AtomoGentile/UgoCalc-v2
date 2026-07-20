@@ -28,9 +28,13 @@ import com.ugocalc.app.util.extractCameraMetadata
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -93,6 +97,7 @@ data class CameraUiState(
     val selectedCalibrationIds: Set<Long> = emptySet(),
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class CameraCaptureViewModel @Inject constructor(
     private val runVisionForModels: RunVisionForModelsUseCase,
@@ -112,9 +117,13 @@ class CameraCaptureViewModel @Inject constructor(
 
     init {
         viewModelScope.launch {
-            scaleCalibrationRepository.observeAll().collect { calibs ->
-                _uiState.update { it.copy(availableCalibrations = calibs) }
-            }
+            sessionStore.session
+                .map { it.sessionMode }
+                .distinctUntilChanged()
+                .flatMapLatest { mode -> scaleCalibrationRepository.observeAll(mode) }
+                .collect { calibs ->
+                    _uiState.update { it.copy(availableCalibrations = calibs) }
+                }
         }
         viewModelScope.launch {
             sessionStore.session.collect { session ->
@@ -225,7 +234,7 @@ class CameraCaptureViewModel @Inject constructor(
             }
             val selectedIds = sessionStore.session.value.selectedCalibrationIds
             val calibrations = if (selectedIds.isEmpty()) null else {
-                scaleCalibrationRepository.observeAll().first().filter { it.id in selectedIds }
+                scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
             }
             val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
             if (outcome !is PipelineOutcome.Verificato) {
@@ -293,7 +302,7 @@ class CameraCaptureViewModel @Inject constructor(
                 }
                 val selectedIds = sessionStore.session.value.selectedCalibrationIds
                 val calibrations = if (selectedIds.isEmpty()) null else {
-                    scaleCalibrationRepository.observeAll().first().filter { it.id in selectedIds }
+                    scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
                 }
                 val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
                 if (outcome is PipelineOutcome.Verificato && outcome.telemetryId >= 0) {

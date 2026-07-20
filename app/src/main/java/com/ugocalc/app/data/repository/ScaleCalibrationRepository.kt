@@ -3,6 +3,7 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.inference.model.ScaleAnchorType
+import com.ugocalc.app.domain.inference.model.SessionMode
 import kotlinx.coroutines.flow.Flow
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -11,12 +12,14 @@ import javax.inject.Singleton
 class ScaleCalibrationRepository @Inject constructor(
     private val calibrationDao: ScaleCalibrationDao
 ) {
-    fun observeAll(): Flow<List<ScaleCalibrationEntity>> = calibrationDao.getAll()
+    fun observeAll(sessionMode: SessionMode): Flow<List<ScaleCalibrationEntity>> = 
+        calibrationDao.getAll(sessionMode.name)
 
-    suspend fun getByType(type: ScaleAnchorType): List<ScaleCalibrationEntity> =
-        calibrationDao.getByType(type.name)
+    suspend fun getByType(type: ScaleAnchorType, sessionMode: SessionMode): List<ScaleCalibrationEntity> =
+        calibrationDao.getByType(type.name, sessionMode.name)
 
     suspend fun addCalibration(
+        sessionMode: SessionMode,
         type: ScaleAnchorType,
         name: String,
         valueCm: Double,
@@ -27,6 +30,33 @@ class ScaleCalibrationRepository @Inject constructor(
     ) {
         calibrationDao.insert(
             ScaleCalibrationEntity(
+                sessionMode = sessionMode.name,
+                type = type.name,
+                name = name,
+                valueCm = valueCm,
+                widthCm = widthCm,
+                heightCm = heightCm,
+                capacityMl = capacityMl,
+                imagePath = imagePath
+            )
+        )
+    }
+
+    suspend fun updateCalibration(
+        id: Long,
+        sessionMode: SessionMode,
+        type: ScaleAnchorType,
+        name: String,
+        valueCm: Double,
+        widthCm: Double? = null,
+        heightCm: Double? = null,
+        capacityMl: Double? = null,
+        imagePath: String? = null,
+    ) {
+        calibrationDao.insert(
+            ScaleCalibrationEntity(
+                id = id,
+                sessionMode = sessionMode.name,
                 type = type.name,
                 name = name,
                 valueCm = valueCm,

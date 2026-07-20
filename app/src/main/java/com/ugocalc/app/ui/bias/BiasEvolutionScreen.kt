@@ -155,28 +155,34 @@ fun BiasEvolutionScreen(
                     )
                 }
             } else {
-                item {
+                item(key = "fattori_appresi_header") {
                     Text(
                         "Fattori appresi",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
                     )
                 }
-                items(uiState.corrections) { correction ->
+                items(
+                    items = uiState.corrections,
+                    key = { "${it.correction.sessionMode}_${it.correction.strategy}_${it.correction.aiModelId}_${it.correction.foodCategory}" }
+                ) { correction ->
                     BiasCorrectionRow(correction)
                     HorizontalDivider()
                 }
             }
 
             if (uiState.recentV2Records.isNotEmpty()) {
-                item {
+                item(key = "recent_v2_header") {
                     Text(
                         "Ultime analisi V2",
                         style = MaterialTheme.typography.titleMedium,
                         modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
                     )
                 }
-                items(uiState.recentV2Records) { record ->
+                items(
+                    items = uiState.recentV2Records,
+                    key = { it.id }
+                ) { record ->
                     V2RecordSummaryRow(record, onOpenV2Details)
                     HorizontalDivider()
                 }

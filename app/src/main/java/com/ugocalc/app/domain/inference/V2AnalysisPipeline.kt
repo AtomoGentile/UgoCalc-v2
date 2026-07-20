@@ -57,6 +57,7 @@ typealias ArbitrationStep = suspend (
 typealias NutritionMatchStep = suspend (
     model: AiModel,
     stime: List<WeightEstimate>,
+    sessionMode: SessionMode,
 ) -> Map<String, NormalizedFoodEntry>
 
 /**
@@ -89,9 +90,9 @@ typealias BiasFactorStep = suspend (
 
 /**
  * Firma dello step che recupera le calibrazioni persistenti dell'utente (§13 punto 4): restituisce
- * tutte le calibrazioni note per il tipo richiesto (o tutte se null).
+ * tutte le calibrazioni note per la modalità di sessione attiva.
  */
-typealias CalibrationsStep = suspend () -> List<ScaleCalibrationEntity>
+typealias CalibrationsStep = suspend (sessionMode: SessionMode) -> List<ScaleCalibrationEntity>
 
 /**
  * Firma della ricerca locale di CHO/100g per nome alimento, usata per risolvere un'ambiguità
@@ -124,7 +125,7 @@ class V2AnalysisPipeline(
         private val physicsEngine: PhysicsEngine = PhysicsEngine(),
         private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
         private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
-        private val matchNutrition: NutritionMatchStep = { _, _ -> emptyMap() },
+        private val matchNutrition: NutritionMatchStep = { _, _, _ -> emptyMap() },
         private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
         private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
         private val getCalibrations: CalibrationsStep = { emptyList() },
@@ -149,7 +150,7 @@ class V2AnalysisPipeline(
         val angoliValidi = fotoValide.map { it.quality.angleDescription }
         val metadataValidi = fotoValide.map { it.quality.cameraMetadata }
 
-        val activeCalibrations = calibrations ?: getCalibrations()
+        val activeCalibrations = calibrations ?: getCalibrations(sessionMode)
         val sceneGraph = when (val esito = perceive(model, immaginiValide, imageMimeType, sessionMode, angoliValidi, metadataValidi, activeCalibrations)) {
             is PerceptionOutcome.FallbackAV1 -> return PipelineOutcome.FallbackAV1(esito.motivo)
             is PerceptionOutcome.Riuscita -> esito.sceneGraph
@@ -209,7 +210,7 @@ class V2AnalysisPipeline(
         val (sceneFinale, stimeFinali, risoluzioni) = risolviAmbiguitaResidua(scene, stime)
         val stimeGarantite = applicaGuardrailBuonSenso(sceneFinale, stimeFinali, verifica)
         val verificaFinale = if (risoluzioni.isEmpty()) verifica else verifica.copy(ambiguitaRisolta = risoluzioni)
-        val abbinamenti = matchNutrition(model, stimeGarantite)
+        val abbinamenti = matchNutrition(model, stimeGarantite, sessionMode)
         val nutrizione = NutritionCalculator.calculate(stimeGarantite, abbinamenti)
         val outcome = PipelineOutcome.Verificato(sceneFinale, stimeGarantite, verificaFinale, nutrizione, arbitratoMotivoMancato, abbinamenti = abbinamenti)
         val telemetryId = recordTelemetry(outcome, model, sessionMode)

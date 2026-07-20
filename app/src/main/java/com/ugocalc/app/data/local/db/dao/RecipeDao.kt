@@ -11,18 +11,21 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface RecipeDao {
 
+    @Query("SELECT * FROM recipes WHERE sessionMode = :sessionMode")
+    fun getAll(sessionMode: String): Flow<List<RecipeEntity>>
+
     @Query("SELECT * FROM recipes")
-    fun getAll(): Flow<List<RecipeEntity>>
+    suspend fun getAllOnce(): List<RecipeEntity>
 
     @Query("SELECT * FROM recipes WHERE id = :id")
     suspend fun getById(id: Long): RecipeEntity?
 
-    @Query("SELECT * FROM recipes WHERE name = :name LIMIT 1")
-    suspend fun findByName(name: String): RecipeEntity?
+    @Query("SELECT * FROM recipes WHERE name = :name AND sessionMode = :sessionMode LIMIT 1")
+    suspend fun findByName(name: String, sessionMode: String): RecipeEntity?
 
     // Fuzzy/contains match: case-insensitive substring search. Returns first match if any.
-    @Query("SELECT * FROM recipes WHERE LOWER(name) LIKE '%' || LOWER(:name) || '%' LIMIT 1")
-    suspend fun findByNameFuzzy(name: String): RecipeEntity?
+    @Query("SELECT * FROM recipes WHERE LOWER(name) LIKE '%' || LOWER(:name) || '%' AND sessionMode = :sessionMode LIMIT 1")
+    suspend fun findByNameFuzzy(name: String, sessionMode: String): RecipeEntity?
 
     @Query("SELECT * FROM recipe_ingredients WHERE recipeId = :recipeId")
     suspend fun getIngredientsForRecipe(recipeId: Long): List<RecipeIngredientEntity>

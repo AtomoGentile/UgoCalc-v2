@@ -3,6 +3,7 @@ package com.ugocalc.app.domain.inference.m6
 import com.ugocalc.app.data.repository.RecipeRepository
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
@@ -13,15 +14,8 @@ import javax.inject.Inject
 /**
  * M6 – Nutrition Engine (piano V2 §5, §14): resta quello della V1 ([MatchFoodsAcrossTablesUseCase]),
  * nessuna riscrittura. Questo è l'unico punto di innesto tra la pipeline V2 e il motore
- * nutrizionale esistente (guida migrazione §3): converte le [WeightEstimate] di M3/M4/M5 — peso
- * deterministico + catena di calcolo — nel contratto [RecognizedFood] che matching, calcolo
- * CHO/grassi e storico già consumano senza modifiche, qualunque sia la provenienza del peso.
- *
- * Implementazione ibrida per la strategia COMPOSTO: se M3 restituisce un peso con strategia
- * COMPOSTO_OCCLUSO e confidenza ALTO, provare a cercare una ricetta nel database tramite
- * RecipeRepository.findByName(nome). Se trovata, decomporre il peso stimato tra gli ingredienti
- * della ricetta (proporzionalmente alle percentuali) e passare gli ingredienti a MatchFoodsAcrossTablesUseCase.
- * Altrimenti, fallback al comportamento precedente (un singolo RecognizedFood per stima).
+ * nutrizionale esistente (guida migrazione §3) — converte le [WeightEstimate] di M3/M4/M5 in
+ * [RecognizedFood].
  */
 class NutritionMatchStepAdapter @Inject constructor(
     private val matchFoodsAcrossTables: MatchFoodsAcrossTablesUseCase,
@@ -29,14 +23,14 @@ class NutritionMatchStepAdapter @Inject constructor(
 ) {
     private val RECIPE_MIN_CONFIDENCE = Confidence.ALTO // only automatic decomposition when confidence is ALTO
 
-    suspend fun match(model: AiModel, stime: List<WeightEstimate>): Map<String, NormalizedFoodEntry> {
+    suspend fun match(model: AiModel, stime: List<WeightEstimate>, sessionMode: SessionMode): Map<String, NormalizedFoodEntry> {
         val expandedRecognized = mutableListOf<RecognizedFood>()
 
         for (est in stime) {
             if (est.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && est.confidenza == RECIPE_MIN_CONFIDENCE) {
-                // Try to find a recipe matching the recognized name
+                // Try to find a recipe matching the recognized name in the current session mode
                 val recipe = try {
-                    recipeRepository.findByNameFuzzy(est.nome.trim())
+                    recipeRepository.findByNameFuzzy(est.nome.trim(), sessionMode)
                 } catch (e: Exception) {
                     null
                 }

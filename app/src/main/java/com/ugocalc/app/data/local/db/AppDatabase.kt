@@ -39,7 +39,7 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         RecipeEntity::class,
         RecipeIngredientEntity::class,
     ],
-    version = 14, // Incrementato a 14 per gestire l'aggiunta di sessionId in AnalysisHistoryEntity
+    version = 15, // Incrementato a 15 per separazione Casa/Ristorante in ricette e calibrazioni
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

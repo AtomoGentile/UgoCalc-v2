@@ -20,10 +20,11 @@ data class UgoCalcBackupArchive(
     val tables: List<TableDto>,
     val biasCorrections: List<BiasCorrectionDto>,
     val favorites: List<FavoriteDto>,
+    val recipes: List<RecipeDto> = emptyList(),
 ) {
     companion object {
         /** Versione corrente del formato di backup (§17), indipendente dallo schema del database Room. */
-        const val SCHEMA_VERSION = 4
+        const val SCHEMA_VERSION = 5
     }
 }
 
@@ -55,10 +56,14 @@ data class V2AnalysisRecordDto(
 
 @Serializable
 data class ScaleCalibrationDto(
+    val sessionMode: String = "CASA",
     val type: String,
     val name: String,
     val valueCm: Double,
-    val capacityMl: Double?,
+    val capacityMl: Double? = null,
+    val widthCm: Double? = null,
+    val heightCm: Double? = null,
+    val imagePath: String? = null,
 )
 
 /** [entries] sono le sole righe già normalizzate: il documento originale caricato dall'utente non viene esportato (§17, §7 nota su storedFilePath). */
@@ -113,6 +118,20 @@ data class FavoriteDto(
     val comboGrassiPer100g: Double?,
 )
 
+@Serializable
+data class RecipeDto(
+    val sessionMode: String,
+    val name: String,
+    val description: String,
+    val ingredients: List<RecipeIngredientDto>,
+)
+
+@Serializable
+data class RecipeIngredientDto(
+    val name: String,
+    val percentage: Double,
+)
+
 /** Conteggi da mostrare all'utente prima di confermare l'import (§17 "sostituzione totale con conferma esplicita"). */
 data class BackupSummary(
     val historyCount: Int,
@@ -121,6 +140,7 @@ data class BackupSummary(
     val tablesCount: Int,
     val biasCorrectionsCount: Int,
     val favoritesCount: Int,
+    val recipesCount: Int = 0,
 )
 
 /** Esito della validazione di un archivio prima di applicarlo (§17, stessa disciplina di versionamento di §7). */

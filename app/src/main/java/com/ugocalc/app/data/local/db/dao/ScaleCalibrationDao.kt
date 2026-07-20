@@ -9,11 +9,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ScaleCalibrationDao {
-    @Query("SELECT * FROM scale_calibrations")
-    fun getAll(): Flow<List<ScaleCalibrationEntity>>
+    @Query("SELECT * FROM scale_calibrations WHERE sessionMode = :sessionMode")
+    fun getAll(sessionMode: String): Flow<List<ScaleCalibrationEntity>>
 
-    @Query("SELECT * FROM scale_calibrations WHERE type = :type")
-    suspend fun getByType(type: String): List<ScaleCalibrationEntity>
+    @Query("SELECT * FROM scale_calibrations")
+    suspend fun getAllOnce(): List<ScaleCalibrationEntity>
+
+    @Query("SELECT * FROM scale_calibrations WHERE type = :type AND sessionMode = :sessionMode")
+    suspend fun getByType(type: String, sessionMode: String): List<ScaleCalibrationEntity>
 
     @Query("SELECT * FROM scale_calibrations WHERE id = :id")
     suspend fun getById(id: Long): ScaleCalibrationEntity?
