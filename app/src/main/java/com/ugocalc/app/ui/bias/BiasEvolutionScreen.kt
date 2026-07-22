@@ -7,6 +7,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -54,6 +56,8 @@ fun BiasEvolutionScreen(
     viewModel: BiasEvolutionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
+    val dayDateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("BIAS ed evoluzione del comportamento") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -166,7 +170,7 @@ fun BiasEvolutionScreen(
                     items = uiState.corrections,
                     key = { "${it.correction.sessionMode}_${it.correction.strategy}_${it.correction.aiModelId}_${it.correction.foodCategory}" }
                 ) { correction ->
-                    BiasCorrectionRow(correction)
+                    BiasCorrectionRow(correction, dayDateFormat)
                     HorizontalDivider()
                 }
             }
@@ -183,7 +187,7 @@ fun BiasEvolutionScreen(
                     items = uiState.recentV2Records,
                     key = { it.id }
                 ) { record ->
-                    V2RecordSummaryRow(record, onOpenV2Details)
+                    V2RecordSummaryRow(record, onOpenV2Details, onDelete = { viewModel.deleteRecord(record.id) }, fullDateFormat)
                     HorizontalDivider()
                 }
             }
@@ -192,35 +196,50 @@ fun BiasEvolutionScreen(
 }
 
 @Composable
-private fun V2RecordSummaryRow(record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity, onClick: (Long) -> Unit) {
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
+private fun V2RecordSummaryRow(
+    record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity,
+    onClick: (Long) -> Unit,
+    onDelete: () -> Unit,
+    dateFormat: SimpleDateFormat,
+) {
     Card(
         onClick = { onClick(record.id) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                "${dateFormat.format(Date(record.analyzedAtEpochMillis))} - ${record.sessionMode}",
-                fontWeight = FontWeight.Bold
-            )
-            Text(
-                "Modello: ${record.aiModelId}",
-                style = MaterialTheme.typography.bodySmall,
-                color = UgoGrey
-            )
-            Text(
-                "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
-                style = MaterialTheme.typography.bodySmall,
-                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-            )
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "${dateFormat.format(Date(record.analyzedAtEpochMillis))} - ${record.sessionMode}",
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "Modello: ${record.aiModelId}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = UgoGrey
+                )
+                Text(
+                    "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
+                    style = MaterialTheme.typography.bodySmall,
+                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                )
+            }
+            androidx.compose.material3.IconButton(onClick = onDelete) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Elimina",
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats) {
+private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats, dateFormat: SimpleDateFormat) {
     val correction = row.correction
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
@@ -228,18 +247,53 @@ private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats) {
                 fontWeight = FontWeight.Bold,
             )
             Text("Modello: ${correction.aiModelId}", style = MaterialTheme.typography.bodySmall)
-            Text(
-                "Fattore ${formatFactor(correction.factor)}x su ${correction.sampleCount} correzioni - aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
-                style = MaterialTheme.typography.bodySmall,
-            )
+
+            when (val result = row.calculationResult) {
+                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile -> {
+                    Text(
+                        "Fattore ${formatFactor(correction.factor)}x su ${correction.sampleCount} correzioni - aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti -> {
+                    Text(
+                        "STATO: CORREZIONE NON ATTIVA (Dati insufficienti)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = UgoGrey,
+                    )
+                    Text(
+                        "Campione: ${result.campione}/${com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SAMPLE_COUNT} necessari. Il sistema inizierà a correggere questo segmento solo dopo aver raccolto abbastanza pesi veri.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = UgoGrey,
+                    )
+                }
+                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile -> {
+                    Text(
+                        "STATO: CORREZIONE DISATTIVATA (Bias instabile)",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                    Text(
+                        "Concordanza: ${(result.concordanza * 100).toInt()}% (minimo ${(com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SIGN_AGREEMENT * 100).toInt()}%). " +
+                                "Gli errori in questo segmento non hanno una direzione costante (alcuni sovrastevano, altri sottostimavano), quindi un fattore fisso peggiorerebbe la precisione.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+
             // Sotto questa soglia il fattore è comunque "Applicabile" per il calcolatore (§8), ma un
             // campione così piccolo per una categoria specifica può anche segnalare che il
             // riconoscimento AI la incontra raramente — un avviso utile, non solo una statistica.
-            if (correction.sampleCount < LOW_SAMPLE_WARNING_THRESHOLD) {
+            if (row.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile && correction.sampleCount < LOW_SAMPLE_WARNING_THRESHOLD) {
                 Text(
                     "Campione ridotto per questa categoria (${correction.sampleCount} osservazioni): il fattore potrebbe non essere ancora affidabile.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(top = 4.dp),
                 )
             }
             row.usageStats?.let { stats ->

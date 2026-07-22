@@ -315,12 +315,25 @@ class TableRepository @Inject constructor(
      * DONE` perché non c'è nessun file da normalizzare: le righe vengono inserite direttamente.
      */
     suspend fun getOrCreateOnlineResearchTable(): OfficialTableEntity {
-        val existing = tableDao.getAllOrderedByPriority().firstOrNull { it.fileType == OfficialFileType.ONLINE_RESEARCH }
+        return getOrCreateSpecialTable("Alimenti trovati online", OfficialFileType.ONLINE_RESEARCH)
+    }
+
+    /**
+     * Tabella per gli alimenti inseriti manualmente dall'utente (§ richiesta utente): creata alla
+     * prima necessità, permette di salvare voci con CHO/grassi personalizzati che non esistono
+     * nelle tabelle ufficiali importate.
+     */
+    suspend fun getOrCreateManualEntriesTable(): OfficialTableEntity {
+        return getOrCreateSpecialTable("Alimenti inseriti manualmente", OfficialFileType.MANUAL_ENTRY)
+    }
+
+    private suspend fun getOrCreateSpecialTable(displayName: String, fileType: OfficialFileType): OfficialTableEntity {
+        val existing = tableDao.getAllOrderedByPriority().firstOrNull { it.fileType == fileType }
         if (existing != null) return existing
         val nextPriority = (tableDao.maxPriorityOrder() ?: -1) + 1
         val entity = OfficialTableEntity(
-            displayName = "Alimenti trovati online",
-            fileType = OfficialFileType.ONLINE_RESEARCH,
+            displayName = displayName,
+            fileType = fileType,
             storedFilePath = "",
             uploadedAtEpochMillis = System.currentTimeMillis(),
             priorityOrder = nextPriority,
@@ -334,13 +347,24 @@ class TableRepository @Inject constructor(
     /** "Aggiungi al database" (§Pezzo E): persiste un alimento trovato con la ricerca online. */
     suspend fun addOnlineResearchEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
         val table = getOrCreateOnlineResearchTable()
-        val nextOrder = (entryDao.maxRowOrder(table.id) ?: -1) + 1
+        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g)
+    }
+
+    /** Crea una nuova voce manuale nel database (§ richiesta utente). */
+    suspend fun addManualEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
+        val table = getOrCreateManualEntriesTable()
+        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g)
+    }
+
+    private suspend fun addEntryToTable(tableId: Long, nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
+        val nextOrder = (entryDao.maxRowOrder(tableId) ?: -1) + 1
         val entity = NormalizedFoodEntryEntity(
-            tableId = table.id,
+            tableId = tableId,
             nome = nome,
             choPer100g = choPer100g,
             grassiPer100g = grassiPer100g,
             rowOrder = nextOrder,
+            isManuallyEdited = true,
         )
         entryDao.insert(entity)
         return mapEntryToDomain(entity)

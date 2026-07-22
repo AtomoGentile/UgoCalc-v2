@@ -15,6 +15,7 @@ import androidx.room.PrimaryKey
  * correzione manuale o un peso reale: sono il segnale da cui i fattori di correzione si calcolano,
  * mai popolati automaticamente.
  */
+@androidx.compose.runtime.Immutable
 @Entity(tableName = "v2_analysis_records")
 data class V2AnalysisRecordEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,

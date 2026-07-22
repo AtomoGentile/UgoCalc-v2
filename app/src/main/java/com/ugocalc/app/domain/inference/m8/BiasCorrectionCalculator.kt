@@ -16,8 +16,8 @@ object BiasCorrectionCalculator {
     /** Numero minimo di osservazioni prima di fidarsi di un bias (§8 "pattern stabili"). */
     const val MIN_SAMPLE_COUNT = 5
 
-    /** Frazione minima di osservazioni concordi sul segno dello scarto: disattivata per ora (§ richiesta utente). */
-    const val MIN_SIGN_AGREEMENT = 0.0
+    /** Frazione minima di osservazioni concordi sul segno dello scarto (§8 "pattern stabili"). */
+    const val MIN_SIGN_AGREEMENT = 0.7
 
     /**
      * [observations] deve contenere solo dati dello stesso identico segmento. Il fattore, quando
@@ -57,8 +57,12 @@ data class BiasObservation(val pesoStimatoG: Double, val pesoVeroG: Double) {
 }
 
 /** Esito del calcolo (§8): mai un fattore applicato su dati insufficienti o su un bias incoerente. */
+@androidx.compose.runtime.Immutable
 sealed interface BiasCorrectionResult {
+    @androidx.compose.runtime.Immutable
     data class Applicabile(val fattore: Double, val campione: Int) : BiasCorrectionResult
+    @androidx.compose.runtime.Immutable
     data class DatiInsufficienti(val campione: Int) : BiasCorrectionResult
+    @androidx.compose.runtime.Immutable
     data class BiasInstabile(val campione: Int, val concordanza: Double) : BiasCorrectionResult
 }

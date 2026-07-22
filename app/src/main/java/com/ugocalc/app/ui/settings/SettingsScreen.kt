@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Card
@@ -27,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.BuildConfig
+import com.ugocalc.app.R
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
@@ -51,44 +53,46 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("Impostazioni") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState())) {
-            SettingsMenuItem("API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi)
-            SettingsMenuItem("Preferiti", "Scorciatoie mostrate in Homepage", onOpenFavorites)
-            SettingsMenuItem("Permessi", "Fotocamera e notifiche", onOpenPermissions)
-            SettingsMenuItem("Accessibilità", "Tema, dimensione testo, colori", onOpenAccessibility)
-            SettingsMenuItem("Modelli preferiti", "Se impostati, saltano del tutto la scelta modello ad ogni analisi", onOpenPreferredModel)
-            SettingsMenuItem("Livello di confidenza", "Soglia per evidenziare le analisi più affidabili", onOpenConfidence)
-            SettingsMenuItem("Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart)
-            SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables)
-            SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup)
-            SettingsMenuItem("Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations)
-            SettingsMenuItem("Ricette", "Gestisci le ricette per la strategia Composto", onOpenRecipes)
-            SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog)
+        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+            item { SettingsMenuItem("API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi) }
+            item { SettingsMenuItem("Preferiti", "Scorciatoie mostrate in Homepage", onOpenFavorites) }
+            item { SettingsMenuItem("Permessi", "Fotocamera e notifiche", onOpenPermissions) }
+            item { SettingsMenuItem("Accessibilità", "Tema, dimensione testo, colori", onOpenAccessibility) }
+            item { SettingsMenuItem("Modelli preferiti", "Se impostati, saltano del tutto la scelta modello ad ogni analisi", onOpenPreferredModel) }
+            item { SettingsMenuItem("Livello di confidenza", "Soglia per evidenziare le analisi più affidabili", onOpenConfidence) }
+            item { SettingsMenuItem("Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart) }
+            item { SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables) }
+            item { SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup) }
+            item { SettingsMenuItem("Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations) }
+            item { SettingsMenuItem("Ricette", "Gestisci le ricette per la strategia Composto", onOpenRecipes) }
+            item { SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog) }
 
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 32.dp, bottom = 16.dp),
-                horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
-            ) {
-                androidx.compose.foundation.Image(
-                    painter = androidx.compose.ui.res.painterResource(id = com.ugocalc.app.R.drawable.ugocalc_logo),
-                    contentDescription = null,
+            item {
+                Column(
                     modifier = Modifier
-                        .size(64.dp)
-                        .clip(RoundedCornerShape(12.dp))
-                )
-                Text(
-                    "UgoCalc",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Text(
-                    "Versione ${BuildConfig.VERSION_NAME}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = UgoGrey,
-                )
+                        .fillMaxWidth()
+                        .padding(top = 32.dp, bottom = 16.dp),
+                    horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally
+                ) {
+                    androidx.compose.foundation.Image(
+                        painter = androidx.compose.ui.res.painterResource(id = R.drawable.ugocalc_logo),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Text(
+                        "UgoCalc",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    Text(
+                        "Versione ${BuildConfig.VERSION_NAME}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = UgoGrey,
+                    )
+                }
             }
         }
     }

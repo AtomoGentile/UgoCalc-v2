@@ -15,6 +15,8 @@ data class RecognizedFood(
     val decomposition: DecompositionInfo? = null,
     /** Se vero, l'alimento è considerato trascurabile (es. spezie, condimenti minimi) e non pesa sul totale visivo. */
     val isTrascurabile: Boolean = false,
+    /** Vero se il peso è stato stimato usando una densità o peso unitario di default (§ richiesta utente). */
+    val usoDefaultFisico: Boolean = false,
 )
 
 @Serializable

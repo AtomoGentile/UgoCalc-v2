@@ -142,7 +142,7 @@ fun HistoryScreen(
                     )
                 }
             }
-            items(filteredHistory) { entry ->
+            items(filteredHistory, key = { it.id }) { entry ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()

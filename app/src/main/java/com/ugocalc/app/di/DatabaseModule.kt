@@ -19,6 +19,7 @@ import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.PhysicalDataDao
 import com.ugocalc.app.data.local.db.dao.RecipeDao
 import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
@@ -75,4 +76,7 @@ object DatabaseModule {
 
     @Provides
     fun provideRecipeDao(db: AppDatabase): RecipeDao = db.recipeDao()
+
+    @Provides
+    fun providePhysicalDataDao(db: AppDatabase): PhysicalDataDao = db.physicalDataDao()
 }

@@ -12,6 +12,7 @@ import androidx.room.Entity
  * dati di riso. Ricalcolata da [com.ugocalc.app.data.repository.BiasCorrectionRepository] a ogni
  * nuova correzione con ground truth salvata in M8, interamente senza intervento dell'owner.
  */
+@androidx.compose.runtime.Immutable
 @Entity(tableName = "bias_corrections", primaryKeys = ["sessionMode", "strategy", "aiModelId", "foodCategory"])
 data class BiasCorrectionEntity(
     val sessionMode: String,

@@ -22,7 +22,7 @@ import kotlin.math.roundToInt
  * visibile (§9), tanto più ampio quanto più la stima ha dovuto ripiegare su valori di default,
  * misure mancanti, occlusione o scala debole.
  */
-class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
+class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
 
     /**
      * [biasFactor], se presente, è il fattore appreso dal segmento (modalità, strategia, modello) in
@@ -67,6 +67,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData) {
             intervallo = interval,
             catenaCalcolo = chain,
             confidenza = confidenceFor(u),
+            usoDefaultFisico = raw.usoDefaultFisico,
         )
     }
 

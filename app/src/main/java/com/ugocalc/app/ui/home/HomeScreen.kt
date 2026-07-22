@@ -1,10 +1,10 @@
 package com.ugocalc.app.ui.home
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -25,6 +25,7 @@ import android.content.res.Configuration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.History
@@ -43,6 +44,7 @@ import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -56,6 +58,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -63,6 +67,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.R
 import com.ugocalc.app.ui.theme.UgoGrey
 import kotlinx.coroutines.launch
 
@@ -98,16 +103,17 @@ fun HomeScreen(
             // sfondo scelto dall'utente (§ segnalazione utente, screenshot con sfondo scuro).
             // La selezione si vede solo dal testo/icona in colore primario, senza nessun blocco
             // colorato che possa stonare.
-            val itemColors = androidx.compose.material3.NavigationDrawerItemDefaults.colors(
-                selectedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                unselectedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
-                selectedTextColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                selectedIconColor = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+            val primary = MaterialTheme.colorScheme.primary
+            val itemColors = NavigationDrawerItemDefaults.colors(
+                selectedContainerColor = Color.Transparent,
+                unselectedContainerColor = Color.Transparent,
+                selectedTextColor = primary,
+                selectedIconColor = primary,
             )
             ModalDrawerSheet(modifier = Modifier.width(240.dp)) {
                 Text(
                     "UgoCalc",
-                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                    style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.padding(16.dp)
                 )
@@ -141,21 +147,21 @@ fun HomeScreen(
                     colors = itemColors,
                     onClick = { scope.launch { drawerState.close() }; onNavigateToSettings() },
                 )
-                androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
+                Spacer(Modifier.weight(1f))
                 Column(
                     modifier = Modifier.padding(16.dp).fillMaxWidth(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    androidx.compose.foundation.Image(
-                        painter = androidx.compose.ui.res.painterResource(id = com.ugocalc.app.R.drawable.ugocalc_logo),
+                    Image(
+                        painter = painterResource(id = R.drawable.ugocalc_logo),
                         contentDescription = null,
                         modifier = Modifier
                             .size(64.dp)
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                            .clip(RoundedCornerShape(12.dp))
                     )
                     Text(
                         "Versione ${com.ugocalc.app.BuildConfig.VERSION_NAME}",
-                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall,
                         color = UgoGrey,
                         modifier = Modifier.padding(top = 8.dp)
                     )
@@ -218,38 +224,42 @@ fun HomeScreen(
                         }
                     )
 
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .verticalScroll(rememberScrollState()),
+                    LazyColumn(
+                        modifier = Modifier.weight(1f),
                         horizontalAlignment = Alignment.Start
                     ) {
-                        OutlinedButton(
-                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                            onClick = {
-                                viewModel.startNewAnalysis()
-                                onNavigateToManualEntry()
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        ) { Text("Aggiungi alimenti manualmente") }
+                        item {
+                            OutlinedButton(
+                                enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                                onClick = {
+                                    viewModel.startNewAnalysis()
+                                    onNavigateToManualEntry()
+                                },
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                            ) { Text("Aggiungi alimenti manualmente") }
+                        }
 
-                        OutlinedButton(
-                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                            onClick = onNavigateToBarcodeScan,
-                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                        ) {
-                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                            Text("Scansiona codice a barre")
+                        item {
+                            OutlinedButton(
+                                enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                                onClick = onNavigateToBarcodeScan,
+                                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            ) {
+                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                                Text("Scansiona codice a barre")
+                            }
                         }
 
                         if (uiState.favoritesEnabled) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("Preferiti", style = MaterialTheme.typography.titleMedium)
-                                IconButton(onClick = { showAddFavoriteDialog = true }) {
-                                    Icon(Icons.Default.Add, contentDescription = "Aggiungi")
+                            item {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text("Preferiti", style = MaterialTheme.typography.titleMedium)
+                                    IconButton(onClick = { showAddFavoriteDialog = true }) {
+                                        Icon(Icons.Default.Add, contentDescription = "Aggiungi")
+                                    }
                                 }
                             }
-                            uiState.favorites.forEach { favorite ->
+                            items(uiState.favorites, key = { it.id }) { favorite ->
                                 FavoriteCard(
                                     favorite = favorite,
                                     onClick = {
@@ -269,68 +279,77 @@ fun HomeScreen(
                     }
                 }
             } else {
-                Column(
+                LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(padding)
-                        .padding(24.dp)
-                        .verticalScroll(rememberScrollState()),
+                        .padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Top,
                 ) {
-                    Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
-                        AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
-                            val preferred = uiState.preferredModels
-                            if (preferred.isNotEmpty()) {
-                                viewModel.startAnalysisWithPreferredModels()
-                                onNavigateDirectlyToCamera(preferred.map { it.id })
-                            } else {
+                    item {
+                        Box(modifier = Modifier.padding(top = 24.dp, bottom = 24.dp)) {
+                            AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
+                                val preferred = uiState.preferredModels
+                                if (preferred.isNotEmpty()) {
+                                    viewModel.startAnalysisWithPreferredModels()
+                                    onNavigateDirectlyToCamera(preferred.map { it.id })
+                                } else {
+                                    viewModel.startNewAnalysis()
+                                    onNavigateToModelSelection()
+                                }
+                            })
+                        }
+                    }
+
+                    item {
+                        OutlinedButton(
+                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                            onClick = {
                                 viewModel.startNewAnalysis()
-                                onNavigateToModelSelection()
-                            }
-                        })
+                                onNavigateToManualEntry()
+                            },
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        ) { Text("Aggiungi alimenti manualmente") }
                     }
 
-                    OutlinedButton(
-                        enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                        onClick = {
-                            viewModel.startNewAnalysis()
-                            onNavigateToManualEntry()
-                        },
-                        modifier = Modifier.padding(bottom = 16.dp),
-                    ) { Text("Aggiungi alimenti manualmente") }
-
-                    if (uiState.analyzeButtonState == AnalyzeButtonState.DISABLED_NO_TABLE) {
-                        Text(
-                            text = "Carica una tabella di valori ufficiali nelle Impostazioni per iniziare",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            modifier = Modifier.padding(bottom = 16.dp),
-                        )
-                    } else if (uiState.analyzeButtonState == AnalyzeButtonState.ENABLED_OFFLINE) {
-                        Text(
-                            text = "Nessuna connessione: nessun modello sarà selezionabile finché non torni online",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            modifier = Modifier.padding(bottom = 16.dp),
-                        )
+                    item {
+                        if (uiState.analyzeButtonState == AnalyzeButtonState.DISABLED_NO_TABLE) {
+                            Text(
+                                text = "Carica una tabella di valori ufficiali nelle Impostazioni per iniziare",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(bottom = 16.dp),
+                            )
+                        } else if (uiState.analyzeButtonState == AnalyzeButtonState.ENABLED_OFFLINE) {
+                            Text(
+                                text = "Nessuna connessione: nessun modello sarà selezionabile finché non torni online",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(bottom = 16.dp),
+                            )
+                        }
                     }
 
-                    OutlinedButton(
-                        enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                        onClick = onNavigateToBarcodeScan,
-                        modifier = Modifier.padding(bottom = 16.dp),
-                    ) {
-                        Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                        Text("Scansiona codice a barre")
+                    item {
+                        OutlinedButton(
+                            enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
+                            onClick = onNavigateToBarcodeScan,
+                            modifier = Modifier.padding(bottom = 16.dp),
+                        ) {
+                            Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
+                            Text("Scansiona codice a barre")
+                        }
                     }
 
                     if (uiState.favoritesEnabled) {
-                        IconButton(
-                            onClick = { showAddFavoriteDialog = true },
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                        ) {
-                            Icon(Icons.Default.Add, contentDescription = "Aggiungi preferito dal database")
+                        item {
+                            IconButton(
+                                onClick = { showAddFavoriteDialog = true },
+                                modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
+                            ) {
+                                Icon(Icons.Default.Add, contentDescription = "Aggiungi preferito dal database")
+                            }
                         }
-                        uiState.favorites.forEach { favorite ->
+                        items(uiState.favorites, key = { it.id }) { favorite ->
                             FavoriteCard(
                                 favorite = favorite,
                                 onClick = {

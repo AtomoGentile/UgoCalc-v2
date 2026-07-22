@@ -58,7 +58,7 @@ fun RecipeListScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(recipes) { recipe ->
+                items(recipes, key = { it.id }) { recipe ->
                     Card(
                         modifier = Modifier.fillMaxWidth().clickable { onRecipeSelected(recipe.id) },
                         colors = CardDefaults.cardColors(

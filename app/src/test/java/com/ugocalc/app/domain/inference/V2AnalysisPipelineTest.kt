@@ -28,7 +28,7 @@ class V2AnalysisPipelineTest {
     @Test
     fun `all photos rejected by M0 short-circuits before calling M1`() = runBlocking {
         var perceiveCalls = 0
-        val pipeline = V2AnalysisPipeline(perceive = { _, _, _, _, _ -> perceiveCalls++; error("non deve essere chiamato") })
+        val pipeline = V2AnalysisPipeline(perceive = { _, _, _, _, _, _, _ -> perceiveCalls++; error("non deve essere chiamato") })
 
         val outcome = pipeline.run(
             photos = listOf(SessionPhoto(blurryPhoto, ByteArray(0))),
@@ -44,7 +44,7 @@ class V2AnalysisPipelineTest {
     @Test
     fun `M1 fallback to V1 propagates as a distinct outcome`() = runBlocking {
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.FallbackAV1("servizio non disponibile") },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.FallbackAV1("servizio non disponibile") },
         )
 
         val outcome = pipeline.run(
@@ -61,7 +61,7 @@ class V2AnalysisPipelineTest {
     fun `an unrecognized schema_version is rejected before reaching M3`() = runBlocking {
         val scenaVersioneFutura = SceneGraph(schemaVersion = SceneGraph.SCHEMA_VERSION + 1, ancore = emptyList(), alimenti = emptyList())
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaVersioneFutura) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaVersioneFutura) },
         )
 
         val outcome = pipeline.run(
@@ -96,7 +96,7 @@ class V2AnalysisPipelineTest {
         )
         val pipeline = V2AnalysisPipeline(
             qualityGate = QualityGate(),
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
         )
 
         val outcome = pipeline.run(
@@ -136,7 +136,7 @@ class V2AnalysisPipelineTest {
     fun `M4 flag triggers M5 exactly once and applies its revision`() = runBlocking {
         var arbitrationCalls = 0
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
             arbitrate = { _, _, _, _, flaggati ->
                 arbitrationCalls++
                 assertEquals(1, flaggati.size)
@@ -176,7 +176,7 @@ class V2AnalysisPipelineTest {
     @Test
     fun `M5 unavailable leaves pre-arbitration estimate and declares the reason explicitly`() = runBlocking {
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
             arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
         )
 
@@ -197,7 +197,7 @@ class V2AnalysisPipelineTest {
     fun `no flags means M5 is never invoked`() = runBlocking {
         var arbitrationCalls = 0
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua.copy(alimenti = scenaAmbigua.alimenti.map { it.copy(confidenza = Confidence.ALTO, alternativeIdentificazione = emptyList()) })) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua.copy(alimenti = scenaAmbigua.alimenti.map { it.copy(confidenza = Confidence.ALTO, alternativeIdentificazione = emptyList()) })) },
             arbitrate = { _, _, _, _, _ -> arbitrationCalls++; ArbitrationOutcome.NonDisponibile("non deve essere chiamato") },
         )
 
@@ -214,7 +214,7 @@ class V2AnalysisPipelineTest {
     @Test
     fun `residual ambiguity after M5 picks the alternative with the highest CHO`() = runBlocking {
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
             arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
             resolveAmbiguity = { candidati ->
                 assertEquals(listOf("riso in bianco", "riso basmati"), candidati)
@@ -243,7 +243,7 @@ class V2AnalysisPipelineTest {
     @Test
     fun `unresolved candidates leave the ambiguous food unchanged`() = runBlocking {
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaAmbigua) },
             arbitrate = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("nessuna API key configurata") },
             resolveAmbiguity = { emptyMap() },
         )
@@ -277,7 +277,7 @@ class V2AnalysisPipelineTest {
         )
         var recordCalls = 0
         val pipeline = V2AnalysisPipeline(
-            perceive = { _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
             recordTelemetry = { outcome, recordedModel, recordedMode ->
                 recordCalls++
                 assertEquals(model, recordedModel)

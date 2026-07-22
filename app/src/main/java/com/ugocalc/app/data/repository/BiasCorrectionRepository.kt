@@ -1,6 +1,9 @@
 package com.ugocalc.app.data.repository
 
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
+import com.ugocalc.app.data.local.db.dao.SessionModeAiModelPair
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
@@ -48,47 +51,126 @@ class BiasCorrectionRepository @Inject constructor(
     suspend fun getAllCorrections(): List<BiasCorrectionEntity> = biasCorrectionDao.getAll()
 
     /**
-     * Caricamento ottimizzato delle statistiche (§ segnalazione utente "stuttering fortissimo"):
-     * carica tutti i record con ground truth una sola volta invece di rieseguire N query (una per
-     * ogni riga di correzione) e ri-parsare i JSON per ogni riga — su decine di categorie, questo
-     * riduce il tempo di elaborazione da diversi secondi a pochi millisecondi.
+     * Caricamento ottimizzato di TUTTI i segmenti che hanno almeno un'osservazione (§ richiesta
+     * utente: "vedere tutte le analisi"), anche se il bias non è ancora stabile o il campione è
+     * insufficiente per calcolare un fattore. Permette di capire perché una correzione non è
+     * ancora attiva (motivazione del bias).
      */
-    suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> {
-        val corrections = getAllCorrections()
-        if (corrections.isEmpty()) return emptyList()
-
-        // Cache locale dei record parsati per questa sessione di calcolo
-        val allGroundTruthRecords = analysisDao.getWithGroundTruthAll()
-            .map { record ->
-                val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
-                val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-                ParsedRecord(record.sessionMode, record.aiModelId, estimates, groundTruth)
+    fun getAllCorrectionsWithUsageStatsFlow(): kotlinx.coroutines.flow.Flow<List<BiasCorrectionWithUsageStats>> =
+        kotlinx.coroutines.flow.combine(
+            biasCorrectionDao.getAllFlow(),
+            analysisDao.getWithGroundTruthAllFlow()
+        ) { existingList, allGroundTruthRecords ->
+            val existingCorrections = existingList.associateBy {
+                "${it.sessionMode}|${it.aiModelId}|${it.strategy}|${it.foodCategory}"
             }
 
-        return corrections.map { correction ->
-            val observations = allGroundTruthRecords
-                .filter { it.sessionMode == correction.sessionMode && it.aiModelId == correction.aiModelId }
-                .flatMap { record ->
-                    record.estimates
-                        .filter { it.strategia.name == correction.strategy && FoodCategoryRouter.categorize(it.nome).name == correction.foodCategory }
-                        .mapNotNull { estimate ->
-                            record.groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoG, pesoVero) }
-                        }
+            // Raggruppa le osservazioni per segmento in un unico passaggio O(N_record * N_stime)
+            val observationsBySegment = mutableMapOf<String, MutableList<BiasObservation>>()
+
+            for (record in allGroundTruthRecords) {
+                val estimates = try {
+                    json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+                } catch (e: Exception) {
+                    emptyList()
+                }
+                val groundTruth = try {
+                    record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
+                } catch (e: Exception) {
+                    emptyMap()
                 }
 
-            BiasCorrectionWithUsageStats(
-                correction = correction,
-                usageStats = if (observations.isNotEmpty()) computeUsageStats(observations, correction.factor) else null,
-            )
-        }
-    }
+                for (est in estimates) {
+                    val category = FoodCategoryRouter.categorize(est.nome).name
+                    val pesoVero = groundTruth[est.nome]
+                    if (pesoVero != null) {
+                        val key = "${record.sessionMode}|${record.aiModelId}|${est.strategia.name}|$category"
+                        observationsBySegment.getOrPut(key) { mutableListOf() }.add(BiasObservation(est.pesoG, pesoVero))
+                    }
+                }
+            }
 
-    private data class ParsedRecord(
-        val sessionMode: String,
-        val aiModelId: String,
-        val estimates: List<WeightEstimate>,
-        val groundTruth: Map<String, Double>
-    )
+            observationsBySegment.map { (key, observations) ->
+                val parts = key.split("|")
+                val mode = parts[0]
+                val modelId = parts[1]
+                val strategy = parts[2]
+                val category = parts[3]
+
+                val existing = existingCorrections[key]
+                val result = BiasCorrectionCalculator.calculate(observations)
+
+                BiasCorrectionWithUsageStats(
+                    correction = existing ?: BiasCorrectionEntity(
+                        sessionMode = mode,
+                        aiModelId = modelId,
+                        strategy = strategy,
+                        foodCategory = category,
+                        factor = 1.0,
+                        sampleCount = observations.size,
+                        updatedAtEpochMillis = 0
+                    ),
+                    usageStats = computeUsageStats(observations, existing?.factor ?: 1.0),
+                    calculationResult = result
+                )
+            }.sortedByDescending { it.usageStats?.observationCount ?: 0 }
+        }
+
+    suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> {
+        val existingList = biasCorrectionDao.getAll()
+        val allGroundTruthRecords = analysisDao.getWithGroundTruthAll()
+        val existingCorrections = existingList.associateBy {
+            "${it.sessionMode}|${it.aiModelId}|${it.strategy}|${it.foodCategory}"
+        }
+
+        val observationsBySegment = mutableMapOf<String, MutableList<BiasObservation>>()
+        for (record in allGroundTruthRecords) {
+            val estimates = try {
+                json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
+            } catch (e: Exception) {
+                emptyList()
+            }
+            val groundTruth = try {
+                record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
+            } catch (e: Exception) {
+                emptyMap()
+            }
+
+            for (est in estimates) {
+                val category = FoodCategoryRouter.categorize(est.nome).name
+                val pesoVero = groundTruth[est.nome]
+                if (pesoVero != null) {
+                    val key = "${record.sessionMode}|${record.aiModelId}|${est.strategia.name}|$category"
+                    observationsBySegment.getOrPut(key) { mutableListOf() }.add(BiasObservation(est.pesoG, pesoVero))
+                }
+            }
+        }
+
+        return observationsBySegment.map { (key, observations) ->
+            val parts = key.split("|")
+            val mode = parts[0]
+            val modelId = parts[1]
+            val strategy = parts[2]
+            val category = parts[3]
+
+            val existing = existingCorrections[key]
+            val result = BiasCorrectionCalculator.calculate(observations)
+
+            BiasCorrectionWithUsageStats(
+                correction = existing ?: BiasCorrectionEntity(
+                    sessionMode = mode,
+                    aiModelId = modelId,
+                    strategy = strategy,
+                    foodCategory = category,
+                    factor = 1.0,
+                    sampleCount = observations.size,
+                    updatedAtEpochMillis = 0
+                ),
+                usageStats = computeUsageStats(observations, existing?.factor ?: 1.0),
+                calculationResult = result
+            )
+        }.sortedByDescending { it.usageStats?.observationCount ?: 0 }
+    }
 
     private fun computeUsageStats(observations: List<BiasObservation>, factor: Double): BiasCorrectionUsageStats {
         val rawErrors = observations.map { it.pesoStimatoG - it.pesoVeroG }
@@ -214,11 +296,14 @@ class BiasCorrectionRepository @Inject constructor(
     }
 }
 
+@Immutable
 data class BiasCorrectionWithUsageStats(
     val correction: BiasCorrectionEntity,
     val usageStats: BiasCorrectionUsageStats?,
+    val calculationResult: BiasCorrectionResult,
 )
 
+@Stable
 data class BiasCorrectionUsageStats(
     val observationCount: Int,
     val meanEstimatedWeightG: Double,

@@ -112,7 +112,7 @@ fun FavoritesSettingsScreen(
             title = { Text("Aggiungi da cronologia") },
             text = {
                 LazyColumn {
-                    items(state.history) { entry ->
+                    items(state.history, key = { it.id }) { entry ->
                         ListItem(
                             headlineContent = { Text(entry.foodTitle) },
                             modifier = Modifier

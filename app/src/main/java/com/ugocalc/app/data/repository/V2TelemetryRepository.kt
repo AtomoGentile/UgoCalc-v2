@@ -54,6 +54,8 @@ class V2TelemetryRepository @Inject constructor(
     /** Analisi V2 ancora senza ground truth: la lista che l'utente può scegliere di correggere con un peso vero (§13 punto 3). */
     suspend fun listPendingGroundTruth(): List<V2AnalysisRecordEntity> = dao.getAllWithoutGroundTruth()
 
+    fun getAllRecordsFlow(): kotlinx.coroutines.flow.Flow<List<V2AnalysisRecordEntity>> = dao.getAllFlow()
+
     suspend fun getAllRecords(): List<V2AnalysisRecordEntity> = dao.getAll()
 
     suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? = dao.getBySessionId(sessionId)
@@ -72,5 +74,9 @@ class V2TelemetryRepository @Inject constructor(
                 groundTruthLivello = livello.jsonValue,
             ),
         )
+    }
+
+    suspend fun deleteRecord(id: Long) {
+        dao.deleteById(id)
     }
 }

@@ -4,18 +4,21 @@ import com.ugocalc.app.domain.inference.m2.StrategyRouter
 
 /**
  * Tabelle fisiche locali usate da M3 (piano V2 §2, §5): densità (g/cm³), pesi unitari di
- * riferimento (g/pezzo) e capacità dei contenitori (ml). Sono **dati, non logica**: una tabella
- * imprecisa produce un errore sistematico visibile nel benchmark, correggibile qui senza toccare il
- * codice del motore (§9).
- *
- * Ogni lookup restituisce anche la propria [PhysicalValue.fonte] (per la catena di calcolo) e un
- * flag [PhysicalValue.isDefault] che segnala quando si è ripiegato sul valore generico: a valle
- * questo giustifica un intervallo di confidenza più ampio.
+ * riferimento (g/pezzo) e capacità dei contenitori (ml).
  */
-object PhysicalData {
+open class PhysicalData(
+    customDensities: List<PhysicalValue> = emptyList()
+) {
+
+    private val dynamicDensities = customDensities.map { 
+        Entry(it.valore, it.fonte, listOf(it.fonte)) 
+    }
 
     /** Diametro di riferimento di un piatto piano, usato quando manca un'ancora di piatto (§9). */
-    const val DEFAULT_PLATE_DIAMETER_CM: Double = 27.0
+    companion object {
+        const val DEFAULT_PLATE_DIAMETER_CM: Double = 27.0
+        val INSTANCE = PhysicalData()
+    }
 
     /** Densità (g/cm³) per gli alimenti a stima geometrica. Fonte primaria: CREA/INRAN. */
     private val densities: List<Entry> = listOf(
@@ -104,6 +107,14 @@ object PhysicalData {
 
     private fun resolve(nome: String, table: List<Entry>, default: PhysicalValue): PhysicalValue {
         val normalizzato = StrategyRouter.normalize(nome)
+        
+        // Priorità 1: Densità dinamiche (inserite dall'utente per questo specifico alimento)
+        if (table === densities) {
+            val dynamicHit = dynamicDensities.firstOrNull { e -> e.keywords.any { matchesWholeWord(normalizzato, it) } }
+            if (dynamicHit != null) return PhysicalValue(dynamicHit.value, dynamicHit.label, isDefault = false)
+        }
+
+        // Priorità 2: Tabelle statiche (CREA/INRAN)
         val hit = table.firstOrNull { e -> e.keywords.any { matchesWholeWord(normalizzato, it) } }
         return hit?.let { PhysicalValue(it.value, it.label, isDefault = false) } ?: default
     }

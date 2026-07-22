@@ -164,12 +164,20 @@ fun FinalResultScreen(
                             }
                             if (line.isExcluded) {
                                 Text("Nessuna corrispondenza trovata in tabella: escluso dal totale", color = Color(0xFFC62828), style = MaterialTheme.typography.bodySmall)
-                                OnlineResearchSection(
-                                    state = uiState.onlineResearch[index],
-                                    onSearch = { viewModel.searchOnline(index) },
-                                    onAdd = { viewModel.addOnlineResultToDatabase(index) },
-                                    onDismiss = { viewModel.dismissOnlineResult(index) },
-                                )
+                                Row {
+                                    OnlineResearchSection(
+                                        state = uiState.onlineResearch[index],
+                                        onSearch = { viewModel.searchOnline(index) },
+                                        onAdd = { viewModel.addOnlineResultToDatabase(index) },
+                                        onDismiss = { viewModel.dismissOnlineResult(index) },
+                                    )
+                                    TextButton(onClick = { 
+                                        // Forza l'apertura del picker che ora ha il tasto "+"
+                                        correctingLineIndex = index 
+                                    }) {
+                                        Text("Crea nuovo")
+                                    }
+                                }
                             } else {
                                 Text(
                                     "Abbinato a: ${line.match?.voceTabellaAbbinata} (confidenza ${line.match?.confidenzaAbbinamento})",

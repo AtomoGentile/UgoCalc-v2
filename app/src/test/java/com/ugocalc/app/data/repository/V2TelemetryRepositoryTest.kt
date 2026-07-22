@@ -14,6 +14,8 @@ import com.ugocalc.app.domain.inference.model.VerificationReport
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.domain.model.Confidence
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -22,7 +24,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Fake in-memoria del DAO Room (§8 M8): sufficiente a testare la serializzazione del repository senza un vero database. */
-private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
+private class TelemetryFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
     private val rows = mutableMapOf<Long, V2AnalysisRecordEntity>()
     private var nextId = 1L
 
@@ -36,20 +38,40 @@ private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
         rows[record.id] = record
     }
 
+    override fun getAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.sortedByDescending { it.analyzedAtEpochMillis })
+
     override suspend fun getAll(): List<V2AnalysisRecordEntity> = rows.values.sortedByDescending { it.analyzedAtEpochMillis }
 
     override suspend fun getById(id: Long): V2AnalysisRecordEntity? = rows[id]
 
+    override suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.sessionId == sessionId }
+
     override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
 
+    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.filter { it.groundTruthPesiJson != null })
+
+    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = rows.values.filter { it.groundTruthPesiJson != null }
+
     override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson == null }
+
+    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null }
 
     override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> =
         rows.values.filter { it.groundTruthPesiJson != null }
             .map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }
             .distinct()
+
+    override suspend fun deleteAll() {
+        rows.clear()
+    }
+
+    override suspend fun deleteById(id: Long) {
+        rows.remove(id)
+    }
 }
 
 class V2TelemetryRepositoryTest {
@@ -72,7 +94,7 @@ class V2TelemetryRepositoryTest {
 
     @Test
     fun `record serializes the pipeline outcome and leaves ground truth absent`() = runBlocking {
-        val dao = FakeV2AnalysisRecordDao()
+        val dao = TelemetryFakeV2AnalysisRecordDao()
         val repository = V2TelemetryRepository(dao, json)
 
         val id = repository.record(outcome, model, SessionMode.CASA)
@@ -88,7 +110,7 @@ class V2TelemetryRepositoryTest {
 
     @Test
     fun `recordGroundTruth attaches the correction to the existing row without touching the rest`() = runBlocking {
-        val dao = FakeV2AnalysisRecordDao()
+        val dao = TelemetryFakeV2AnalysisRecordDao()
         val repository = V2TelemetryRepository(dao, json)
         val id = repository.record(outcome, model, SessionMode.CASA)
 
@@ -102,7 +124,7 @@ class V2TelemetryRepositoryTest {
 
     @Test
     fun `recordGroundTruth on a missing record is a no-op`() = runBlocking {
-        val dao = FakeV2AnalysisRecordDao()
+        val dao = TelemetryFakeV2AnalysisRecordDao()
         val repository = V2TelemetryRepository(dao, json)
 
         repository.recordGroundTruth(999L, mapOf("mela" to 170.0), GroundTruthLevel.BRONZE)

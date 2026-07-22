@@ -12,6 +12,8 @@ import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -42,13 +44,20 @@ private class FakeV2Dao : V2AnalysisRecordDao {
         return id
     }
     override suspend fun update(record: V2AnalysisRecordEntity) { rows[record.id] = record }
+    override fun getAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.sortedByDescending { it.analyzedAtEpochMillis })
     override suspend fun getAll(): List<V2AnalysisRecordEntity> = rows.values.sortedByDescending { it.analyzedAtEpochMillis }
     override suspend fun getById(id: Long): V2AnalysisRecordEntity? = rows[id]
+    override suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? = rows.values.firstOrNull { it.sessionId == sessionId }
+    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? = rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null }
     override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
+    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.filter { it.groundTruthPesiJson != null })
+    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = rows.values.filter { it.groundTruthPesiJson != null }
     override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> = rows.values.filter { it.groundTruthPesiJson == null }
     override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> =
         rows.values.filter { it.groundTruthPesiJson != null }.map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }.distinct()
+    override suspend fun deleteAll() { rows.clear() }
+    override suspend fun deleteById(id: Long) { rows.remove(id) }
 }
 
 class BenchmarkRepositoryTest {
@@ -100,12 +109,12 @@ class BenchmarkRepositoryTest {
         val entry = NormalizedFoodEntry(nome = "riso", choPer100g = 78.0, grassiPer100g = 0.5)
         val lines = listOf(
             CalculatedFoodLine(
-                recognizedFood = RecognizedFood("riso", 165.0, "", Confidence.ALTO),
+                recognizedFood = RecognizedFood("riso", 165.0, "", confidenza = Confidence.ALTO),
                 match = FoodMatch("riso", "riso", nessunaCorrispondenza = false, confidenzaAbbinamento = Confidence.ALTO),
                 tableEntry = entry,
             ),
             CalculatedFoodLine(
-                recognizedFood = RecognizedFood("acqua", 200.0, "", Confidence.ALTO),
+                recognizedFood = RecognizedFood("acqua", 200.0, "", confidenza = Confidence.ALTO),
                 match = null,
                 tableEntry = null,
             ),
@@ -163,7 +172,7 @@ class BenchmarkRepositoryTest {
                 aiModelId = model.id,
                 schemaVersion = 1,
                 sceneGraphJson = "{}",
-                weightEstimatesJson = """[{"nome":"riso basmati","strategia":"DISTESA_SUL_PIATTO","peso_g":160.0,"intervallo":{"min_g":130.0,"max_g":190.0},"catena_calcolo":{"formula":"f","valori":{},"fonti":[],"sintesi":"s"},"confidenza":"ALTO"}]""",
+                weightEstimatesJson = """[{"nome":"riso basmati","strategia":"distesa","peso_g":160.0,"intervallo":{"min_g":130.0,"max_g":190.0},"catena_calcolo":{"formula":"f","valori":{},"fonti":[],"sintesi":"s"},"confidenza":"alto"}]""",
                 verificationReportJson = "{}",
                 nutritionReportJson = """{"righe":[],"choTotaleG":0.0,"grassiTotaleG":0.0}""",
             ),

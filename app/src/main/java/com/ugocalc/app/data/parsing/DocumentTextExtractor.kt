@@ -43,10 +43,10 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
                     OfficialFileType.DOC -> extractDoc(input)
                     OfficialFileType.DOCX -> extractDocx(input)
                     OfficialFileType.XLSX -> extractXlsx(input)
-                    // Tabella sintetica (§Pezzo E), mai passata da qui: le sue righe vengono
-                    // inserite direttamente in TableRepository.addOnlineResearchEntry, non
-                    // normalizzate da un file. Presente solo per l'esaustività del when.
-                    OfficialFileType.ONLINE_RESEARCH -> throw DocumentExtractionException("Le voci trovate online non hanno un file sorgente da estrarre")
+                    // Casi speciali (§Pezzo E / § richiesta utente), mai passati da qui: non
+                    // hanno un file fisico da cui estrarre testo via DocumentTextExtractor.
+                    OfficialFileType.ONLINE_RESEARCH,
+                    OfficialFileType.MANUAL_ENTRY -> throw DocumentExtractionException("Questa voce non ha un file sorgente da estrarre")
                 }
             } ?: throw DocumentExtractionException("Impossibile aprire il file selezionato")
         } catch (e: DocumentExtractionException) {

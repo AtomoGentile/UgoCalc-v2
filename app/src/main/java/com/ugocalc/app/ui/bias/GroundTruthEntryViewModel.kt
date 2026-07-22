@@ -87,4 +87,14 @@ class GroundTruthEntryViewModel @Inject constructor(
             )
         }
     }
+
+    /** Elimina un'analisi se giudicata "sbagliata" (es. test, inquadratura pessima, alimenti non riconosciuti) per non inquinare i futuri fattori di correzione (§ richiesta utente). */
+    fun delete(recordId: Long) {
+        viewModelScope.launch {
+            telemetryRepository.deleteRecord(recordId)
+            _uiState.value = _uiState.value.copy(
+                pending = _uiState.value.pending.filterNot { it.record.id == recordId }
+            )
+        }
+    }
 }

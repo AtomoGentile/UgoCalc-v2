@@ -196,33 +196,39 @@ fun UgoCalcTheme(
         AppTheme.DARK -> true
         AppTheme.SYSTEM -> isSystemInDarkTheme()
     }
-    val baseColors = when {
-        isRistorante && useDark -> RistoranteDarkColors
-        isRistorante -> RistoranteLightColors
-        useDark -> DarkColors
-        else -> LightColors
+    
+    val colors = androidx.compose.runtime.remember(useDark, isRistorante, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor) {
+        val baseColors = when {
+            isRistorante && useDark -> RistoranteDarkColors
+            isRistorante -> RistoranteLightColors
+            useDark -> DarkColors
+            else -> LightColors
+        }
+        baseColors.withCustomColors(useDark, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor)
     }
-    val colors = baseColors.withCustomColors(useDark, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor)
+
     val baseTypography = MaterialTheme.typography
-    fun scaled(size: androidx.compose.ui.unit.TextUnit) = (size.value * textScale).sp
-    // Il colore va "cotto" dentro ogni TextStyle, non solo passato come contentColor della
-    // Surface radice: qualunque Card/Button/Surface annidato (usatissimi in questa app) reimposta
-    // il proprio contentColor in base al proprio sfondo, sovrascrivendo quello ereditato dall'alto
-    // — un TextStyle.color esplicito invece vince sempre, indipendentemente da dove si trova il Text.
-    fun style(base: androidx.compose.ui.text.TextStyle, size: androidx.compose.ui.unit.TextUnit) = base.copy(
-        fontSize = scaled(size),
-        fontFamily = fontFamily ?: base.fontFamily,
-        fontWeight = fontWeight ?: base.fontWeight,
-        color = fontColor ?: base.color,
-    )
-    val scaledTypography = baseTypography.copy(
-        bodyLarge = style(baseTypography.bodyLarge, baseTypography.bodyLarge.fontSize),
-        bodyMedium = style(baseTypography.bodyMedium, baseTypography.bodyMedium.fontSize),
-        bodySmall = style(baseTypography.bodySmall, baseTypography.bodySmall.fontSize),
-        titleLarge = style(baseTypography.titleLarge, baseTypography.titleLarge.fontSize),
-        titleMedium = style(baseTypography.titleMedium, baseTypography.titleMedium.fontSize),
-        labelLarge = style(baseTypography.labelLarge, baseTypography.labelLarge.fontSize),
-    )
+    val scaledTypography = androidx.compose.runtime.remember(baseTypography, textScale, fontFamily, fontWeight, fontColor) {
+        fun scaled(size: androidx.compose.ui.unit.TextUnit) = (size.value * textScale).sp
+        // Il colore va "cotto" dentro ogni TextStyle, non solo passato come contentColor della
+        // Surface radice: qualunque Card/Button/Surface annidato (usatissimi in questa app) reimposta
+        // il proprio contentColor in base al proprio sfondo, sovrascrivendo quello ereditato dall'alto
+        // — un TextStyle.color esplicito invece vince sempre, indipendentemente da dove si trova il Text.
+        fun style(base: androidx.compose.ui.text.TextStyle, size: androidx.compose.ui.unit.TextUnit) = base.copy(
+            fontSize = scaled(size),
+            fontFamily = fontFamily ?: base.fontFamily,
+            fontWeight = fontWeight ?: base.fontWeight,
+            color = fontColor ?: base.color,
+        )
+        baseTypography.copy(
+            bodyLarge = style(baseTypography.bodyLarge, baseTypography.bodyLarge.fontSize),
+            bodyMedium = style(baseTypography.bodyMedium, baseTypography.bodyMedium.fontSize),
+            bodySmall = style(baseTypography.bodySmall, baseTypography.bodySmall.fontSize),
+            titleLarge = style(baseTypography.titleLarge, baseTypography.titleLarge.fontSize),
+            titleMedium = style(baseTypography.titleMedium, baseTypography.titleMedium.fontSize),
+            labelLarge = style(baseTypography.labelLarge, baseTypography.labelLarge.fontSize),
+        )
+    }
 
     MaterialTheme(
         colorScheme = colors,

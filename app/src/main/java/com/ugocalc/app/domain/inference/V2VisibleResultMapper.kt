@@ -24,6 +24,7 @@ fun PipelineOutcome.Verificato.toModelVisionSuccess(model: AiModel): ModelVision
             commento = stima.catenaCalcolo.sintesi,
             ragionamento = stima.ragionamento,
             confidenza = stima.confidenza,
+            usoDefaultFisico = stima.usoDefaultFisico,
         )
     }
     val confidenzaGlobale = when {
@@ -48,7 +49,8 @@ fun PipelineOutcome.Verificato.toAnalysisTotals(): AnalysisTotals {
             pesoStimatoG = stima.pesoG,
             commento = stima.catenaCalcolo.sintesi,
             confidenza = stima.confidenza,
-            isTrascurabile = stima.strategia == com.ugocalc.app.domain.inference.model.EstimationStrategy.TRASCURABILE
+            isTrascurabile = stima.strategia == com.ugocalc.app.domain.inference.model.EstimationStrategy.TRASCURABILE,
+            usoDefaultFisico = stima.usoDefaultFisico,
         )
         val entry = abbinamenti[stima.nome]
         val match = if (entry != null) {

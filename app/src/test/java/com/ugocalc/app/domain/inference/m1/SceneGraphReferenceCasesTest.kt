@@ -31,7 +31,7 @@ class SceneGraphReferenceCasesTest {
     fun `a well-formed M1 response decodes into the expected SceneGraph`() {
         val raw = """
             {
-              "schema_version": 1,
+              "schema_version": 4,
               "ancore": [
                 { "tipo": "riferimento_corporeo", "descrizione": "apertura mano", "dimensione_reale_cm": 20.0, "confidenza": "medio" }
               ],
@@ -77,7 +77,7 @@ class SceneGraphReferenceCasesTest {
     fun `optional raw measurement fields left out by the model stay null, never fabricated`() {
         val raw = """
             {
-              "schema_version": 1,
+              "schema_version": 4,
               "ancore": [],
               "alimenti": [
                 { "nome": "mela", "occlusione": "nessuna", "misure_grezze": { "conteggio": 2 }, "confidenza": "alto" }

@@ -12,6 +12,8 @@ import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.Confidence
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -21,7 +23,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /** Fake in-memoria dei due DAO coinvolti, sullo stesso pattern di [V2TelemetryRepositoryTest]. */
-private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
+private class BiasFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
     private val rows = mutableMapOf<Long, V2AnalysisRecordEntity>()
     private var nextId = 1L
 
@@ -37,7 +39,27 @@ private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
 
     override suspend fun getAll(): List<V2AnalysisRecordEntity> = rows.values.sortedByDescending { it.analyzedAtEpochMillis }
 
+    override fun getAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.sortedByDescending { it.analyzedAtEpochMillis })
+
+    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.filter { it.groundTruthPesiJson != null })
+
+    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = rows.values.filter { it.groundTruthPesiJson != null }
+
     override suspend fun getById(id: Long): V2AnalysisRecordEntity? = rows[id]
+
+    override suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.sessionId == sessionId }
+
+    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null }
+
+    override suspend fun deleteAll() {
+        rows.clear()
+    }
+
+    override suspend fun deleteById(id: Long) {
+        rows.remove(id)
+    }
 
     override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
@@ -51,13 +73,15 @@ private class FakeV2AnalysisRecordDao : V2AnalysisRecordDao {
             .distinct()
 }
 
-private class FakeBiasCorrectionDao : BiasCorrectionDao {
+private class BiasFakeBiasCorrectionDao : BiasCorrectionDao {
     val saved = mutableMapOf<List<String>, BiasCorrectionEntity>()
 
     override suspend fun get(sessionMode: String, strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
         saved[listOf(sessionMode, strategy, aiModelId, foodCategory)]
 
     override suspend fun getAll(): List<BiasCorrectionEntity> = saved.values.toList()
+
+    override fun getAllFlow(): Flow<List<BiasCorrectionEntity>> = flowOf(saved.values.toList())
 
     override suspend fun upsert(entity: BiasCorrectionEntity) {
         saved[listOf(entity.sessionMode, entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
@@ -80,7 +104,7 @@ class BiasCorrectionRepositoryTest {
         confidenza = Confidence.ALTO,
     )
 
-    private fun recordWithGroundTruth(analysisDao: FakeV2AnalysisRecordDao, estimates: List<WeightEstimate>, groundTruth: Map<String, Double>) = runBlocking {
+    private fun recordWithGroundTruth(analysisDao: BiasFakeV2AnalysisRecordDao, estimates: List<WeightEstimate>, groundTruth: Map<String, Double>) = runBlocking {
         analysisDao.insert(
             V2AnalysisRecordEntity(
                 analyzedAtEpochMillis = System.currentTimeMillis(),
@@ -99,8 +123,8 @@ class BiasCorrectionRepositoryTest {
 
     @Test
     fun `a stable underestimation across enough meals saves a correction factor`() = runBlocking {
-        val analysisDao = FakeV2AnalysisRecordDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
         val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
 
         // 5 pasti, M3 sottostima sempre il riso dello stesso segmento (casa/distesa/questo modello).
@@ -115,8 +139,8 @@ class BiasCorrectionRepositoryTest {
 
     @Test
     fun `too few observations for the segment leave no factor saved`() = runBlocking {
-        val analysisDao = FakeV2AnalysisRecordDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
         val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
 
         recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to 120.0))
@@ -128,8 +152,8 @@ class BiasCorrectionRepositoryTest {
 
     @Test
     fun `observations from a different strategy, mode or model never mix into the segment`() = runBlocking {
-        val analysisDao = FakeV2AnalysisRecordDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
         val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
 
         // Stesso alimento ma strategia diversa: non deve contare per DISTESA_SUL_PIATTO.
@@ -166,8 +190,8 @@ class BiasCorrectionRepositoryTest {
 
     @Test
     fun `without consent, recalculate is a no-op and currentFactor never returns a stored value`() = runBlocking {
-        val analysisDao = FakeV2AnalysisRecordDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
         val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
 
         val veri = listOf(120.0, 110.0, 130.0, 115.0, 125.0)
@@ -181,8 +205,8 @@ class BiasCorrectionRepositoryTest {
 
     @Test
     fun `usage stats expose raw errors and estimated correction impact`() = runBlocking {
-        val analysisDao = FakeV2AnalysisRecordDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
         val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
 
         listOf(120.0, 120.0, 120.0, 120.0, 120.0).forEach { vero ->

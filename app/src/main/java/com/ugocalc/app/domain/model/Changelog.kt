@@ -9,6 +9,7 @@ package com.ugocalc.app.domain.model
  *
  * Tutti i campi sono opzionali: una voce di changelog potrebbe non toccare tutti i moduli.
  */
+@androidx.compose.runtime.Immutable
 data class ModuleVersions(
     @androidx.annotation.Keep val inferenceEngine: String? = null,
     @androidx.annotation.Keep val perceptionPrompt: String? = null,
@@ -22,6 +23,7 @@ data class ModuleVersions(
  * Una riga del changelog in-app. [moduleVersions] è popolata solo per le release che toccano
  * esplicitamente il motore V2; per le altre (UI, piccole migrazioni) resta `null`.
  */
+@androidx.compose.runtime.Immutable
 data class ChangelogEntry(
     val version: String,
     val highlights: List<String>,
@@ -36,6 +38,26 @@ data class ChangelogEntry(
  */
 object Changelog {
     val ENTRIES = listOf(
+        ChangelogEntry(
+            version = "2.4.5",
+            highlights = listOf(
+                "Pulizia Dati V2: introdotta la possibilità di eliminare le analisi V2 errate (es. test, inquadrature pessime) per evitare di inquinare il calcolo dei fattori di correzione.",
+                "Gestione Ground Truth: aggiunto il comando 'Elimina' nella schermata di registrazione del peso vero e nella dashboard BIAS per una manutenzione rapida della telemetria.",
+                "Integrità del Bias: migliorata l'affidabilità del sistema di auto-apprendimento permettendo all'utente di scartare esplicitamente le rilevazioni non rappresentative.",
+                "UX Dettaglio Tecnico: aggiunta l'azione di eliminazione direttamente dalla visualizzazione del ragionamento AI, facilitando il triage delle analisi post-scatto.",
+                "Gestione Dati Fisici: introdotto il supporto completo per il salvataggio e la gestione dei dati fisici utente tramite database locale.",
+                "Infrastruttura Dagger/Hilt: risolto un problema critico di dependency injection che impediva la corretta fornitura del DAO per i dati fisici.",
+                "Ottimizzazione Architettura: migliorata la separazione delle responsabilità tra i moduli di database e i repository dei dati fisici."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.4.0",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.2.0",
+                biasCalculator = "1.3.0",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
         ChangelogEntry(
             version = "2.4.0",
             highlights = listOf(

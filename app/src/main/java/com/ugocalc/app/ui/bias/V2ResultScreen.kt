@@ -6,16 +6,22 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,6 +50,15 @@ fun V2ResultScreen(
             TopAppBar(
                 title = { Text("Dettaglio Tecnico V2") },
                 navigationIcon = { BackIconButton(onBack) },
+                actions = {
+                    androidx.compose.material3.IconButton(onClick = { viewModel.deleteRecord(onDeleted = onBack) }) {
+                        androidx.compose.material3.Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Elimina analisi",
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    }
+                },
                 colors = ugoTopAppBarColors()
             )
         }
@@ -84,7 +99,7 @@ fun V2ResultScreen(
                 }
             } else {
                 items(uiState.v2Stime) { stima ->
-                    V2WeightEstimateCard(stima)
+                    V2WeightEstimateCard(stima, onUpdateDensity = viewModel::updateDensity)
                     HorizontalDivider()
                 }
             }
@@ -93,7 +108,13 @@ fun V2ResultScreen(
 }
 
 @Composable
-private fun V2WeightEstimateCard(stima: WeightEstimate) {
+private fun V2WeightEstimateCard(
+    stima: WeightEstimate,
+    onUpdateDensity: (String, Double) -> Unit
+) {
+    var showDensityDialog by remember { mutableStateOf(false) }
+    var newDensityText by remember { mutableStateOf("") }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -123,7 +144,55 @@ private fun V2WeightEstimateCard(stima: WeightEstimate) {
             )
 
             CalculationChainBlock(stima.catenaCalcolo)
+
+            if (stima.usoDefaultFisico) {
+                androidx.compose.material3.TextButton(
+                    onClick = {
+                        val currentDensity = stima.catenaCalcolo.valori["densità"] ?: 1.0
+                        newDensityText = currentDensity.toString()
+                        showDensityDialog = true
+                    },
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text("⚠️ Densità di default: inserisci valore reale", color = MaterialTheme.colorScheme.error)
+                }
+            }
         }
+    }
+
+    if (showDensityDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDensityDialog = false },
+            title = { Text("Correggi densità per ${stima.nome}") },
+            text = {
+                Column {
+                    Text(
+                        "Inserisci la densità in g/cm³ (es. 0.82 per riso). Questo valore verrà salvato e usato per le prossime analisi di questo alimento.",
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                    OutlinedTextField(
+                        value = newDensityText,
+                        onValueChange = { newDensityText = it },
+                        label = { Text("Densità (g/cm³)") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    newDensityText.toDoubleOrNull()?.let { density ->
+                        onUpdateDensity(stima.nome, density)
+                    }
+                    showDensityDialog = false
+                }) { Text("Salva") }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDensityDialog = false }) { Text("Annulla") }
+            }
+        )
     }
 }
 

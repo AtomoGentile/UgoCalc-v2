@@ -28,13 +28,17 @@ class V2ResultViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val sessionStore: AnalysisSessionStore,
     private val telemetryRepository: V2TelemetryRepository,
+    private val physicalDataRepository: com.ugocalc.app.data.repository.PhysicalDataRepository,
     private val json: Json,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(V2ResultUiState())
     val uiState: StateFlow<V2ResultUiState> = _uiState.asStateFlow()
 
+    private var _recordId: Long? = null
+
     init {
         val recordId = savedStateHandle.get<String>("recordId")?.toLongOrNull()
+        _recordId = recordId
         if (recordId != null) {
             viewModelScope.launch {
                 val record = telemetryRepository.getById(recordId) ?: return@launch
@@ -56,6 +60,20 @@ class V2ResultViewModel @Inject constructor(
                     ) }
                 }
             }
+        }
+    }
+
+    fun updateDensity(foodName: String, density: Double) {
+        viewModelScope.launch {
+            physicalDataRepository.addDensity(foodName, density)
+        }
+    }
+
+    fun deleteRecord(onDeleted: () -> Unit) {
+        val recordId = _recordId ?: return
+        viewModelScope.launch {
+            telemetryRepository.deleteRecord(recordId)
+            onDeleted()
         }
     }
 }

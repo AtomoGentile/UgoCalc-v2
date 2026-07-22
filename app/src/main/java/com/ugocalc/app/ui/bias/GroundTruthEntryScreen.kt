@@ -79,7 +79,11 @@ fun GroundTruthEntryScreen(onBack: () -> Unit, viewModel: GroundTruthEntryViewMo
                 }
             } else {
                 items(uiState.pending, key = { it.record.id }) { entry ->
-                    PendingRecordCard(entry, onSubmit = { pesiG, livello -> viewModel.submit(entry.record.id, pesiG, livello) })
+                    PendingRecordCard(
+                        entry = entry,
+                        onSubmit = { pesiG, livello -> viewModel.submit(entry.record.id, pesiG, livello) },
+                        onDelete = { viewModel.delete(entry.record.id) }
+                    )
                     HorizontalDivider()
                 }
             }
@@ -91,6 +95,7 @@ fun GroundTruthEntryScreen(onBack: () -> Unit, viewModel: GroundTruthEntryViewMo
 private fun PendingRecordCard(
     entry: PendingGroundTruthRecord,
     onSubmit: (Map<String, Double>, GroundTruthLevel) -> Unit,
+    onDelete: () -> Unit,
 ) {
     val dateFormat = remember { SimpleDateFormat("d MMM yyyy HH:mm", Locale.ITALIAN) }
     var livello by remember { mutableStateOf(GroundTruthLevel.BRONZE) }
@@ -123,16 +128,25 @@ private fun PendingRecordCard(
                 }
             }
 
-            Button(
-                onClick = {
-                    val pesiG = pesiInput.value.mapNotNull { (nome, raw) ->
-                        raw.trim().replace(',', '.').toDoubleOrNull()?.let { nome to it }
-                    }.toMap()
-                    onSubmit(pesiG, livello)
-                },
-                modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-            ) {
-                Text("Salva peso vero")
+            Row(modifier = Modifier.padding(top = 12.dp)) {
+                Button(
+                    onClick = {
+                        val pesiG = pesiInput.value.mapNotNull { (nome, raw) ->
+                            raw.trim().replace(',', '.').toDoubleOrNull()?.let { nome to it }
+                        }.toMap()
+                        onSubmit(pesiG, livello)
+                    },
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Salva peso vero")
+                }
+                androidx.compose.material3.TextButton(
+                    onClick = onDelete,
+                    modifier = Modifier.padding(start = 8.dp),
+                    colors = androidx.compose.material3.ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Elimina")
+                }
             }
         }
     }

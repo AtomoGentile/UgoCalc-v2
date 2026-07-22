@@ -7,15 +7,24 @@ import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
+import com.ugocalc.app.data.local.db.dao.RecipeDao
+import com.ugocalc.app.data.local.db.dao.ScaleCalibrationDao
+import com.ugocalc.app.data.local.db.dao.SessionModeAiModelPair
+import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.data.local.db.entity.BiasCorrectionEntity
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
+import com.ugocalc.app.data.local.db.entity.RecipeEntity
+import com.ugocalc.app.data.local.db.entity.RecipeIngredientEntity
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
+import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.model.OfficialFileType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import org.junit.Assert.assertEquals
@@ -83,15 +92,71 @@ private class FakeNormalizedFoodEntryDao : NormalizedFoodEntryDao {
     override suspend fun searchByName(query: String): List<NormalizedFoodEntryEntity> = rows.filter { it.nome.contains(query) }
 }
 
-private class FakeBiasCorrectionDao : BiasCorrectionDao {
+private class BackupFakeBiasCorrectionDao : BiasCorrectionDao {
     val saved = mutableMapOf<List<String>, BiasCorrectionEntity>()
     override suspend fun get(sessionMode: String, strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
         saved[listOf(sessionMode, strategy, aiModelId, foodCategory)]
     override suspend fun getAll(): List<BiasCorrectionEntity> = saved.values.toList()
+    override fun getAllFlow(): Flow<List<BiasCorrectionEntity>> = flowOf(saved.values.toList())
     override suspend fun upsert(entity: BiasCorrectionEntity) {
         saved[listOf(entity.sessionMode, entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
     }
     override suspend fun deleteAll() { saved.clear() }
+}
+
+private class BackupFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
+    private val rows = mutableMapOf<Long, V2AnalysisRecordEntity>()
+    private var nextId = 1L
+    override suspend fun insert(record: V2AnalysisRecordEntity): Long {
+        val id = nextId++
+        rows[id] = record.copy(id = id)
+        return id
+    }
+    override suspend fun update(record: V2AnalysisRecordEntity) { rows[record.id] = record }
+    override fun getAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.toList())
+    override suspend fun getAll(): List<V2AnalysisRecordEntity> = rows.values.toList()
+    override suspend fun getById(id: Long): V2AnalysisRecordEntity? = rows[id]
+    override suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? = rows.values.firstOrNull { it.sessionId == sessionId }
+    override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> = emptyList()
+    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(emptyList())
+    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = emptyList()
+    override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> = emptyList()
+    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? = null
+    override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> = emptyList()
+    override suspend fun deleteAll() { rows.clear() }
+    override suspend fun deleteById(id: Long) { rows.remove(id) }
+}
+
+private class FakeScaleCalibrationDao : ScaleCalibrationDao {
+    val rows = mutableListOf<ScaleCalibrationEntity>()
+    override fun getAll(sessionMode: String): Flow<List<ScaleCalibrationEntity>> = flowOf(rows)
+    override suspend fun getAllOnce(): List<ScaleCalibrationEntity> = rows.toList()
+    override suspend fun getByType(type: String, sessionMode: String): List<ScaleCalibrationEntity> = emptyList()
+    override suspend fun getById(id: Long): ScaleCalibrationEntity? = rows.firstOrNull { it.id == id }
+    override suspend fun insert(calibration: ScaleCalibrationEntity): Long {
+        rows.add(calibration)
+        return calibration.id
+    }
+    override suspend fun deleteById(id: Long) { rows.removeAll { it.id == id } }
+    override suspend fun deleteAll() { rows.clear() }
+}
+
+private class FakeRecipeDao : RecipeDao {
+    val recipes = mutableListOf<RecipeEntity>()
+    val ingredients = mutableListOf<RecipeIngredientEntity>()
+    override fun getAll(sessionMode: String): Flow<List<RecipeEntity>> = flowOf(recipes)
+    override suspend fun getAllOnce(): List<RecipeEntity> = recipes.toList()
+    override suspend fun getById(id: Long): RecipeEntity? = recipes.firstOrNull { it.id == id }
+    override suspend fun findByName(name: String, sessionMode: String): RecipeEntity? = null
+    override suspend fun findByNameFuzzy(name: String, sessionMode: String): RecipeEntity? = null
+    override suspend fun getIngredientsForRecipe(recipeId: Long): List<RecipeIngredientEntity> = ingredients.filter { it.recipeId == recipeId }
+    override suspend fun insertRecipe(recipe: RecipeEntity): Long {
+        recipes.add(recipe)
+        return recipe.id
+    }
+    override suspend fun insertIngredients(ingredients: List<RecipeIngredientEntity>) { this.ingredients.addAll(ingredients) }
+    override suspend fun deleteById(id: Long) { recipes.removeAll { it.id == id } }
+    override suspend fun deleteAll() { recipes.clear() }
 }
 
 private class FakeFavoriteShortcutDao : FavoriteShortcutDao {
@@ -119,16 +184,19 @@ class BackupRepositoryTest {
         historyDao: FakeAnalysisHistoryDao = FakeAnalysisHistoryDao(),
         tableDao: FakeOfficialTableDao = FakeOfficialTableDao(),
         entryDao: FakeNormalizedFoodEntryDao = FakeNormalizedFoodEntryDao(),
-        biasDao: FakeBiasCorrectionDao = FakeBiasCorrectionDao(),
+        biasDao: BackupFakeBiasCorrectionDao = BackupFakeBiasCorrectionDao(),
         favoriteDao: FakeFavoriteShortcutDao = FakeFavoriteShortcutDao(),
-    ) = BackupRepository(historyDao, tableDao, entryDao, biasDao, favoriteDao, json)
+        v2Dao: BackupFakeV2AnalysisRecordDao = BackupFakeV2AnalysisRecordDao(),
+        scaleDao: FakeScaleCalibrationDao = FakeScaleCalibrationDao(),
+        recipeDao: FakeRecipeDao = FakeRecipeDao(),
+    ) = BackupRepository(historyDao, tableDao, entryDao, biasDao, favoriteDao, v2Dao, scaleDao, recipeDao, json)
 
     @Test
     fun `export then apply on a fresh store replicates history, tables, bias corrections and favorites`() = runBlocking {
         val historyDao = FakeAnalysisHistoryDao()
         val tableDao = FakeOfficialTableDao()
         val entryDao = FakeNormalizedFoodEntryDao()
-        val biasDao = FakeBiasCorrectionDao()
+        val biasDao = BackupFakeBiasCorrectionDao()
         val favoriteDao = FakeFavoriteShortcutDao()
 
         val historyId = historyDao.insert(AnalysisHistoryEntity(foodTitle = "Pasta al pomodoro", analyzedAtEpochMillis = 1000L, totalChoG = 80.0, totalGrassiG = 10.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
@@ -144,7 +212,7 @@ class BackupRepositoryTest {
         val freshHistoryDao = FakeAnalysisHistoryDao()
         val freshTableDao = FakeOfficialTableDao()
         val freshEntryDao = FakeNormalizedFoodEntryDao()
-        val freshBiasDao = FakeBiasCorrectionDao()
+        val freshBiasDao = BackupFakeBiasCorrectionDao()
         val freshFavoriteDao = FakeFavoriteShortcutDao()
         val importRepo = repository(freshHistoryDao, freshTableDao, freshEntryDao, freshBiasDao, freshFavoriteDao)
 
@@ -175,7 +243,7 @@ class BackupRepositoryTest {
         val historyDao = FakeAnalysisHistoryDao()
         historyDao.insert(AnalysisHistoryEntity(foodTitle = "Dato locale da sostituire", analyzedAtEpochMillis = 1L, totalChoG = 1.0, totalGrassiG = 1.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
         val repo = repository(historyDao = historyDao)
-        val archiveJson = """{"schemaVersion":1,"exportedAtEpochMillis":1,"history":[{"foodTitle":"Dato importato","analyzedAtEpochMillis":2,"totalChoG":2.0,"totalGrassiG":2.0,"modelDisplayNamesJson":"[]","detailsJson":"[]"}],"tables":[],"biasCorrections":[],"favorites":[]}"""
+        val archiveJson = """{"schemaVersion":5,"exportedAtEpochMillis":1,"history":[{"foodTitle":"Dato importato","analyzedAtEpochMillis":2,"totalChoG":2.0,"totalGrassiG":2.0,"modelDisplayNamesJson":"[]","detailsJson":"[]"}],"tables":[],"biasCorrections":[],"favorites":[],"v2Records":[],"scaleCalibrations":[],"recipes":[]}"""
 
         repo.applyImport(archiveJson)
 
@@ -189,11 +257,11 @@ class BackupRepositoryTest {
         historyDao.insert(AnalysisHistoryEntity(foodTitle = "Esistente", analyzedAtEpochMillis = 1L, totalChoG = 1.0, totalGrassiG = 1.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
         val repo = repository(historyDao = historyDao)
         val futureVersion = UgoCalcBackupArchive.SCHEMA_VERSION + 1
-        val archiveJson = """{"schemaVersion":$futureVersion,"exportedAtEpochMillis":1,"history":[],"tables":[],"biasCorrections":[],"favorites":[]}"""
+        val archiveJson = """{"schemaVersion":$futureVersion,"exportedAtEpochMillis":1,"history":[],"tables":[],"biasCorrections":[],"favorites":[],"v2Records":[],"scaleCalibrations":[],"recipes":[]}"""
 
         val validation = repo.previewImport(archiveJson)
 
-        assertTrue(validation is ImportValidation.SchemaTooNew)
+        assertTrue("Expected SchemaTooNew, got $validation", validation is ImportValidation.SchemaTooNew)
         assertEquals(futureVersion, (validation as ImportValidation.SchemaTooNew).found)
         assertEquals(1, historyDao.rows.size) // nessuna scrittura: previewImport non tocca mai il database
     }

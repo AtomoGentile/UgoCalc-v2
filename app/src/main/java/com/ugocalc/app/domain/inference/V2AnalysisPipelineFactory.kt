@@ -26,30 +26,38 @@ class V2AnalysisPipelineFactory @Inject constructor(
     private val biasCorrectionRepository: BiasCorrectionRepository,
     private val scaleCalibrationRepository: ScaleCalibrationRepository,
     private val settingsRepository: SettingsRepository,
-    private val tableRepository: TableRepository
+    private val tableRepository: TableRepository,
+    private val physicalDataRepository: com.ugocalc.app.data.repository.PhysicalDataRepository,
 ) {
     /**
      * [sessionId] collega il record M8 salvato da questa esecuzione al pasto tracciato per il
      * benchmark V1/V2 (§10, §13 punto 5), se il chiamante ne ha già generato uno; `null` se la
      * pipeline gira fuori da una sessione tracciata (es. test, chiamate dirette).
      */
-    fun create(sessionId: String? = null): V2AnalysisPipeline = V2AnalysisPipeline(
-        perceive = perceptionEngine::perceive,
-        arbitrate = arbitrationEngine::arbitrate,
-        matchNutrition = nutritionMatchStepAdapter::match,
-        recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
-        biasFactor = { sessionMode, strategy, aiModelId, foodCategory ->
-            val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
-            biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
-        },
-        getCalibrations = { sessionMode -> scaleCalibrationRepository.observeAll(sessionMode).first() },
-        resolveAmbiguity = { candidati ->
-            // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni
-            // candidato prende il CHO/100g della prima voce trovata nelle tabelle dell'utente.
-            candidati.mapNotNull { nome ->
-                tableRepository.searchEntries(nome).firstOrNull()?.let { nome to it.entry.choPer100g }
-            }.toMap()
-        },
+    suspend fun create(sessionId: String? = null): V2AnalysisPipeline {
+        val customDensities = physicalDataRepository.getCustomDensities().map {
+            com.ugocalc.app.domain.inference.m3.PhysicalValue(it.value, it.label, isDefault = false)
+        }
+        val physicalData = com.ugocalc.app.domain.inference.m3.PhysicalData(customDensities)
 
-    )
+        return V2AnalysisPipeline(
+            perceive = perceptionEngine::perceive,
+            physicsEngine = com.ugocalc.app.domain.inference.m3.PhysicsEngine(physicalData),
+            arbitrate = arbitrationEngine::arbitrate,
+            matchNutrition = nutritionMatchStepAdapter::match,
+            recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
+            biasFactor = { sessionMode, strategy, aiModelId, foodCategory ->
+                val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
+                biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
+            },
+            getCalibrations = { sessionMode -> scaleCalibrationRepository.observeAll(sessionMode).first() },
+            resolveAmbiguity = { candidati ->
+                // Ricerca locale, deterministica (§13 punto 2): nessuna chiamata al modello. Per ogni
+                // candidato prende il CHO/100g della prima voce trovata nelle tabelle dell'utente.
+                candidati.mapNotNull { nome ->
+                    tableRepository.searchEntries(nome).firstOrNull()?.let { nome to it.entry.choPer100g }
+                }.toMap()
+            },
+        )
+    }
 }

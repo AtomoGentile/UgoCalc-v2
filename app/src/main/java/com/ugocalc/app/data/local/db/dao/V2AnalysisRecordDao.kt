@@ -6,6 +6,8 @@ import androidx.room.Query
 import androidx.room.Update
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 
+import kotlinx.coroutines.flow.Flow
+
 /** M8 – accesso all'archivio di telemetria V2 (§5, §8). */
 @Dao
 interface V2AnalysisRecordDao {
@@ -14,6 +16,9 @@ interface V2AnalysisRecordDao {
 
     @Update
     suspend fun update(record: V2AnalysisRecordEntity)
+
+    @Query("SELECT * FROM v2_analysis_records ORDER BY analyzedAtEpochMillis DESC")
+    fun getAllFlow(): Flow<List<V2AnalysisRecordEntity>>
 
     @Query("SELECT * FROM v2_analysis_records ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getAll(): List<V2AnalysisRecordEntity>
@@ -27,6 +32,10 @@ interface V2AnalysisRecordDao {
     /** Righe con ground truth: la base dei fattori di correzione appresi per (modalità, strategia, modello) (§8). */
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL AND sessionMode = :sessionMode AND aiModelId = :aiModelId ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity>
+
+    /** Tutte le righe con ground truth (§ segnalazione utente "stuttering fortissimo"): evita N query per ricalcolare tutte le statistiche della vista BIAS. */
+    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
+    fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>>
 
     /** Tutte le righe con ground truth (§ segnalazione utente "stuttering fortissimo"): evita N query per ricalcolare tutte le statistiche della vista BIAS. */
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
@@ -46,6 +55,9 @@ interface V2AnalysisRecordDao {
 
     @Query("DELETE FROM v2_analysis_records")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM v2_analysis_records WHERE id = :id")
+    suspend fun deleteById(id: Long)
 }
 
 /** Proiezione minima per [V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth]. */

@@ -83,17 +83,30 @@ fun ChangelogScreen(onBack: () -> Unit, viewModel: ChangelogViewModel = hiltView
                 }
                 HorizontalDivider()
             }
-            items(Changelog.ENTRIES) { entry ->
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                    Text("Versione ${entry.version}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    entry.highlights.forEach { highlight ->
-                        Text("• $highlight", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
-                    }
-                    entry.moduleVersions?.let { versions ->
+            Changelog.ENTRIES.forEach { entry ->
+                item(key = "version_${entry.version}") {
+                    Text(
+                        "Versione ${entry.version}",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                }
+                items(entry.highlights) { highlight ->
+                    Text(
+                        "• $highlight",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                entry.moduleVersions?.let { versions ->
+                    item(key = "versions_${entry.version}") {
                         ModuleVersionsBlock(versions)
                     }
                 }
-                HorizontalDivider()
+                item(key = "divider_${entry.version}") {
+                    HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
+                }
             }
         }
     }

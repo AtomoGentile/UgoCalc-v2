@@ -23,6 +23,8 @@ data class WeightEstimate(
     @SerialName("intervallo") val intervallo: ConfidenceInterval,
     @SerialName("catena_calcolo") val catenaCalcolo: CalculationChain,
     val confidenza: Confidence,
+    /** Vero se il calcolo ha dovuto ripiegare su un valore di default (densità, peso unitario, capacità) perché non trovato in tabella (§ richiesta utente). */
+    val usoDefaultFisico: Boolean = false,
 )
 
 /** Intervallo di confidenza sul peso, in grammi. Sempre mostrato, mai nascosto (§9). */

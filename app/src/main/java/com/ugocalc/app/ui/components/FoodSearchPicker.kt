@@ -10,10 +10,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
@@ -24,9 +26,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -94,14 +100,27 @@ fun FoodSearchPicker(
     val filteredResults = if (showChoFilter) results.filter { it.entry.choPer100g.toFloat() in choRange } else results
     val filteredMostSearched = if (showChoFilter) mostSearched.filter { it.entry.choPer100g.toFloat() in choRange } else mostSearched
 
+    var showCreateDialog by remember { mutableStateOf(false) }
+    var newFoodName by remember { mutableStateOf("") }
+    var newFoodCho by remember { mutableStateOf("") }
+    var newFoodGrassi by remember { mutableStateOf("") }
+
     Column(modifier = modifier.fillMaxWidth().let { if (fillAvailableHeight) it.fillMaxHeight() else it }) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = viewModel::setQuery,
-            label = { Text("Cerca un alimento nelle tue tabelle") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = query,
+                onValueChange = viewModel::setQuery,
+                label = { Text("Cerca un alimento nelle tue tabelle") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = {
+                newFoodName = query
+                showCreateDialog = true
+            }, modifier = Modifier.padding(start = 8.dp)) {
+                Icon(Icons.Default.Add, contentDescription = "Crea nuovo alimento")
+            }
+        }
         if (showChoFilter) {
             Text(
                 "CHO per 100g: ${choRange.start.toInt()}–${choRange.endInclusive.toInt()} g",
@@ -182,6 +201,51 @@ fun FoodSearchPicker(
                 }
             }
         }
+    }
+
+    if (showCreateDialog) {
+        AlertDialog(
+            onDismissRequest = { showCreateDialog = false },
+            title = { Text("Crea nuovo alimento") },
+            text = {
+                Column {
+                    OutlinedTextField(
+                        value = newFoodName,
+                        onValueChange = { newFoodName = it },
+                        label = { Text("Nome") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = newFoodCho,
+                        onValueChange = { newFoodCho = it },
+                        label = { Text("CHO per 100g") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                    OutlinedTextField(
+                        value = newFoodGrassi,
+                        onValueChange = { newFoodGrassi = it },
+                        label = { Text("Grassi per 100g") },
+                        singleLine = true,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val cho = newFoodCho.toDoubleOrNull() ?: 0.0
+                    val grassi = newFoodGrassi.toDoubleOrNull() ?: 0.0
+                    viewModel.createManualFood(newFoodName, cho, grassi, onSelect)
+                    showCreateDialog = false
+                }) { Text("Crea e seleziona") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateDialog = false }) { Text("Annulla") }
+            }
+        )
     }
 }
 
@@ -297,6 +361,13 @@ class FoodSearchPickerViewModel @Inject constructor(
         viewModelScope.launch {
             tableRepository.clearMostSearched()
             refreshMostSearched()
+        }
+    }
+
+    fun createManualFood(nome: String, cho: Double, grassi: Double, onSelect: (NormalizedFoodEntry) -> Unit) {
+        viewModelScope.launch {
+            val entry = tableRepository.addManualEntry(nome, cho, grassi)
+            onSelect(entry)
         }
     }
 

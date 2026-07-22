@@ -46,7 +46,7 @@ class PhysicsEngineTest {
             goodScale,
         )
         val area = PI * 13.5 * 13.5
-        val atteso = 0.4 * area * 1.5 * 0.8 * 0.85 // densità riso cotto = 0.85
+        val atteso = 0.4 * area * 1.5 * 0.8 * 0.82 // densità riso cotto = 0.82
         assertEquals(atteso, est.pesoG, 1e-6)
     }
 
@@ -67,7 +67,7 @@ class PhysicsEngineTest {
             EstimationStrategy.BLOCCO_MISURABILE,
             goodScale,
         )
-        assertEquals(40.0 * 1.05, est.pesoG, 1e-6) // 40 cm³ × densità formaggio 1.05
+        assertEquals(40.0 * 1.06, est.pesoG, 1e-6) // 40 cm³ × densità formaggio 1.06
     }
 
     @Test
@@ -78,7 +78,7 @@ class PhysicsEngineTest {
             goodScale,
         )
         val volume = PI * 4.0 * 4.0 * 3.0
-        assertEquals(volume * 0.45, est.pesoG, 1e-6) // densità torta 0.45
+        assertEquals(volume * 0.48, est.pesoG, 1e-6) // densità torta 0.48
     }
 
     @Test
