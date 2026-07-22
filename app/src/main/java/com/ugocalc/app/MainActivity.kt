@@ -14,6 +14,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.rememberNavController
+import com.ugocalc.app.data.repository.AuthRepository
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.AppViewModel
 import com.ugocalc.app.ui.components.AppUpdateDialog
@@ -24,10 +25,12 @@ import com.ugocalc.app.ui.theme.AppFontFamily
 import com.ugocalc.app.ui.theme.UgoCalcTheme
 import com.ugocalc.app.util.isCameraPermissionGranted
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject lateinit var authRepository: AuthRepository
     private val appViewModel: AppViewModel by viewModels()
 
     private val startupPermissionLauncher =
@@ -41,7 +44,9 @@ class MainActivity : ComponentActivity() {
             val settings by appViewModel.settings.collectAsState()
             val showWhatsNew by appViewModel.showWhatsNew.collectAsState()
             val appUpdateStatus by appViewModel.appUpdateStatus.collectAsState()
-            
+
+            val isLoggedIn by authRepository.isLoggedInFlow.collectAsState(initial = false)
+
             if (isReady) {
                 // Icona Casa/Ristorante in Homepage (§ richiesta utente): sceglie quale delle due liste
                 // di colori personalizzati in Accessibilità applicare a tutta l'app.
@@ -64,8 +69,8 @@ class MainActivity : ComponentActivity() {
                     fontColor = settings.fontColorArgb?.let { Color(it) },
                 ) {
                     val navController = rememberNavController()
-                    UgoCalcNavHost(navController = navController)
-                    
+                    UgoCalcNavHost(navController = navController, startAuthenticated = isLoggedIn)
+
                     appUpdateStatus?.let { status ->
                         AppUpdateDialog(status = status, onDismiss = { appViewModel.dismissAppUpdate() })
                     }

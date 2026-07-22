@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.ugocalc.app.data.auth.AuthResult
 import com.ugocalc.app.data.auth.AuthUser
 import com.ugocalc.app.data.auth.CognitoAuthManager
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -16,7 +17,7 @@ private val Context.dataStore by preferencesDataStore(name = "auth_preferences")
 
 @Singleton
 class AuthRepository @Inject constructor(
-    private val context: Context
+    @ApplicationContext private val context: Context
 ) {
     private object PreferencesKeys {
         val USER_ID = stringPreferencesKey("user_id")

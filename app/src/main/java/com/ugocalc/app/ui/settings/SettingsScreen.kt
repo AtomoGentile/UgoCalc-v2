@@ -50,10 +50,12 @@ fun SettingsScreen(
     onOpenBackup: () -> Unit,
     onOpenScaleCalibrations: () -> Unit,
     onOpenRecipes: () -> Unit,
+    onOpenAccount: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("Impostazioni") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
+            item { SettingsMenuItem("Account", "Accesso, condivisione e bias globale", onOpenAccount) }
             item { SettingsMenuItem("API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi) }
             item { SettingsMenuItem("Preferiti", "Scorciatoie mostrate in Homepage", onOpenFavorites) }
             item { SettingsMenuItem("Permessi", "Fotocamera e notifiche", onOpenPermissions) }

@@ -11,6 +11,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
+import com.ugocalc.app.ui.auth.AccountSettingsScreen
+import com.ugocalc.app.ui.auth.AuthScreen
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
 import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen
 import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
@@ -45,7 +47,9 @@ import com.ugocalc.app.ui.settings.tables.OfficialTablesListScreen
 import com.ugocalc.app.ui.settings.tables.TableEditorScreen
 
 @Composable
-fun UgoCalcNavHost(navController: NavHostController) {
+fun UgoCalcNavHost(navController: NavHostController, startAuthenticated: Boolean = false) {
+    val startDestination = if (startAuthenticated) Routes.HOME else Routes.AUTH
+
     /** Naviga verso una destinazione principale pulendo lo stack ed evitando duplicati (§ bug fix backstack). */
     val navigateTopLevel: (String) -> Unit = { route ->
         navController.navigate(route) {
@@ -64,7 +68,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
     NavHost(
         navController = navController,
-        startDestination = Routes.HOME,
+        startDestination = startDestination,
         enterTransition = { fadeIn(animationSpec = tween(300)) },
         exitTransition = { fadeOut(animationSpec = tween(300)) },
     ) {
@@ -190,12 +194,12 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = safeBack) }
         composable(Routes.SETTINGS_SCALE_CALIBRATIONS) { ScaleCalibrationScreen(onBack = safeBack) }
-        composable(Routes.SETTINGS_RECIPES) { 
+        composable(Routes.SETTINGS_RECIPES) {
             RecipeListScreen(
-                onRecipeSelected = { recipeId -> navController.navigate(Routes.recipeDetailRoute(recipeId)) }, 
+                onRecipeSelected = { recipeId -> navController.navigate(Routes.recipeDetailRoute(recipeId)) },
                 onAddRecipe = { navController.navigate(Routes.recipeEditRoute(0L)) },
                 onBack = safeBack
-            ) 
+            )
         }
         composable(
             route = Routes.SETTINGS_RECIPE_DETAIL,
@@ -235,6 +239,7 @@ fun UgoCalcNavHost(navController: NavHostController) {
                 onOpenScaleCalibrations = { navController.navigate(Routes.SETTINGS_SCALE_CALIBRATIONS) },
                 onOpenRecipes = { navController.navigate(Routes.SETTINGS_RECIPES) },
                 onOpenBackup = { navController.navigate(Routes.SETTINGS_BACKUP) },
+                onOpenAccount = { navController.navigate(Routes.SETTINGS_ACCOUNT) },
             )
         }
 
@@ -254,14 +259,35 @@ fun UgoCalcNavHost(navController: NavHostController) {
 
         composable(
             route = Routes.V2_RESULT,
-            arguments = listOf(navArgument("recordId") { 
+            arguments = listOf(navArgument("recordId") {
                 type = NavType.StringType
                 nullable = true
                 defaultValue = null
             })
-        ) { 
-            V2ResultScreen(onBack = safeBack) 
+        ) {
+            V2ResultScreen(onBack = safeBack)
         }
         composable(Routes.AMBIGUITY_RESOLUTION) { AmbiguityResolutionScreen(onBack = safeBack) }
+
+        composable(Routes.AUTH) {
+            AuthScreen(
+                onAuthenticated = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(Routes.AUTH) { inclusive = true }
+                    }
+                },
+            )
+        }
+
+        composable(Routes.SETTINGS_ACCOUNT) {
+            AccountSettingsScreen(
+                onBack = safeBack,
+                onSignedOut = {
+                    navController.navigate(Routes.AUTH) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+            )
+        }
     }
 }

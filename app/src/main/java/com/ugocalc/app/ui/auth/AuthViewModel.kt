@@ -58,4 +58,8 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Idle
         }
     }
+
+    fun setError(message: String) {
+        _authState.value = AuthState.Error(message)
+    }
 }

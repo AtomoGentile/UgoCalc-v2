@@ -4,34 +4,20 @@
 // Riceve un evento benchmark dall'app Android (CloudSyncManager) e lo scrive in DynamoDB.
 // Scrittura condizionale su eventId per garantire idempotenza lato server.
 // IAM: permesso solo dynamodb:PutItem sulle tabelle ugocalc-events.
-// Richiede autenticazione Cognito via Authorization header.
+// Richiede autenticazione Cognito via Authorization header (firma RS256 verificata).
+// Account condivisi: PK = accountId (risolto via ugocalc-accounts), non il loginId raw.
 
 const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall } = require('@aws-sdk/util-dynamodb');
+const { verifyToken } = require('../utils/verifyToken');
+const { resolveAccountId } = require('../utils/resolveAccount');
 
 const EVENTS_TABLE = process.env.EVENTS_TABLE || 'ugocalc-events';
 const dynamo = new DynamoDBClient({});
 
-function extractUserIdFromToken(authHeader) {
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return null;
-  }
-
-  const token = authHeader.substring(7);
-
-  try {
-    const decoded = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf-8'));
-    return decoded.sub || decoded['cognito:username'] || null;
-  } catch (e) {
-    console.error('Token decode error:', e);
-    return null;
-  }
-}
-
 exports.handler = async (event) => {
-  // Verifica Authorization header
   const authHeader = event.headers?.authorization || event.headers?.Authorization;
-  const tokenUserId = extractUserIdFromToken(authHeader);
+  const tokenUserId = await verifyToken(authHeader);
 
   if (!tokenUserId) {
     return response(401, { error: 'Unauthorized: missing or invalid Authorization header' });
@@ -49,8 +35,11 @@ exports.handler = async (event) => {
     return response(400, { error: 'Missing required fields: eventId, userId, payload' });
   }
 
-  // Verifica che userId nel body corrisponda a quello nel token
-  if (userId !== tokenUserId) {
+  // Resolve canonical accountId (handles shared accounts)
+  const accountId = await resolveAccountId(tokenUserId);
+
+  // userId in body must match either the loginId or the resolved accountId
+  if (userId !== tokenUserId && userId !== accountId) {
     return response(403, { error: 'Forbidden: userId mismatch' });
   }
 
@@ -64,7 +53,7 @@ exports.handler = async (event) => {
     await dynamo.send(new PutItemCommand({
       TableName: EVENTS_TABLE,
       Item: marshall({
-        PK: userId,
+        PK: accountId,
         SK: eventId,
         eventType: 'benchmark',
         createdAt: new Date().toISOString(),

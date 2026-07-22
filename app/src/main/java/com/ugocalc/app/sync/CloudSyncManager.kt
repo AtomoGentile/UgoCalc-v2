@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.ugocalc.app.data.local.db.dao.CloudSyncQueueDao
 import com.ugocalc.app.data.local.db.entity.CloudSyncQueueEntity
+import com.ugocalc.app.data.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -30,17 +31,19 @@ class CloudSyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val cloudSyncQueueDao: CloudSyncQueueDao,
     private val workManager: WorkManager,
+    private val authRepository: AuthRepository,
 ) {
     companion object {
-        const val USER_ID = "simone"
+        const val DEFAULT_USER_ID = "default-user-single-mode"
         private const val WORK_NAME = "cloud_sync"
     }
 
     suspend fun enqueue(eventType: String, payloadJson: String) {
+        val userId = authRepository.getCurrentUser()?.userId ?: DEFAULT_USER_ID
         val event = CloudSyncQueueEntity(
             eventId = UUID.randomUUID().toString(),
             eventType = eventType,
-            userId = USER_ID,
+            userId = userId,
             payloadJson = payloadJson,
             createdAtEpochMillis = System.currentTimeMillis(),
         )

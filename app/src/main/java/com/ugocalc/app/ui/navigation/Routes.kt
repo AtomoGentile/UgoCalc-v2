@@ -39,6 +39,9 @@ object Routes {
     const val SETTINGS_TABLE_EDITOR = "settings_table_editor/{tableId}"
     const val SETTINGS_BACKUP = "settings_backup"
 
+    const val AUTH = "auth"
+    const val SETTINGS_ACCOUNT = "settings_account"
+
     /**
      * Gli id modello possono contenere "/" (es. "openai/gpt-4o" per GitHub Models): senza
      * Uri.encode, Navigation Compose spezzerebbe la route su quello slash invece di trattarlo come

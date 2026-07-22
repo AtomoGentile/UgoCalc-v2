@@ -9,8 +9,8 @@ import androidx.room.PrimaryKey
  * applica una condizione di scrittura condizionale sull'eventId per garantire l'idempotenza
  * anche in caso di retry aggressivi o scritture quasi simultanee.
  *
- * userId è prefissato "simone" per ora (app single-user), ma è parte della chiave DynamoDB
- * (PK: userId, SK: eventId) per non dover riscrivere lo schema quando si aggiungeranno utenti.
+ * userId viene risolto da CloudSyncManager via AuthRepository (utente autenticato, oppure
+ * DEFAULT_USER_ID per dati preesistenti single-user). PK: userId, SK: eventId in DynamoDB.
  */
 @Entity(tableName = "cloud_sync_queue")
 data class CloudSyncQueueEntity(
