@@ -28,11 +28,12 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(authInterceptor: com.ugocalc.app.data.auth.AuthInterceptor): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
+            .addInterceptor(authInterceptor)
             .addInterceptor(logging)
             // Le chiamate di Visione (immagini) e Normalizzazione (tabelle estese) possono richiedere
             // tempi più lunghi del default: timeout generosi per evitare falsi "Analisi non riuscita".

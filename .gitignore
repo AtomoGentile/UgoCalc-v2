@@ -1,11 +1,11 @@
 # File sensibili / credenziali
 *.json
-!google-services.json
 credentials*
 *.pem
 *.key
 *.jks
 *.keystore
+google-services.json
 # Service account Google Cloud (Vertex AI/Gemini): già coperto da *.json sopra, elencato qui
 # in modo esplicito per qualunque nome/percorso venga usato durante lo sviluppo locale.
 *service-account*.json

@@ -3,6 +3,7 @@
 // Lambda: GET /config
 // Legge la configurazione remota da DynamoDB (tabella ugocalc-config) e la restituisce.
 // IAM: permesso solo dynamodb:GetItem sulla tabella ugocalc-config.
+// Supporta letture non autenticate (globale) e autenticate (per utente specifico).
 
 const { DynamoDBClient, GetItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
@@ -10,10 +11,31 @@ const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 const TABLE = process.env.CONFIG_TABLE || 'ugocalc-config';
 const dynamo = new DynamoDBClient({});
 
-exports.handler = async () => {
+function extractUserIdFromToken(authHeader) {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return null;
+  }
+
+  const token = authHeader.substring(7);
+
+  try {
+    const decoded = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString('utf-8'));
+    return decoded.sub || decoded['cognito:username'] || null;
+  } catch (e) {
+    console.error('Token decode error:', e);
+    return null;
+  }
+}
+
+exports.handler = async (event) => {
+  // Se autenticato, usa userId come PK; altrimenti usa 'global'
+  const authHeader = event.headers?.authorization || event.headers?.Authorization;
+  const tokenUserId = extractUserIdFromToken(authHeader);
+  const pk = tokenUserId || 'global';
+
   const result = await dynamo.send(new GetItemCommand({
     TableName: TABLE,
-    Key: marshall({ PK: 'global', SK: 'v1' }),
+    Key: marshall({ PK: pk, SK: 'v1' }),
   }));
 
   if (!result.Item) {

@@ -143,6 +143,10 @@ dependencies {
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
 
+    // AWS Amplify for Cognito authentication
+    implementation("com.amplifyframework:core:2.13.2")
+    implementation("com.amplifyframework:aws-auth-cognito:2.13.2")
+
     // Tests
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

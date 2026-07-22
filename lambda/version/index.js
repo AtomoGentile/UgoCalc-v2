@@ -3,6 +3,7 @@
 // Lambda: GET /version
 // Legge la versione più recente dell'app da DynamoDB (tabella ugocalc-versions).
 // IAM: permesso solo dynamodb:GetItem sulla tabella ugocalc-versions.
+// Richiesta globale (non autenticata).
 
 const { DynamoDBClient, GetItemCommand } = require('@aws-sdk/client-dynamodb');
 const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
