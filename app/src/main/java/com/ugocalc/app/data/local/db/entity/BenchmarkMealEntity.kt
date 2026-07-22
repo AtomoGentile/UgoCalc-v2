@@ -2,6 +2,7 @@ package com.ugocalc.app.data.local.db.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * Benchmark pesato V1 vs V2 (piano V2 §10, §13 punto 5): una riga per pasto, che collega la stima
@@ -14,6 +15,7 @@ import androidx.room.PrimaryKey
  * Salvata automaticamente (non su azione utente, a differenza di `analysis_history`): altrimenti un
  * pasto in cui l'utente non preme "Salva" in cronologia sparirebbe anche dal benchmark.
  */
+@Serializable
 @Entity(tableName = "benchmark_meals")
 data class BenchmarkMealEntity(
     @PrimaryKey val sessionId: String,

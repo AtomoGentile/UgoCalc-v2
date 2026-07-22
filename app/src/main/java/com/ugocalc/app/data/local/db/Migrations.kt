@@ -182,3 +182,23 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
         db.execSQL("ALTER TABLE recipes ADD COLUMN sessionMode TEXT NOT NULL DEFAULT 'CASA'")
     }
 }
+
+/** CloudSync (Prompt 5): coda offline-first degli eventi da trasmettere al backend AWS. */
+val MIGRATION_16_17 = object : Migration(16, 17) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `cloud_sync_queue` (
+                `eventId` TEXT PRIMARY KEY NOT NULL,
+                `eventType` TEXT NOT NULL,
+                `userId` TEXT NOT NULL,
+                `payloadJson` TEXT NOT NULL,
+                `createdAtEpochMillis` INTEGER NOT NULL,
+                `attemptCount` INTEGER NOT NULL DEFAULT 0,
+                `lastAttemptEpochMillis` INTEGER,
+                `syncedAtEpochMillis` INTEGER
+            )
+            """.trimIndent()
+        )
+    }
+}

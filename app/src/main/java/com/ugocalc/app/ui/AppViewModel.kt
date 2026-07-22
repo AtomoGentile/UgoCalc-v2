@@ -4,6 +4,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.data.local.prefs.UserSettings
+import com.ugocalc.app.data.repository.AppUpdateCheckResult
+import com.ugocalc.app.data.repository.AppUpdateRepository
+import com.ugocalc.app.data.repository.AppUpdateStatus
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.domain.model.Changelog
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -19,6 +22,7 @@ import javax.inject.Inject
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
+    private val appUpdateRepository: AppUpdateRepository,
 ) : ViewModel() {
     val settings: StateFlow<UserSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserSettings())
@@ -44,6 +48,9 @@ class AppViewModel @Inject constructor(
     private val _isReady = MutableStateFlow(false)
     val isReady: StateFlow<Boolean> = _isReady
 
+    private val _appUpdateStatus = MutableStateFlow<AppUpdateStatus?>(null)
+    val appUpdateStatus: StateFlow<AppUpdateStatus?> = _appUpdateStatus
+
     init {
         viewModelScope.launch {
             val first = settingsRepository.settings.first()
@@ -51,6 +58,12 @@ class AppViewModel @Inject constructor(
                 settingsRepository.setLastSeenVersionCode(BuildConfig.VERSION_CODE)
             }
             _isReady.value = true
+        }
+        viewModelScope.launch {
+            when (val result = appUpdateRepository.checkForUpdate()) {
+                is AppUpdateCheckResult.UpdateAvailable -> _appUpdateStatus.value = result.status
+                else -> Unit
+            }
         }
     }
 
@@ -60,5 +73,10 @@ class AppViewModel @Inject constructor(
 
     fun dismissWhatsNew() {
         viewModelScope.launch { settingsRepository.setLastSeenVersionCode(BuildConfig.VERSION_CODE) }
+    }
+
+    fun dismissAppUpdate() {
+        val status = _appUpdateStatus.value ?: return
+        if (!status.mandatory) _appUpdateStatus.value = null
     }
 }

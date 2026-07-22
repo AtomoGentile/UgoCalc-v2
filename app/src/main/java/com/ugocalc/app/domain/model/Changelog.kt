@@ -39,6 +39,24 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "3.0.0",
+            highlights = listOf(
+                "Migrazione AWS: la distribuzione degli aggiornamenti è stata completamente trasferita da GitHub a AWS per maggiore stabilità e controllo.",
+                "Sincronizzazione cloud automatica: telemetria benchmark e inferenze sono ora sincronizzate con il backend AWS tramite coda offline-first.",
+                "Recupero configurazione remota: l'app scarica dinamicamente la configurazione da AWS al primo avvio, riducendo i rebuild necessari.",
+                "Autenticazione versione app: controllo automatico degli aggiornamenti obbligatori e opzionali tramite manifest server.",
+                "Infrastruttura scalabile: il backend AWS (Lambda + DynamoDB) è pronto per il supporto multi-utente e l'analisi aggregata dei dati."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.4.0",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.2.0",
+                biasCalculator = "1.3.0",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "2.4.5",
             highlights = listOf(
                 "Pulizia Dati V2: introdotta la possibilità di eliminare le analisi V2 errate (es. test, inquadrature pessime) per evitare di inquinare il calcolo dei fattori di correzione.",
@@ -143,7 +161,7 @@ object Changelog {
                 "Valutazione automatica benchmark: nuovo worker per l'aggregazione delle metriche di precisione.",
                 "Integrazione Hilt + WorkManager: architettura robusta per i processi in background.",
                 "Promozione automatica: logica basata sulla percentuale di pasti con errore CHO contenuto.",
-                "Supporto Firebase App Distribution per aggiornamenti rapidi del canale tester."
+                "Distribuzione aggiornamenti tramite GitHub Releases."
             ),
             moduleVersions = ModuleVersions(
                 inferenceEngine = "2.0.0",

@@ -7,8 +7,6 @@ plugins {
     id("com.google.dagger.hilt.android")
     id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.serialization") version "2.0.21"
-    id("com.google.gms.google-services")
-    id("com.google.firebase.appdistribution")
 }
 
 android {
@@ -20,7 +18,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "2.4.0"
+        versionName = "3.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -28,11 +26,6 @@ android {
     buildTypes {
         debug {
             isMinifyEnabled = false
-            // Accessing the extension directly by name to avoid resolution issues
-            extensions.configure<com.google.firebase.appdistribution.gradle.AppDistributionExtension>("firebaseAppDistribution") {
-                releaseNotesFile = "release_notes.txt"
-                groups = "tester"
-            }
         }
         release {
             isMinifyEnabled = true
@@ -144,10 +137,6 @@ dependencies {
     // Services, niente CameraX da integrare a mano — coerente con la scelta già fatta per lo
     // scatto foto di delegare alla fotocamera di sistema invece di una preview custom.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
-
-    // Firebase (App Distribution + Analytics optional)
-    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
-    implementation("com.google.firebase:firebase-analytics")
 
     // WorkManager (background notification when app in background)
     implementation("androidx.work:work-runtime-ktx:2.9.1")

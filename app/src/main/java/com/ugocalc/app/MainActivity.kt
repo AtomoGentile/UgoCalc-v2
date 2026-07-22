@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.navigation.compose.rememberNavController
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.AppViewModel
+import com.ugocalc.app.ui.components.AppUpdateDialog
 import com.ugocalc.app.ui.components.DataDisclaimerDialog
 import com.ugocalc.app.ui.components.WhatsNewDialog
 import com.ugocalc.app.ui.navigation.UgoCalcNavHost
@@ -39,6 +40,7 @@ class MainActivity : ComponentActivity() {
             val isReady by appViewModel.isReady.collectAsState()
             val settings by appViewModel.settings.collectAsState()
             val showWhatsNew by appViewModel.showWhatsNew.collectAsState()
+            val appUpdateStatus by appViewModel.appUpdateStatus.collectAsState()
             
             if (isReady) {
                 // Icona Casa/Ristorante in Homepage (§ richiesta utente): sceglie quale delle due liste
@@ -64,10 +66,15 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     UgoCalcNavHost(navController = navController)
                     
-                    if (!settings.hasSeenDataDisclaimer) {
-                        DataDisclaimerDialog(onDismiss = { appViewModel.dismissDataDisclaimer() })
-                    } else if (showWhatsNew) {
-                        WhatsNewDialog(onDismiss = { appViewModel.dismissWhatsNew() })
+                    appUpdateStatus?.let { status ->
+                        AppUpdateDialog(status = status, onDismiss = { appViewModel.dismissAppUpdate() })
+                    }
+                    if (appUpdateStatus?.mandatory != true) {
+                        if (!settings.hasSeenDataDisclaimer) {
+                            DataDisclaimerDialog(onDismiss = { appViewModel.dismissDataDisclaimer() })
+                        } else if (showWhatsNew) {
+                            WhatsNewDialog(onDismiss = { appViewModel.dismissWhatsNew() })
+                        }
                     }
                 }
             } else {

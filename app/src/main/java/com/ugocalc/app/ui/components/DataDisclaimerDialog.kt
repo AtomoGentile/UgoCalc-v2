@@ -27,8 +27,7 @@ fun DataDisclaimerDialog(onDismiss: () -> Unit) {
                         "UgoCalc invia i dati necessari (foto, tabelle, testo di ricerca) al servizio AI che " +
                         "scegli tu in Impostazioni > API — nulla parte finché non imposti almeno una chiave.\n\n" +
                         "Lo scanner codici a barre interroga il database pubblico OpenFoodFacts.\n\n" +
-                        "Cronologia, preferiti e tabelle restano salvati solo sul telefono. L'app include " +
-                        "Firebase per la distribuzione delle build di test e statistiche di base sull'utilizzo.",
+                        "Cronologia, preferiti e tabelle restano salvati solo sul telefono.",
                     modifier = Modifier.padding(top = 4.dp),
                 )
             }

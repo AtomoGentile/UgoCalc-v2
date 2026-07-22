@@ -8,11 +8,15 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import java.util.concurrent.TimeUnit
+import javax.inject.Named
 import javax.inject.Singleton
 
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
+
+    // URL base del backend AWS. Sostituire con l'URL reale al momento del deploy.
+    private const val AWS_BASE_URL = "https://api.ugocalc.example.com"
 
     @Provides
     @Singleton
@@ -37,4 +41,8 @@ object NetworkModule {
             .writeTimeout(90, TimeUnit.SECONDS)
             .build()
     }
+
+    @Provides
+    @Named("aws_base_url")
+    fun provideAwsBaseUrl(): String = AWS_BASE_URL
 }

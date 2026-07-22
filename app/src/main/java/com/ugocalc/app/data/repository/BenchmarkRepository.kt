@@ -9,6 +9,8 @@ import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.inference.m7.NutritionReport
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.CalculatedFoodLine
+import com.ugocalc.app.sync.CloudSyncEventType
+import com.ugocalc.app.sync.CloudSyncManager
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
@@ -66,6 +68,7 @@ class BenchmarkRepository @Inject constructor(
     private val benchmarkDao: BenchmarkMealDao,
     private val v2Dao: V2AnalysisRecordDao,
     private val json: Json,
+    private val cloudSyncManager: CloudSyncManager,
 ) {
     /** Salva la stima grezza V1 (pesi per alimento) appena disponibile, prima del matching nutrizionale. */
     suspend fun recordV1Estimate(
@@ -126,11 +129,14 @@ class BenchmarkRepository @Inject constructor(
 
     suspend fun recordGroundTruth(sessionId: String, pesiG: Map<String, Double>, livello: GroundTruthLevel) {
         val meal = benchmarkDao.getById(sessionId) ?: return
-        benchmarkDao.update(
-            meal.copy(
-                groundTruthPesiJson = json.encodeToString(pesiG),
-                groundTruthLivello = livello.jsonValue,
-            ),
+        val updated = meal.copy(
+            groundTruthPesiJson = json.encodeToString(pesiG),
+            groundTruthLivello = livello.jsonValue,
+        )
+        benchmarkDao.update(updated)
+        cloudSyncManager.enqueue(
+            eventType = CloudSyncEventType.BENCHMARK,
+            payloadJson = json.encodeToString(updated),
         )
     }
 
