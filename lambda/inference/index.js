@@ -1,15 +1,12 @@
 'use strict';
 
-// Lambda: POST /inference
-// Riceve un evento inference (telemetria pipeline V2) dall'app e lo scrive in DynamoDB.
+// Lambda: POST /inference  — salva un record di telemetria V2 con ground truth
+//         GET  /inference  — restituisce tutti i record inference dell'account (per sync cross-device)
 // Scrittura condizionale su eventId per idempotenza.
-// Bedrock viene invocato tramite ruolo IAM (nessuna chiave statica).
-// IAM: dynamodb:PutItem su ugocalc-events + bedrock:InvokeModel se inference AI è locale alla Lambda.
-// Richiede autenticazione Cognito via Authorization header (firma RS256 verificata).
 // Account condivisi: PK = accountId (risolto via ugocalc-accounts), non il loginId raw.
 
-const { DynamoDBClient, PutItemCommand } = require('@aws-sdk/client-dynamodb');
-const { marshall } = require('@aws-sdk/util-dynamodb');
+const { DynamoDBClient, PutItemCommand, QueryCommand } = require('@aws-sdk/client-dynamodb');
+const { marshall, unmarshall } = require('@aws-sdk/util-dynamodb');
 const { verifyToken } = require('../utils/verifyToken');
 const { resolveAccountId } = require('../utils/resolveAccount');
 
@@ -24,6 +21,47 @@ exports.handler = async (event) => {
     return response(401, { error: 'Unauthorized: missing or invalid Authorization header' });
   }
 
+  const method = event.requestContext?.http?.method || event.httpMethod || 'POST';
+
+  if (method === 'GET') {
+    return handleGet(tokenUserId);
+  }
+  return handlePost(event, tokenUserId);
+};
+
+// ── GET /inference ────────────────────────────────────────────────────────────
+async function handleGet(tokenUserId) {
+  const accountId = await resolveAccountId(tokenUserId);
+
+  try {
+    const result = await dynamo.send(new QueryCommand({
+      TableName: EVENTS_TABLE,
+      KeyConditionExpression: 'PK = :pk',
+      FilterExpression: 'eventType = :et',
+      ExpressionAttributeValues: marshall({
+        ':pk': accountId,
+        ':et': 'inference',
+      }),
+    }));
+
+    const records = (result.Items || []).map(item => {
+      const row = unmarshall(item);
+      try {
+        return JSON.parse(row.payloadJson);
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+
+    return response(200, { records });
+  } catch (err) {
+    console.error('DynamoDB query error:', err);
+    return response(500, { error: 'Internal error' });
+  }
+}
+
+// ── POST /inference ───────────────────────────────────────────────────────────
+async function handlePost(event, tokenUserId) {
   let body;
   try {
     body = JSON.parse(event.body || '{}');
@@ -36,10 +74,8 @@ exports.handler = async (event) => {
     return response(400, { error: 'Missing required fields: eventId, userId, payload' });
   }
 
-  // Resolve canonical accountId (handles shared accounts)
   const accountId = await resolveAccountId(tokenUserId);
 
-  // userId in body must match either the loginId or the resolved accountId
   if (userId !== tokenUserId && userId !== accountId) {
     return response(403, { error: 'Forbidden: userId mismatch' });
   }
@@ -65,7 +101,7 @@ exports.handler = async (event) => {
         segmentKey,
         payloadJson: JSON.stringify(payload),
       }, { removeUndefinedValues: true }),
-      ConditionExpression: 'attribute_not_exists(PK)',
+      ConditionExpression: 'attribute_not_exists(SK)',
     }));
     return response(201, { ok: true });
   } catch (err) {
@@ -75,7 +111,7 @@ exports.handler = async (event) => {
     console.error('DynamoDB error:', err);
     return response(500, { error: 'Internal error' });
   }
-};
+}
 
 function response(statusCode, body) {
   return {

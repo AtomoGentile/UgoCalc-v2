@@ -196,11 +196,16 @@ class CameraAngleOverlayService : Service(), SensorEventListener {
             }
             else -> return
         }
-        updateOverlayText()
-        publishReading()
+        val nowMs = System.currentTimeMillis()
+        if (nowMs - lastOverlayUpdateMs >= 100L) {
+            lastOverlayUpdateMs = nowMs
+            updateOverlayText()
+            publishReading()
+        }
     }
 
     private var currentMotionRadPerSec = 0.0
+    private var lastOverlayUpdateMs = 0L
 
     private fun publishReading() {
         LastReading.value = MeasuredAngle(

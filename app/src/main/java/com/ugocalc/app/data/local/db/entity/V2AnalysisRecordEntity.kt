@@ -2,6 +2,7 @@ package com.ugocalc.app.data.local.db.entity
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import kotlinx.serialization.Serializable
 
 /**
  * M8 – Telemetria e archivio di apprendimento (piano V2 §5, §7, §8). Una riga per ogni analisi V2
@@ -15,6 +16,7 @@ import androidx.room.PrimaryKey
  * correzione manuale o un peso reale: sono il segnale da cui i fattori di correzione si calcolano,
  * mai popolati automaticamente.
  */
+@Serializable
 @androidx.compose.runtime.Immutable
 @Entity(tableName = "v2_analysis_records")
 data class V2AnalysisRecordEntity(
@@ -34,4 +36,13 @@ data class V2AnalysisRecordEntity(
     val groundTruthPesiJson: String? = null,
     /** Livello di affidabilità del ground truth: "gold" (bilancia), "silver" (etichetta), "bronze" (stima utente). */
     val groundTruthLivello: String? = null,
+    /**
+     * Null per i record completati con successo (Verificato). Non-null se la pipeline si è fermata
+     * prima: contiene il motivo leggibile (es. "NessunaFotoValida", "FallbackAV1: <motivo>",
+     * "SchemaNonSupportato: v3 attesa v2", "Eccezione: <message>"). I campi JSON sono vuoti
+     * string per questi record — non hanno dati di pipeline da mostrare.
+     */
+    val failureReason: String? = null,
+    /** UUID stabile generato client-side: usato come chiave idempotente per la sync cross-device (inference push/pull). I record precedenti alla migrazione 18→19 hanno un valore sintetico "local-{id}". */
+    val clientId: String? = null,
 )

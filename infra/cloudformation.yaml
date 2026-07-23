@@ -16,6 +16,13 @@ Parameters:
     Type: String
     Default: ugocalc-lambda.zip
     Description: S3 key of the Lambda zip (all five handlers bundled together)
+  GoogleClientId:
+    Type: String
+    Description: Google OAuth 2.0 Web Client ID
+  GoogleClientSecret:
+    Type: String
+    NoEcho: true
+    Description: Google OAuth 2.0 Web Client Secret
 
 # ─────────────────────────────────────────────
 # Cognito
@@ -43,8 +50,29 @@ Resources:
           Required: true
           Mutable: true
 
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Properties:
+      Domain: !Sub ${AppName}-auth
+      UserPoolId: !Ref UserPool
+
+  GoogleIdentityProvider:
+    Type: AWS::Cognito::UserPoolIdentityProvider
+    Properties:
+      UserPoolId: !Ref UserPool
+      ProviderName: Google
+      ProviderType: Google
+      ProviderDetails:
+        client_id: !Ref GoogleClientId
+        client_secret: !Ref GoogleClientSecret
+        authorize_scopes: email profile openid
+      AttributeMapping:
+        email: email
+        name: name
+
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
+    DependsOn: GoogleIdentityProvider
     Properties:
       ClientName: !Sub ${AppName}-android
       UserPoolId: !Ref UserPool
@@ -52,6 +80,21 @@ Resources:
       ExplicitAuthFlows:
         - ALLOW_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      SupportedIdentityProviders:
+        - COGNITO
+        - Google
+      CallbackURLs:
+        - !Sub ugocalc://auth
+      LogoutURLs:
+        - !Sub ugocalc://auth
+      AllowedOAuthFlows:
+        - code
+      AllowedOAuthScopes:
+        - email
+        - openid
+        - profile
+      AllowedOAuthFlowsUserPoolClient: true
       PreventUserExistenceErrors: ENABLED
 
   IdentityPool:
@@ -149,6 +192,21 @@ Resources:
       KeySchema:
         - AttributeName: PK
           KeyType: HASH
+
+  InvitesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: ugocalc-invites
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
 
 # ─────────────────────────────────────────────
 # Lambda shared execution role base + per-function roles
@@ -248,7 +306,7 @@ Resources:
                 Action: dynamodb:GetItem
                 Resource: !GetAtt ConfigTable.Arn
 
-  # share: GetItem + PutItem on ugocalc-accounts
+  # share: CRUD on ugocalc-invites + GetItem/PutItem on ugocalc-accounts
   ShareRole:
     Type: AWS::IAM::Role
     Properties:
@@ -267,6 +325,12 @@ Resources:
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                Resource: !GetAtt InvitesTable.Arn
               - Effect: Allow
                 Action:
                   - dynamodb:GetItem
@@ -299,9 +363,48 @@ Resources:
                 Action: dynamodb:Scan
                 Resource: !GetAtt EventsTable.Arn
 
+  # version: GetItem on ugocalc-versions only (public endpoint, no auth)
+  VersionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub ${AppName}-lambda-version
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: version-dynamo
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: dynamodb:GetItem
+                Resource: !GetAtt VersionsTable.Arn
+
 # ─────────────────────────────────────────────
 # Lambda functions
 # ─────────────────────────────────────────────
+
+  VersionLambda:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub ${AppName}-version
+      Runtime: nodejs20.x
+      Handler: version/index.handler
+      Role: !GetAtt VersionRole.Arn
+      Code:
+        S3Bucket: !Ref LambdaS3Bucket
+        S3Key: !Ref LambdaS3Key
+      Timeout: 10
+      MemorySize: 128
+      Environment:
+        Variables:
+          VERSIONS_TABLE: ugocalc-versions
 
   InferenceLambda:
     Type: AWS::Lambda::Function
@@ -374,6 +477,7 @@ Resources:
       Environment:
         Variables:
           ACCOUNTS_TABLE: ugocalc-accounts
+          INVITES_TABLE: ugocalc-invites
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_CLIENT_ID: !Ref UserPoolClient
 
@@ -464,12 +568,27 @@ Resources:
       IntegrationUri: !GetAtt BiasLambda.Arn
       PayloadFormatVersion: '2.0'
 
+  VersionIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref HttpApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt VersionLambda.Arn
+      PayloadFormatVersion: '2.0'
+
   # Routes
   InferenceRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: POST /inference
+      Target: !Sub integrations/${InferenceIntegration}
+
+  InferenceGetRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /inference
       Target: !Sub integrations/${InferenceIntegration}
 
   BenchmarkRoute:
@@ -493,12 +612,47 @@ Resources:
       RouteKey: POST /share
       Target: !Sub integrations/${ShareIntegration}
 
+  ShareGenerateRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /share/generate
+      Target: !Sub integrations/${ShareIntegration}
+
+  ShareRequestRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /share/request
+      Target: !Sub integrations/${ShareIntegration}
+
+  ShareStatusRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /share/status
+      Target: !Sub integrations/${ShareIntegration}
+
+  ShareApproveRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: POST /share/approve
+      Target: !Sub integrations/${ShareIntegration}
+
   BiasRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: GET /bias
       Target: !Sub integrations/${BiasIntegration}
+
+  VersionRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /version
+      Target: !Sub integrations/${VersionIntegration}
 
   # Lambda permissions for API Gateway invocation
   InferenceLambdaPermission:
@@ -529,6 +683,14 @@ Resources:
     Type: AWS::Lambda::Permission
     Properties:
       FunctionName: !Ref ShareLambda
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
+
+  VersionLambdaPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref VersionLambda
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${HttpApi}/*
@@ -565,3 +727,7 @@ Outputs:
   Region:
     Description: AWS Region
     Value: !Ref AWS::Region
+
+  CognitoDomain:
+    Description: Cognito Hosted UI domain for OAuth
+    Value: !Sub https://${AppName}-auth.auth.${AWS::Region}.amazoncognito.com

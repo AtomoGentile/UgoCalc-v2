@@ -37,7 +37,7 @@ fun ConfidenceSettingsScreen(
     Scaffold(topBar = { TopAppBar(title = { Text("Livello di confidenza") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Mostra livello di sicurezza", modifier = Modifier.weight(1f))
+                Text("Mostra avviso di bassa confidenza", modifier = Modifier.weight(1f))
                 Switch(
                     checked = state.userSettings.confidenceIndicatorEnabled,
                     onCheckedChange = { viewModel.setConfidenceIndicatorEnabled(it) },
@@ -46,17 +46,17 @@ fun ConfidenceSettingsScreen(
 
             if (state.userSettings.confidenceIndicatorEnabled) {
                 Text(
-                    "Soglia: ${state.userSettings.confidenceThresholdPercent}%",
+                    "Soglia di allerta: ${state.userSettings.confidenceAlertThresholdPercent}%",
                     style = MaterialTheme.typography.titleMedium,
                     modifier = Modifier.padding(top = 24.dp),
                 )
                 Slider(
-                    value = state.userSettings.confidenceThresholdPercent.toFloat(),
-                    onValueChange = { viewModel.setConfidenceThresholdPercent(it.toInt()) },
+                    value = state.userSettings.confidenceAlertThresholdPercent.toFloat(),
+                    onValueChange = { viewModel.setConfidenceAlertThresholdPercent(it.toInt()) },
                     valueRange = 0f..100f,
                 )
                 Text(
-                    "Le analisi con confidenza pari o superiore alla soglia vengono evidenziate con il colore primario dell'app.",
+                    "Sotto questa soglia, viene mostrato un avviso (⚠) sulla stima di peso. Aumenta per ricevere avvisi più frequenti.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

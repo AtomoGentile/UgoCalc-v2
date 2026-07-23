@@ -175,7 +175,8 @@ class BenchmarkRepository @Inject constructor(
         var within20 = 0
         var mealsWithCho = 0
         for (meal in meals) {
-            val stimePerNome = if (v1) meal.v1PesiPerAlimento else meal.v2Stime.associate { it.nome to it.pesoG }
+            // Per V2, il ground truth è a crudo: usa pesoCrudoG per il confronto corretto.
+            val stimePerNome = if (v1) meal.v1PesiPerAlimento else meal.v2Stime.associate { it.nome to it.pesoCrudoG }
             for ((nome, veroG) in meal.groundTruthPesi) {
                 stimePerNome[nome]?.let { stimaG -> weightErrors += abs(stimaG - veroG) }
             }

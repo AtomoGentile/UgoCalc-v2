@@ -5,8 +5,13 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.data.remote.aws.CloudSyncClient
+import com.ugocalc.app.sync.CloudSyncEventType
+import com.ugocalc.app.sync.CloudSyncManager
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -29,6 +34,8 @@ enum class GroundTruthLevel(val jsonValue: String) {
 class V2TelemetryRepository @Inject constructor(
     private val dao: V2AnalysisRecordDao,
     private val json: Json,
+    private val cloudSyncManager: CloudSyncManager,
+    private val cloudSyncClient: CloudSyncClient,
 ) {
     suspend fun record(
         outcome: PipelineOutcome.Verificato,
@@ -47,6 +54,29 @@ class V2TelemetryRepository @Inject constructor(
             nutritionReportJson = json.encodeToString(outcome.nutrizione),
             arbitratoMotivoMancato = outcome.arbitratoMotivoMancato,
             sessionId = sessionId,
+            clientId = UUID.randomUUID().toString(),
+        )
+        return dao.insert(entity)
+    }
+
+    /** Registra un tentativo V2 fallito prima del completamento (NessunaFotoValida, FallbackAV1, SchemaNonSupportato, eccezione). Usato dalla shadow mode per tenere il conteggio allineato con la cronologia. */
+    suspend fun recordFailure(
+        reason: String,
+        model: AiModel,
+        sessionMode: SessionMode,
+        sessionId: String? = null,
+    ): Long {
+        val entity = V2AnalysisRecordEntity(
+            analyzedAtEpochMillis = System.currentTimeMillis(),
+            sessionMode = sessionMode.name,
+            aiModelId = model.id,
+            schemaVersion = 0,
+            sceneGraphJson = "",
+            weightEstimatesJson = "",
+            verificationReportJson = "",
+            nutritionReportJson = "",
+            sessionId = sessionId,
+            failureReason = reason,
         )
         return dao.insert(entity)
     }
@@ -65,18 +95,45 @@ class V2TelemetryRepository @Inject constructor(
     /** Per la scorciatoia "Registra peso vero" a fine analisi (§13 punto 3): true se questa sessione ha prodotto un record V2 ancora senza ground truth. */
     suspend fun hasPendingGroundTruth(sessionId: String): Boolean = dao.getPendingBySessionId(sessionId) != null
 
-    /** Correzione manuale o peso vero pesato per uno o più alimenti di un'analisi già salvata. Nessun effetto se [recordId] non esiste più (es. cronologia già ripulita). */
+    /** Correzione manuale o peso vero pesato per uno o più alimenti di un'analisi già salvata. Nessun effetto se [recordId] non esiste più (es. cronologia già ripulita). Dopo il salvataggio pusha l'evento INFERENCE per la sync cross-device. */
     suspend fun recordGroundTruth(recordId: Long, pesiG: Map<String, Double>, livello: GroundTruthLevel) {
         val record = dao.getById(recordId) ?: return
-        dao.update(
-            record.copy(
-                groundTruthPesiJson = json.encodeToString(pesiG),
-                groundTruthLivello = livello.jsonValue,
-            ),
+        val updated = record.copy(
+            groundTruthPesiJson = json.encodeToString(pesiG),
+            groundTruthLivello = livello.jsonValue,
+        )
+        dao.update(updated)
+        cloudSyncManager.enqueue(
+            eventType = CloudSyncEventType.INFERENCE,
+            payloadJson = json.encodeToString(updated),
         )
     }
 
     suspend fun deleteRecord(id: Long) {
         dao.deleteById(id)
+    }
+
+    /**
+     * Scarica i record INFERENCE dell'utente dal backend e fa upsert locale per clientId (idempotente).
+     * I record già presenti (stesso clientId) vengono ignorati — non sovrascrivono eventuali ground truth
+     * aggiunti localmente dopo la sync. Restituisce il numero di record nuovi inseriti.
+     */
+    suspend fun pullAndMerge(): Int {
+        val payloads = cloudSyncClient.fetchInferenceRecords()
+        var inserted = 0
+        for (payload in payloads) {
+            try {
+                val remote = json.decodeFromString<V2AnalysisRecordEntity>(payload)
+                if (remote.clientId == null) continue
+                val existing = dao.getByClientId(remote.clientId)
+                if (existing == null) {
+                    dao.insertIfAbsent(remote.copy(id = 0))
+                    inserted++
+                }
+            } catch (_: Exception) {
+                // record malformato: skip senza bloccare gli altri
+            }
+        }
+        return inserted
     }
 }

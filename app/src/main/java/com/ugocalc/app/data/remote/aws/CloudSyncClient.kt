@@ -3,9 +3,10 @@ package com.ugocalc.app.data.remote.aws
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -30,6 +31,33 @@ class CloudSyncClient @Inject constructor(
     @Named("aws_base_url") private val baseUrl: String,
 ) {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
+
+    /** Scarica i record INFERENCE dell'utente dal backend (l'identità viene dal token Cognito nell'AuthInterceptor). Restituisce i payload JSON grezzi oppure lista vuota in caso di errore. */
+    suspend fun fetchInferenceRecords(): List<String> = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("$baseUrl/inference")
+            .header("Accept", "application/json")
+            .header("User-Agent", "UgoCalc-Android")
+            .get()
+            .build()
+
+        val client = okHttpClient.newBuilder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .build()
+
+        try {
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@withContext emptyList()
+                val body = response.body?.string() ?: return@withContext emptyList()
+                val root = json.parseToJsonElement(body).jsonObject
+                val records = root["records"]?.jsonArray ?: return@withContext emptyList()
+                records.map { it.toString() }
+            }
+        } catch (_: IOException) {
+            emptyList()
+        }
+    }
 
     suspend fun sendEvent(
         endpoint: String,

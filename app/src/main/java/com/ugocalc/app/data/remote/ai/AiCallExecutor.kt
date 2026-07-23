@@ -4,6 +4,8 @@ import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
 import com.ugocalc.app.data.remote.ai.client.AiCallException
 import com.ugocalc.app.data.remote.ai.client.AiTextCompletionClient
 import com.ugocalc.app.data.remote.ai.client.AnthropicCompletionClient
+import com.ugocalc.app.data.remote.ai.client.BedrockMantleClaudeClient
+import com.ugocalc.app.data.remote.ai.client.BedrockMantleGptClient
 import com.ugocalc.app.data.remote.ai.client.GeminiCompletionClient
 import com.ugocalc.app.data.remote.ai.client.ImagePart
 import com.ugocalc.app.data.remote.ai.client.MalformedJsonException
@@ -30,6 +32,8 @@ class AiCallExecutor @Inject constructor(
     private val openAiClient: OpenAiCompletionClient,
     private val anthropicClient: AnthropicCompletionClient,
     private val geminiClient: GeminiCompletionClient,
+    private val bedrockClaudeClient: BedrockMantleClaudeClient,
+    private val bedrockGptClient: BedrockMantleGptClient,
     private val apiKeyStore: SecureApiKeyStore,
     internal val json: Json,
 ) {
@@ -38,11 +42,23 @@ class AiCallExecutor @Inject constructor(
         AiProviderType.OPENAI, AiProviderType.OPENAI_API -> openAiClient
         AiProviderType.ANTHROPIC -> anthropicClient
         AiProviderType.GEMINI -> geminiClient
+        AiProviderType.BEDROCK_CLAUDE -> bedrockClaudeClient
+        AiProviderType.BEDROCK_GPT -> bedrockGptClient
     }
 
-    internal fun apiKeyFor(model: AiModel): String =
-        apiKeyStore.getApiKey(model.provider)
+    internal fun apiKeyFor(model: AiModel): String {
+        if (model.provider == AiProviderType.BEDROCK_CLAUDE || model.provider == AiProviderType.BEDROCK_GPT) {
+            val mantleKey = apiKeyStore.getBedrockMantleApiKey()
+            if (mantleKey.isNullOrBlank()) {
+                throw AiCallException("API key Bedrock Mantle non configurata per ${model.displayName}")
+            }
+            val projectId = apiKeyStore.getBedrockMantleProjectId()
+            val region = apiKeyStore.getBedrockRegion()
+            return "$mantleKey|$projectId|$region"
+        }
+        return apiKeyStore.getApiKey(model.provider)
             ?: throw AiCallException("Nessuna API key configurata per ${model.displayName}")
+    }
 
     /** Codifica immagini grezze in [ImagePart] pronte per [completeJson], come già fatto in V1. */
     fun encodeImages(images: List<ByteArray>, mimeType: String): List<ImagePart> =

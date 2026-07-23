@@ -10,6 +10,7 @@ import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.domain.inference.model.ScaleAnchorType
 import com.ugocalc.app.domain.inference.model.SessionMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -17,8 +18,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
-/** ViewModel per la UI di gestione delle calibrazioni di scala. */
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class ScaleCalibrationViewModel @Inject constructor(
     private val repository: ScaleCalibrationRepository,
     private val settingsRepository: SettingsRepository,

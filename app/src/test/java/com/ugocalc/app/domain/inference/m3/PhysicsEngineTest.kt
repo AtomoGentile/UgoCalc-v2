@@ -5,6 +5,7 @@ import com.ugocalc.app.domain.inference.model.OcclusionDegree
 import com.ugocalc.app.domain.inference.model.PerceivedFood
 import com.ugocalc.app.domain.inference.model.RawMeasurements
 import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -85,7 +86,7 @@ class PhysicsEngineTest {
     fun `negligible strategy yields a small fixed weight with low confidence`() {
         val est = engine.estimate(food("olio"), EstimationStrategy.TRASCURABILE, goodScale)
         assertEquals(5.0, est.pesoG, 1e-9)
-        assertEquals(Confidence.BASSO, est.confidenza)
+        assertEquals(Confidence.BASSO, Confidence.fromScore(est.confidenza))
     }
 
     // --- Proprietà -----------------------------------------------------------------------------
@@ -128,9 +129,9 @@ class PhysicsEngineTest {
     @Test
     fun `a clean countable estimate is high confidence, a fallback one is not`() {
         val pulito = engine.estimate(food("mele", RawMeasurements(conteggio = 3)), EstimationStrategy.CONTABILE, goodScale)
-        assertEquals(Confidence.ALTO, pulito.confidenza)
+        assertTrue(pulito.confidenza.percent >= 85) // ALTO è 85-100%
 
         val senzaConteggio = engine.estimate(food("mele", RawMeasurements()), EstimationStrategy.CONTABILE, goodScale)
-        assertTrue(senzaConteggio.confidenza != Confidence.ALTO) // conteggio mancante → incertezza maggiore
+        assertTrue(senzaConteggio.confidenza.percent < pulito.confidenza.percent) // conteggio mancante → confidenza minore
     }
 }

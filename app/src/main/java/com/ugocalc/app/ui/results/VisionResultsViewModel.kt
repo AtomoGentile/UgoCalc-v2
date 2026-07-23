@@ -12,7 +12,9 @@ import com.ugocalc.app.util.AnalysisNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -41,14 +43,18 @@ class VisionResultsViewModel @Inject constructor(
     val uiState: StateFlow<VisionResultsUiState> = _uiState
 
     init {
-        sessionStore.session.onEach { session ->
-            _uiState.value = _uiState.value.copy(
-                outcomes = session.visionOutcomes,
-                referenceModelId = session.referenceModelId,
-                usingV2Engine = session.usingV2Engine,
-                v2AmbiguitaRisolte = session.v2AmbiguitaRisolte,
-            )
-        }.launchIn(viewModelScope)
+        sessionStore.session
+            .map { s -> listOf(s.visionOutcomes, s.referenceModelId, s.usingV2Engine, s.v2AmbiguitaRisolte) }
+            .distinctUntilChanged()
+            .onEach { (outcomes, referenceModelId, usingV2Engine, v2Ambiguita) ->
+                @Suppress("UNCHECKED_CAST")
+                _uiState.value = _uiState.value.copy(
+                    outcomes = outcomes as List<ModelVisionOutcome>,
+                    referenceModelId = referenceModelId as String?,
+                    usingV2Engine = usingV2Engine as Boolean,
+                    v2AmbiguitaRisolte = v2Ambiguita as List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>,
+                )
+            }.launchIn(viewModelScope)
     }
 
     fun selectReferenceModel(modelId: String) {

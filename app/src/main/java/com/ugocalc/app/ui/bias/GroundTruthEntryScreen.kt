@@ -110,7 +110,7 @@ private fun PendingRecordCard(
                 OutlinedTextField(
                     value = pesiInput.value[stima.nome].orEmpty(),
                     onValueChange = { value -> pesiInput.value = pesiInput.value + (stima.nome to value) },
-                    label = { Text("${stima.nome} (stimato ${stima.pesoG.toInt()} g)") },
+                    label = { Text("${stima.nome} (stimato ${stima.pesoCrudoG.toInt()} g crudo)") },
                     keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 )

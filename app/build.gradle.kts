@@ -74,14 +74,16 @@ dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.activity:activity-compose:1.10.0")
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("androidx.compose.animation:animation")
     implementation("androidx.navigation:navigation-compose:2.7.7")
     debugImplementation("androidx.compose.ui:ui-tooling")
 
@@ -120,6 +122,12 @@ dependencies {
 
     // Security (encrypted storage for API keys)
     implementation("androidx.security:security-crypto:1.1.0")
+
+    // AppCompat (necessario per BiometricPrompt — FragmentActivity)
+    implementation("androidx.appcompat:appcompat:1.7.0")
+
+    // Biometric authentication (approvazione inviti)
+    implementation("androidx.biometric:biometric:1.1.0")
 
     // Firma JWT RS256 per il flusso OAuth2 "JWT Bearer" dei service account Google Cloud
     // (autenticazione Vertex AI per Gemini, vedi VertexAiTokenProvider). Libreria pura Java,

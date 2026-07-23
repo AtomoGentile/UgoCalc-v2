@@ -46,9 +46,9 @@ class V2AnalysisPipelineFactory @Inject constructor(
             arbitrate = arbitrationEngine::arbitrate,
             matchNutrition = nutritionMatchStepAdapter::match,
             recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
-            biasFactor = { sessionMode, strategy, aiModelId, foodCategory ->
+            biasFactor = { strategy, aiModelId, foodCategory ->
                 val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
-                biasCorrectionRepository.currentFactor(sessionMode, strategy, aiModelId, foodCategory, consentGiven)
+                biasCorrectionRepository.currentFactor(strategy, aiModelId, foodCategory, consentGiven)
             },
             getCalibrations = { sessionMode -> scaleCalibrationRepository.observeAll(sessionMode).first() },
             resolveAmbiguity = { candidati ->

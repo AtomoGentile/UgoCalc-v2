@@ -41,6 +41,8 @@ object Routes {
 
     const val AUTH = "auth"
     const val SETTINGS_ACCOUNT = "settings_account"
+    const val INVITE_REQUEST = "invite_request/{token}"
+    fun inviteRequestRoute(token: String) = "invite_request/$token"
 
     /**
      * Gli id modello possono contenere "/" (es. "openai/gpt-4o" per GitHub Models): senza

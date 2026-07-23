@@ -14,6 +14,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -46,27 +49,33 @@ class BiasEvolutionViewModel @Inject constructor(
     private val telemetryRepository: V2TelemetryRepository,
 ) : ViewModel() {
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<BiasEvolutionUiState> = combine(
         settingsRepository.settings,
         biasCorrectionRepository.getAllCorrectionsWithUsageStatsFlow(),
         telemetryRepository.getAllRecordsFlow().map { it.take(10) }
     ) { settings, corrections, recentV2 ->
-        val v2Promoted = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2
-        BiasEvolutionUiState(
-            loading = false,
-            consentGiven = settings.biasDataConsentGiven,
-            v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
-            v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
-            v2Promoted = v2Promoted,
-            corrections = corrections,
-            recentV2Records = recentV2
-        )
-    }.flowOn(Dispatchers.Default)
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(5000),
-            initialValue = BiasEvolutionUiState(loading = true)
-        )
+        Triple(settings, corrections, recentV2)
+    }.flatMapLatest { (settings, corrections, recentV2) ->
+        flow {
+            val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
+            emit(
+                BiasEvolutionUiState(
+                    loading = false,
+                    consentGiven = settings.biasDataConsentGiven,
+                    v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
+                    v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
+                    v2Promoted = promotion.promoteV2,
+                    corrections = corrections,
+                    recentV2Records = recentV2
+                )
+            )
+        }.flowOn(Dispatchers.Default)
+    }.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = BiasEvolutionUiState(loading = true)
+    )
 
     fun setConsentGiven(given: Boolean) {
         viewModelScope.launch { settingsRepository.setBiasDataConsentGiven(given) }

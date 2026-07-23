@@ -39,13 +39,31 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "3.0.1",
+            highlights = listOf(
+                "Bug fix: risolta una migrazione database duplicata che impediva l'avvio su dispositivi aggiornati dalla 2.x alla 3.x.",
+                "Bug fix: unificazione bias correction tra modalità Casa e Ristorante — i fattori di correzione ora sfruttano tutti i pasti registrati, indipendentemente dal contesto.",
+                "Aggiornamento componenti UI: aggiornato Compose BOM a 2024.12.01 con Material3 1.3, migliora la compatibilità con Android 15."
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.4.0",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.2.0",
+                biasCalculator = "1.3.1",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
+        ChangelogEntry(
             version = "3.0.0",
             highlights = listOf(
-                "Migrazione AWS: la distribuzione degli aggiornamenti è stata completamente trasferita da GitHub a AWS per maggiore stabilità e controllo.",
-                "Sincronizzazione cloud automatica: telemetria benchmark e inferenze sono ora sincronizzate con il backend AWS tramite coda offline-first.",
-                "Recupero configurazione remota: l'app scarica dinamicamente la configurazione da AWS al primo avvio, riducendo i rebuild necessari.",
-                "Autenticazione versione app: controllo automatico degli aggiornamenti obbligatori e opzionali tramite manifest server.",
-                "Infrastruttura scalabile: il backend AWS (Lambda + DynamoDB) è pronto per il supporto multi-utente e l'analisi aggregata dei dati."
+                "Migrazione AWS completa: Firebase rimosso completamente, infrastruttura migrata a AWS (Cognito + Lambda + DynamoDB) con 25/25 Lambda test passanti.",
+                "Autenticazione Cognito: signup/signin/signout tramite AWS Cognito User Pool con Amplify SDK v2 per Android.",
+                "Multi-user account sharing: sistema di inviti per la condivisione dell'account con sincronizzazione cloud offline-first tramite CloudSync queue.",
+                "Sicurezza e compliance: JWT verification (RS256), secure API key storage, IAM least-privilege roles, session token storage conforme ai requisiti legali.",
+                "Infrastruttura AWS scalabile: CloudFormation template, Lambda handlers per inference/benchmark/config/share/bias, API Gateway HTTP v2, 4 tabelle DynamoDB.",
+                "Deploy script automatico: infra/deploy.sh per CloudFormation deployment one-click con provisioning automatico on first login.",
+                "Bias aggregation multi-utente: Lambda analizza e aggrega i dati di correzione tra utenti per miglioramenti sistematici.",
             ),
             moduleVersions = ModuleVersions(
                 inferenceEngine = "2.4.0",

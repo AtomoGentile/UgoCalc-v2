@@ -82,7 +82,6 @@ typealias TelemetryStep = suspend (
  * mai alcuna correzione.
  */
 typealias BiasFactorStep = suspend (
-    sessionMode: SessionMode,
     strategy: EstimationStrategy,
     aiModelId: String,
     foodCategory: FoodCategory,
@@ -127,7 +126,7 @@ class V2AnalysisPipeline(
         private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
         private val matchNutrition: NutritionMatchStep = { _, _, _ -> emptyMap() },
         private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
-        private val biasFactor: BiasFactorStep = { _, _, _, _ -> null },
+        private val biasFactor: BiasFactorStep = { _, _, _ -> null },
         private val getCalibrations: CalibrationsStep = { emptyList() },
     private val resolveAmbiguity: AmbiguityResolutionStep = { emptyMap() },
 ) {
@@ -239,28 +238,38 @@ class V2AnalysisPipeline(
             val food = scene.alimenti.find { it.nome == stima.nome } ?: return@map stima
             val limiti = food.limitiBuonSenso ?: return@map stima
 
+            // I limiti di buon senso di M1 sono in grammi cotti (l'AI vede cibo cotto):
+            // il confronto avviene su pesoG (cotto). Il rapporto crudo/cotto resta invariato.
+            val ratioCreCotto = if (stima.pesoG > 0.0) stima.pesoCrudoG / stima.pesoG else 1.0
+
             if (stima.pesoG > limiti.pesoMaxG) {
                 val u = stima.intervallo.ampiezzaRelativa // Mantiene la stessa incertezza relativa
+                val nuovoCotto = limiti.pesoMaxG
+                val nuovoCrudo = nuovoCotto * ratioCreCotto
                 stima.copy(
-                    pesoG = limiti.pesoMaxG,
+                    pesoG = nuovoCotto,
+                    pesoCrudoG = nuovoCrudo,
                     intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
-                        minG = (limiti.pesoMaxG * (1 - u)).coerceAtLeast(0.0),
-                        maxG = limiti.pesoMaxG * (1 + u)
+                        minG = (nuovoCrudo * (1 - u)).coerceAtLeast(0.0),
+                        maxG = nuovoCrudo * (1 + u)
                     ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
-                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoG.toInt()}g), limitato a ${limiti.pesoMaxG.toInt()}g]"
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoG.toInt()}g cotto), limitato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
                     )
                 )
             } else if (stima.pesoG < limiti.pesoMinG) {
                 val u = stima.intervallo.ampiezzaRelativa
+                val nuovoCotto = limiti.pesoMinG
+                val nuovoCrudo = nuovoCotto * ratioCreCotto
                 stima.copy(
-                    pesoG = limiti.pesoMinG,
+                    pesoG = nuovoCotto,
+                    pesoCrudoG = nuovoCrudo,
                     intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
-                        minG = (limiti.pesoMinG * (1 - u)).coerceAtLeast(0.0),
-                        maxG = limiti.pesoMinG * (1 + u)
+                        minG = (nuovoCrudo * (1 - u)).coerceAtLeast(0.0),
+                        maxG = nuovoCrudo * (1 + u)
                     ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
-                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoG.toInt()}g), portato a ${limiti.pesoMinG.toInt()}g]"
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoG.toInt()}g cotto), portato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
                     )
                 )
             } else {
@@ -326,7 +335,7 @@ class V2AnalysisPipeline(
         for (assegnazione in assegnazioni) {
             val food = foodByName.getValue(assegnazione.nome)
             val categoria = FoodCategoryRouter.categorize(food.nome)
-            val fattore = biasFactor(sessionMode, assegnazione.strategia, model.id, categoria)
+            val fattore = biasFactor(assegnazione.strategia, model.id, categoria)
             val baseEstimate = physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
             results.add(baseEstimate)
         }

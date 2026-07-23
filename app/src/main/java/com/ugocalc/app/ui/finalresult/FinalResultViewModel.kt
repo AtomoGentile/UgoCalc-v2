@@ -21,8 +21,10 @@ import com.ugocalc.app.ui.AnalysisSessionStore
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -64,15 +66,17 @@ class FinalResultViewModel @Inject constructor(
     val uiState: StateFlow<FinalResultUiState> = _uiState
 
     init {
-        sessionStore.session.onEach { session ->
-            val totals = session.totals
-            val defaultTitle = totals?.lines?.maxByOrNull { it.recognizedFood.pesoStimatoG }?.recognizedFood?.nome ?: "Piatto"
-            _uiState.value = _uiState.value.copy(
-                totals = totals,
-                foodTitle = _uiState.value.foodTitle.ifBlank { defaultTitle },
-                modelNames = session.selectedModels.map { it.displayName },
-            )
-        }.launchIn(viewModelScope)
+        sessionStore.session
+            .map { Triple(it.totals, it.selectedModels, it.totals?.lines) }
+            .distinctUntilChanged()
+            .onEach { (totals, selectedModels, _) ->
+                val defaultTitle = totals?.lines?.maxByOrNull { it.recognizedFood.pesoStimatoG }?.recognizedFood?.nome ?: "Piatto"
+                _uiState.value = _uiState.value.copy(
+                    totals = totals,
+                    foodTitle = _uiState.value.foodTitle.ifBlank { defaultTitle },
+                    modelNames = selectedModels.map { it.displayName },
+                )
+            }.launchIn(viewModelScope)
 
         // Sessione stabile fino al reset (dopo Salva): il controllo va fatto una sola volta, non ad ogni aggiornamento dei totali.
         val sessionId = sessionStore.session.value.sessionId

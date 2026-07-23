@@ -8,6 +8,7 @@ import com.ugocalc.app.domain.inference.model.OcclusionDegree
 import com.ugocalc.app.domain.inference.model.PerceivedFood
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import kotlin.math.PI
 import kotlin.math.roundToInt
 
@@ -44,7 +45,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
             EstimationStrategy.COMPOSTO_OCCLUSO -> composite(food)
             EstimationStrategy.TRASCURABILE -> negligible()
         }
-        val u = uncertainty(food, strategy, scale, raw)
+        val confidenceScore = confidenceScore(food, strategy, scale, raw)
         val peso = if (biasFactor != null) raw.pesoG * biasFactor else raw.pesoG
         val chain = if (biasFactor != null) {
             raw.chain.copy(
@@ -55,18 +56,38 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
         } else {
             raw.chain
         }
+        // Conversione cotto → crudo: divide per la resa di cottura dell'alimento.
+        // TRASCURABILE non cuoce mai; per le strategie che usano già densità "a crudo" (unitWeights)
+        // la resa sarà 1.0 (default). Il peso crudo è quello confrontabile col ground truth utente.
+        val resa = if (strategy == EstimationStrategy.TRASCURABILE) {
+            PhysicalValue(1.0, "trascurabile", isDefault = true)
+        } else {
+            data.cookingYield(food.nome)
+        }
+        val pesoCrudo = peso / resa.valore
+        val chainConResa = if (resa.valore != 1.0) {
+            chain.copy(
+                valori = chain.valori + ("resa_cottura" to resa.valore),
+                fonti = chain.fonti + CalculationSource("resa_cottura", resa.valore, resa.fonte),
+                sintesi = "${chain.sintesi} → ${g(pesoCrudo)} g crudo (÷${resa.valore} resa)",
+            )
+        } else {
+            chain
+        }
+        val uncertaintyFromScore = 1.0 - (confidenceScore.percent / 100.0)
         val interval = ConfidenceInterval(
-            minG = (peso * (1 - u)).coerceAtLeast(0.0),
-            maxG = peso * (1 + u),
+            minG = (pesoCrudo * (1 - uncertaintyFromScore)).coerceAtLeast(0.0),
+            maxG = pesoCrudo * (1 + uncertaintyFromScore),
         )
         return WeightEstimate(
             nome = food.nome,
             ragionamento = food.ragionamento,
             strategia = strategy,
             pesoG = peso,
+            pesoCrudoG = pesoCrudo,
             intervallo = interval,
-            catenaCalcolo = chain,
-            confidenza = confidenceFor(u),
+            catenaCalcolo = chainConResa,
+            confidenza = confidenceScore,
             usoDefaultFisico = raw.usoDefaultFisico,
         )
     }
@@ -222,49 +243,50 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
         }
     }
 
-    // --- Incertezza e confidenza -------------------------------------------------------------
+    // --- Confidenza (modello moltiplicativo) ------------------------------------------------
 
-    private fun uncertainty(
+    private fun confidenceScore(
         food: PerceivedFood,
         strategy: EstimationStrategy,
         scale: ScaleContext,
         raw: RawEstimate,
-    ): Double {
-        var u = baseUncertainty(strategy)
-        u += when (food.occlusione) {
-            OcclusionDegree.NESSUNA -> 0.0
-            OcclusionDegree.PARZIALE -> 0.10
-            OcclusionDegree.ELEVATA -> 0.25
+    ): ConfidenceScore {
+        var confidence = baseConfidence(strategy)
+
+        // Fattori moltiplicativi (0.0 .. 1.0)
+        confidence *= when (food.occlusione) {
+            OcclusionDegree.NESSUNA -> 1.0
+            OcclusionDegree.PARZIALE -> 0.88
+            OcclusionDegree.ELEVATA -> 0.72
         }
-        u += when (food.confidenza) {
-            Confidence.ALTO -> 0.0
-            Confidence.MEDIO -> 0.05
-            Confidence.BASSO -> 0.18
+
+        confidence *= when (food.confidenza) {
+            Confidence.ALTO -> 1.0
+            Confidence.MEDIO -> 0.93
+            Confidence.BASSO -> 0.80
         }
-        u += when (scale.quality) {
-            Confidence.ALTO -> 0.0
-            Confidence.MEDIO -> 0.04
-            Confidence.BASSO -> 0.12
+
+        confidence *= when (scale.quality) {
+            Confidence.ALTO -> 1.0
+            Confidence.MEDIO -> 0.95
+            Confidence.BASSO -> 0.87
         }
-        if (raw.usoDefaultFisico) u += 0.12
-        if (raw.usoFallbackMisura) u += 0.15
-        if (strategy == EstimationStrategy.DISTESA_SUL_PIATTO && scale.plateDiameterIsDefault) u += 0.12
-        return u.coerceIn(0.05, 0.9)
+
+        if (raw.usoDefaultFisico) confidence *= 0.87
+        if (raw.usoFallbackMisura) confidence *= 0.83
+        if (strategy == EstimationStrategy.DISTESA_SUL_PIATTO && scale.plateDiameterIsDefault) confidence *= 0.87
+
+        val percent = (confidence * 100).toInt().coerceIn(0, 100)
+        return ConfidenceScore(percent)
     }
 
-    private fun baseUncertainty(s: EstimationStrategy): Double = when (s) {
-        EstimationStrategy.CONTABILE -> 0.10
-        EstimationStrategy.DISTESA_SUL_PIATTO -> 0.22
-        EstimationStrategy.A_CONTENITORE -> 0.18
-        EstimationStrategy.BLOCCO_MISURABILE -> 0.18
-        EstimationStrategy.COMPOSTO_OCCLUSO -> 0.32
-        EstimationStrategy.TRASCURABILE -> 0.55
-    }
-
-    private fun confidenceFor(u: Double): Confidence = when {
-        u <= 0.15 -> Confidence.ALTO
-        u <= 0.35 -> Confidence.MEDIO
-        else -> Confidence.BASSO
+    private fun baseConfidence(s: EstimationStrategy): Double = when (s) {
+        EstimationStrategy.CONTABILE -> 0.92
+        EstimationStrategy.DISTESA_SUL_PIATTO -> 0.80
+        EstimationStrategy.A_CONTENITORE -> 0.83
+        EstimationStrategy.BLOCCO_MISURABILE -> 0.83
+        EstimationStrategy.COMPOSTO_OCCLUSO -> 0.70
+        EstimationStrategy.TRASCURABILE -> 0.50
     }
 
     private data class RawEstimate(

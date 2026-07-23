@@ -17,6 +17,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import javax.inject.Inject
+import javax.inject.Named
 import javax.inject.Singleton
 
 open class AiCallException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -60,7 +61,7 @@ interface AiTextCompletionClient {
  */
 @Singleton
 class OpenAiCompletionClient @Inject constructor(
-    private val okHttpClient: OkHttpClient,
+    @Named("no_auth") private val okHttpClient: OkHttpClient,
     private val json: Json,
 ) : AiTextCompletionClient {
 
@@ -137,7 +138,7 @@ class OpenAiCompletionClient @Inject constructor(
  */
 @Singleton
 class AnthropicCompletionClient @Inject constructor(
-    private val okHttpClient: OkHttpClient,
+    @Named("no_auth") private val okHttpClient: OkHttpClient,
     private val json: Json,
 ) : AiTextCompletionClient {
 
@@ -257,13 +258,184 @@ class AnthropicCompletionClient @Inject constructor(
 }
 
 /**
+ * Chiama Claude tramite AWS Bedrock Mantle (endpoint Anthropic-compatibile).
+ * Endpoint: POST https://bedrock-mantle.{region}.api.aws/anthropic/v1/messages
+ * Auth: x-api-key (Mantle API key) + anthropic-workspace-id (project ID)
+ *
+ * Il parametro apiKey arriva nel formato "mantleApiKey|projectId|region".
+ */
+@Singleton
+class BedrockMantleClaudeClient @Inject constructor(
+    @Named("no_auth") private val okHttpClientNoAuth: OkHttpClient,
+    private val json: Json,
+) : AiTextCompletionClient {
+
+    override suspend fun completeJson(
+        apiKey: String,
+        modelId: String,
+        userText: String,
+        images: List<ImagePart>,
+    ): String = withContext(Dispatchers.IO) {
+        val (mantleKey, projectId, region) = parseCredentials(apiKey)
+        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val request = Request.Builder()
+            .url("https://bedrock-mantle.$region.api.aws/anthropic/v1/messages")
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer $mantleKey")
+            .header("anthropic-workspace-id", projectId)
+            .header("anthropic-version", ANTHROPIC_VERSION)
+            .post(bodyBytes.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        okHttpClientNoAuth.newCall(request).execute().use { response ->
+            val bodyString = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val message = "Chiamata Bedrock Mantle (Claude) fallita: HTTP ${response.code} $bodyString"
+                throw if (response.code == 503) ServiceUnavailableException(message) else AiCallException(message)
+            }
+            extractText(bodyString)
+        }
+    }
+
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+        put("model", modelId)
+        put("max_tokens", MAX_OUTPUT_TOKENS)
+        putJsonArray("messages") {
+            addJsonObject {
+                put("role", "user")
+                putJsonArray("content") {
+                    images.forEach { image ->
+                        addJsonObject {
+                            put("type", "image")
+                            putJsonObject("source") {
+                                put("type", "base64")
+                                put("media_type", image.mimeType)
+                                put("data", image.base64)
+                            }
+                        }
+                    }
+                    addJsonObject { put("type", "text"); put("text", userText) }
+                }
+            }
+        }
+    }
+
+    private fun extractText(rawResponseBody: String): String {
+        val root = try {
+            json.parseToJsonElement(rawResponseBody).jsonObject
+        } catch (e: Exception) {
+            throw AiCallException("Risposta Bedrock Mantle (Claude) non valida (JSON malformato)", e)
+        }
+        return root["content"]?.jsonArray
+            ?.firstOrNull { it.jsonObject["type"]?.jsonPrimitive?.content == "text" }
+            ?.jsonObject?.get("text")?.jsonPrimitive?.content
+            ?: throw AiCallException("Risposta Bedrock Mantle (Claude) priva di contenuto testuale")
+    }
+
+    override suspend fun searchOnline(apiKey: String, modelId: String, userText: String): String =
+        completeJson(apiKey, modelId, userText)
+
+    companion object {
+        private const val ANTHROPIC_VERSION = "2023-06-01"
+        private const val MAX_OUTPUT_TOKENS = 16384
+
+        fun parseCredentials(apiKey: String): Triple<String, String, String> {
+            val parts = apiKey.split('|')
+            require(parts.size == 3) {
+                "Credenziali Bedrock Mantle non valide: formato atteso 'mantleApiKey|projectId|region'"
+            }
+            return Triple(parts[0], parts[1], parts[2])
+        }
+    }
+}
+
+/**
+ * Chiama GPT tramite AWS Bedrock Mantle (endpoint OpenAI-compatibile).
+ * Endpoint: POST https://bedrock-mantle.{region}.api.aws/v1/chat/completions
+ * Auth: Authorization: Bearer (Mantle API key) + OpenAI-Project (project ID)
+ *
+ * Il parametro apiKey arriva nel formato "mantleApiKey|projectId|region".
+ */
+@Singleton
+class BedrockMantleGptClient @Inject constructor(
+    @Named("no_auth") private val okHttpClientNoAuth: OkHttpClient,
+    private val json: Json,
+) : AiTextCompletionClient {
+
+    override suspend fun completeJson(
+        apiKey: String,
+        modelId: String,
+        userText: String,
+        images: List<ImagePart>,
+    ): String = withContext(Dispatchers.IO) {
+        val (mantleKey, projectId, region) = BedrockMantleClaudeClient.parseCredentials(apiKey)
+        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val request = Request.Builder()
+            .url("https://bedrock-mantle.$region.api.aws/v1/chat/completions")
+            .header("Content-Type", "application/json")
+            .header("Authorization", "Bearer $mantleKey")
+            .header("OpenAI-Project", "default")
+            .post(bodyBytes.toRequestBody("application/json".toMediaType()))
+            .build()
+
+        okHttpClientNoAuth.newCall(request).execute().use { response ->
+            val bodyString = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val message = "Chiamata Bedrock Mantle (GPT) fallita: HTTP ${response.code} $bodyString"
+                throw if (response.code == 503) ServiceUnavailableException(message) else AiCallException(message)
+            }
+            extractText(bodyString)
+        }
+    }
+
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+        put("model", modelId)
+        putJsonArray("messages") {
+            addJsonObject {
+                put("role", "user")
+                putJsonArray("content") {
+                    images.forEach { image ->
+                        addJsonObject {
+                            put("type", "image_url")
+                            putJsonObject("image_url") { put("url", "data:${image.mimeType};base64,${image.base64}") }
+                        }
+                    }
+                    addJsonObject { put("type", "text"); put("text", userText) }
+                }
+            }
+        }
+        put("max_tokens", MAX_OUTPUT_TOKENS)
+    }
+
+    private fun extractText(rawResponseBody: String): String {
+        val root = try {
+            json.parseToJsonElement(rawResponseBody).jsonObject
+        } catch (e: Exception) {
+            throw AiCallException("Risposta Bedrock Mantle (GPT) non valida (JSON malformato)", e)
+        }
+        return root["choices"]?.jsonArray?.getOrNull(0)?.jsonObject
+            ?.get("message")?.jsonObject
+            ?.get("content")?.jsonPrimitive?.content
+            ?: throw AiCallException("Risposta Bedrock Mantle (GPT) priva di contenuto testuale")
+    }
+
+    override suspend fun searchOnline(apiKey: String, modelId: String, userText: String): String {
+        throw AiCallException("Ricerca online non disponibile per GPT su Bedrock Mantle.")
+    }
+
+    companion object {
+        private const val MAX_OUTPUT_TOKENS = 16384
+    }
+}
+
+/**
  * Chiama Gemini tramite l'endpoint pubblico Google AI Studio (generativelanguage.googleapis.com),
  * autenticato con una semplice API key (fascia gratuita con limiti di frequenza, nessun account
  * Google Cloud/fatturazione richiesto — a differenza di Vertex AI).
  */
 @Singleton
 class GeminiCompletionClient @Inject constructor(
-    private val okHttpClient: OkHttpClient,
+    @Named("no_auth") private val okHttpClient: OkHttpClient,
     private val json: Json,
 ) : AiTextCompletionClient {
 

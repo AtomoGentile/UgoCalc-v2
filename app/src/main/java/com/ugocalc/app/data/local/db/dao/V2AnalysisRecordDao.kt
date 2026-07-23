@@ -2,6 +2,7 @@ package com.ugocalc.app.data.local.db.dao
 
 import androidx.room.Dao
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
@@ -41,17 +42,32 @@ interface V2AnalysisRecordDao {
     @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
     suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity>
 
-    /** Righe ancora senza ground truth: da mostrare all'utente per registrare un peso vero (§13 punto 3). */
-    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC")
+    /** Righe ancora senza ground truth: da mostrare all'utente per registrare un peso vero (§13 punto 3). I record falliti (failureReason NOT NULL) sono esclusi perché non hanno stime da correggere. */
+    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NULL AND failureReason IS NULL ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity>
 
-    /** Il record appena creato per [sessionId], se ancora senza ground truth: per la scorciatoia "Registra peso vero" a fine analisi. */
-    @Query("SELECT * FROM v2_analysis_records WHERE sessionId = :sessionId AND groundTruthPesiJson IS NULL ORDER BY analyzedAtEpochMillis DESC LIMIT 1")
+    /** Il record appena creato per [sessionId], se ancora senza ground truth: per la scorciatoia "Registra peso vero" a fine analisi. I record falliti sono esclusi. */
+    @Query("SELECT * FROM v2_analysis_records WHERE sessionId = :sessionId AND groundTruthPesiJson IS NULL AND failureReason IS NULL ORDER BY analyzedAtEpochMillis DESC LIMIT 1")
     suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity?
 
     /** Coppie (modalità, modello) per cui esiste almeno un ground truth: base per il ricalcolo periodico di tutti i segmenti (§8, §13). */
     @Query("SELECT DISTINCT sessionMode, aiModelId FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
     suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair>
+
+    /** Modelli per cui esiste almeno un ground truth, indipendentemente dalla modalità: base per il ricalcolo bias unificato (§8). */
+    @Query("SELECT DISTINCT aiModelId FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL")
+    suspend fun getAiModelIdsWithGroundTruth(): List<String>
+
+    /** Righe con ground truth per un dato modello, senza filtro sulla modalità: per il ricalcolo bias unificato casa+ristorante (§8). */
+    @Query("SELECT * FROM v2_analysis_records WHERE groundTruthPesiJson IS NOT NULL AND aiModelId = :aiModelId ORDER BY analyzedAtEpochMillis DESC")
+    suspend fun getWithGroundTruthByModel(aiModelId: String): List<V2AnalysisRecordEntity>
+
+    /** Upsert per clientId: ignora il record se già presente (idempotente per pull cross-device). */
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(record: V2AnalysisRecordEntity): Long
+
+    @Query("SELECT * FROM v2_analysis_records WHERE clientId = :clientId LIMIT 1")
+    suspend fun getByClientId(clientId: String): V2AnalysisRecordEntity?
 
     @Query("DELETE FROM v2_analysis_records")
     suspend fun deleteAll()

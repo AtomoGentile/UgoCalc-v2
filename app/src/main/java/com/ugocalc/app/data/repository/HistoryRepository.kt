@@ -3,7 +3,10 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.domain.model.AnalysisTotals
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -13,8 +16,13 @@ import javax.inject.Singleton
 class HistoryRepository @Inject constructor(
     private val historyDao: AnalysisHistoryDao,
     private val json: Json,
+    private val authRepository: AuthRepository,
 ) {
-    fun observeHistory(): Flow<List<AnalysisHistoryEntity>> = historyDao.observeAll()
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observeHistory(): Flow<List<AnalysisHistoryEntity>> =
+        authRepository.currentUserFlow.flatMapLatest { user ->
+            if (user != null) historyDao.observeAll() else flowOf(emptyList())
+        }
 
     suspend fun getById(id: Long): AnalysisHistoryEntity? = historyDao.getById(id)
 

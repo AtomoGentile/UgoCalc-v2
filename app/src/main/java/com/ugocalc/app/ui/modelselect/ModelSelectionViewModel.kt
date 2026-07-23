@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
+import com.ugocalc.app.domain.model.AiProviderType
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,11 @@ class ModelSelectionViewModel @Inject constructor(
             // §2.4 punto 1: senza connessione nessun provider cloud è raggiungibile.
             val models = AiModelCatalog.ALL.filter { model ->
                 if (isOffline) false
-                else settingsRepository.getApiKey(model.provider) != null
+                else if (model.provider == AiProviderType.BEDROCK_CLAUDE || model.provider == AiProviderType.BEDROCK_GPT) {
+                    settingsRepository.hasBedrockCredentials()
+                } else {
+                    settingsRepository.getApiKey(model.provider) != null
+                }
             }
 
             val settings = settingsRepository.settings

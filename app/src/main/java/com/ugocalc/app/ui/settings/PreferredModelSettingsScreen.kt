@@ -1,14 +1,27 @@
 package com.ugocalc.app.ui.settings
 
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.selection.toggleable
-import androidx.compose.material3.Checkbox
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -18,16 +31,19 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.ugoTopAppBarColors
 
 /**
  * Impostazioni > Modelli preferiti (§2.2): se ne selezioni almeno uno, "Analizza" in Home salta
- * del tutto la schermata di scelta modello e avvia subito l'analisi con questi (§ modello
- * preferito esteso: più di una scelta possibile, non un singolo modello).
+ * del tutto la schermata di scelta modello e avvia subito l'analisi con questi.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -37,33 +53,90 @@ fun PreferredModelSettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Modelli preferiti") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
+    Scaffold(topBar = {
+        TopAppBar(
+            title = { Text("Modelli preferiti") },
+            navigationIcon = { BackIconButton(onBack) },
+            colors = ugoTopAppBarColors(),
+        )
+    }) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
             Text(
                 "Se selezioni uno o più modelli, l'analisi partirà subito con questi, saltando la schermata di scelta modello. Senza nessuno selezionato, ti verrà chiesto ogni volta.",
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(bottom = 16.dp),
             )
-            viewModel.availableModels.forEach { model ->
-                val isSelected = model.id in state.userSettings.preferredModelIds
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 72.dp)
-                        .toggleable(
-                            value = isSelected,
-                            onValueChange = { viewModel.togglePreferredModel(model.id) },
-                        )
-                        .padding(horizontal = 4.dp),
-                ) {
-                    Checkbox(checked = isSelected, onCheckedChange = null, modifier = Modifier.scale(1.3f))
-                    Text(
-                        model.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 16.dp),
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(viewModel.availableModels) { model ->
+                    val isSelected = model.id in state.userSettings.preferredModelIds
+                    PreferredModelCard(
+                        model = model,
+                        isSelected = isSelected,
+                        onClick = { viewModel.togglePreferredModel(model.id) },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PreferredModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.9f)
+            .border(borderWidth, borderColor, RoundedCornerShape(12.dp)),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                if (model.logoRes != null) {
+                    Image(
+                        painter = painterResource(id = model.logoRes),
+                        contentDescription = model.displayName,
+                        modifier = Modifier
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Fit,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = model.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                if (model.subtitle.isNotEmpty()) {
+                    Text(
+                        text = model.subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.TopEnd).size(22.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
             }
         }
     }

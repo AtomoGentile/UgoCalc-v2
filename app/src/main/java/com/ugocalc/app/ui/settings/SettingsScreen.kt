@@ -33,6 +33,13 @@ import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
 
+private data class SettingsMenuItemData(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val onClick: () -> Unit,
+)
+
 /** Menu principale Impostazioni (§2.2). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,21 +62,31 @@ fun SettingsScreen(
 ) {
     Scaffold(topBar = { TopAppBar(title = { Text("Impostazioni") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding)) {
-            item { SettingsMenuItem("Account", "Accesso, condivisione e bias globale", onOpenAccount) }
-            item { SettingsMenuItem("API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi) }
-            item { SettingsMenuItem("Preferiti", "Scorciatoie mostrate in Homepage", onOpenFavorites) }
-            item { SettingsMenuItem("Permessi", "Fotocamera e notifiche", onOpenPermissions) }
-            item { SettingsMenuItem("Accessibilità", "Tema, dimensione testo, colori", onOpenAccessibility) }
-            item { SettingsMenuItem("Modelli preferiti", "Se impostati, saltano del tutto la scelta modello ad ogni analisi", onOpenPreferredModel) }
-            item { SettingsMenuItem("Livello di confidenza", "Soglia per evidenziare le analisi più affidabili", onOpenConfidence) }
-            item { SettingsMenuItem("Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart) }
-            item { SettingsMenuItem("Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables) }
-            item { SettingsMenuItem("Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup) }
-            item { SettingsMenuItem("Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations) }
-            item { SettingsMenuItem("Ricette", "Gestisci le ricette per la strategia Composto", onOpenRecipes) }
-            item { SettingsMenuItem("Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog) }
+            val settingsItems = listOf(
+                SettingsMenuItemData("account", "Account", "Accesso, condivisione e bias globale", onOpenAccount),
+                SettingsMenuItemData("api", "API", "Chiave API per OpenAI, Anthropic, Gemini", onOpenApi),
+                SettingsMenuItemData("favorites", "Preferiti", "Scorciatoie mostrate in Homepage", onOpenFavorites),
+                SettingsMenuItemData("permissions", "Permessi", "Fotocamera e notifiche", onOpenPermissions),
+                SettingsMenuItemData("accessibility", "Accessibilità", "Tema, dimensione testo, colori", onOpenAccessibility),
+                SettingsMenuItemData("preferred_models", "Modelli preferiti", "Se impostati, saltano del tutto la scelta modello ad ogni analisi", onOpenPreferredModel),
+                SettingsMenuItemData("confidence", "Livello di confidenza", "Soglia per evidenziare le analisi più affidabili", onOpenConfidence),
+                SettingsMenuItemData("history_chart", "Grafico cronologia", "Colonne CHO/grassi per pasto, con intervallo selezionabile", onOpenHistoryChart),
+                SettingsMenuItemData("tables", "Tabelle valori ufficiali", "Carica e modifica le tabelle CHO/grassi", onOpenTables),
+                SettingsMenuItemData("backup", "Backup e ripristino", "Esporta o importa cronologia, database e dati di correzione del bias", onOpenBackup),
+                SettingsMenuItemData("scale_calibrations", "Calibrazioni scala", "Gestisci le tue stoviglie e riferimenti corporei calibrati", onOpenScaleCalibrations),
+                SettingsMenuItemData("recipes", "Ricette", "Gestisci le ricette per la strategia Composto", onOpenRecipes),
+                SettingsMenuItemData("changelog", "Software e aggiornamenti", "Come funzionano gli aggiornamenti e storico delle versioni", onOpenChangelog),
+            )
+            items(
+                count = settingsItems.size,
+                key = { settingsItems[it].id },
+                contentType = { "settings_menu_item" }
+            ) { index ->
+                val item = settingsItems[index]
+                SettingsMenuItem(item.title, item.subtitle, item.onClick)
+            }
 
-            item {
+            item(key = "footer") {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()

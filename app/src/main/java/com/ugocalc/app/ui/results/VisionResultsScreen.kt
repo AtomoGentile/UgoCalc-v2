@@ -146,7 +146,11 @@ private fun ModelResultCard(
                     Text(outcome.reason, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
                 }
                 is ModelVisionOutcome.Success -> {
-                    Text("Confidenza globale: ${outcome.result.confidenzaGlobale}", style = MaterialTheme.typography.bodySmall)
+                    val confidenzaPeso = outcome.result.confidenzaGlobalePeso
+                    if (confidenzaPeso != null) {
+                        Text("Confidenza peso: ${confidenzaPeso.percent}% — ${com.ugocalc.app.domain.model.ConfidenceScore.bandLabel(confidenzaPeso)}", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("Identificazione: ${outcome.result.confidenzaGlobale}", style = MaterialTheme.typography.bodySmall)
                     if (outcome.result.ragionamento.isNotEmpty()) {
                         Text(
                             outcome.result.ragionamento,
@@ -158,8 +162,14 @@ private fun ModelResultCard(
                     }
                     outcome.result.alimenti.forEach { food ->
                         val isCautious = food.nome in outcome.result.stimeCautelative
+                        val confidenzaPesoFood = food.confidenzaPeso
+                        val weightDisplay = if (confidenzaPesoFood != null) {
+                            "${food.pesoStimatoG.toInt()}g @ ${confidenzaPesoFood.percent}%"
+                        } else {
+                            "${food.pesoStimatoG.toInt()}g"
+                        }
                         Text(
-                            "• ${food.nome} — ${if (food.isTrascurabile) "trascurabile" else "${food.pesoStimatoG.toInt()}g"} (${food.confidenza})",
+                            "• ${food.nome} — ${if (food.isTrascurabile) "trascurabile" else weightDisplay} (${food.confidenza})",
                             modifier = Modifier.padding(top = 4.dp),
                             color = if (isCautious) MaterialTheme.colorScheme.primary else Color.Unspecified,
                             fontWeight = if (isCautious) FontWeight.Bold else FontWeight.Normal,

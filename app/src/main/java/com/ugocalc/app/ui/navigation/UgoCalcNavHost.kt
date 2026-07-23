@@ -4,6 +4,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -13,6 +14,7 @@ import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.ui.auth.AccountSettingsScreen
 import com.ugocalc.app.ui.auth.AuthScreen
+import com.ugocalc.app.ui.auth.InviteRequestScreen
 import com.ugocalc.app.ui.barcode.BarcodeScanScreen
 import com.ugocalc.app.ui.bias.AmbiguityResolutionScreen
 import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
@@ -47,8 +49,23 @@ import com.ugocalc.app.ui.settings.tables.OfficialTablesListScreen
 import com.ugocalc.app.ui.settings.tables.TableEditorScreen
 
 @Composable
-fun UgoCalcNavHost(navController: NavHostController, startAuthenticated: Boolean = false) {
+fun UgoCalcNavHost(
+    navController: NavHostController,
+    startAuthenticated: Boolean = false,
+    pendingInviteToken: String? = null,
+    onInviteTokenConsumed: () -> Unit = {},
+) {
     val startDestination = if (startAuthenticated) Routes.HOME else Routes.AUTH
+
+    // Se c'è un token di invito, naviga subito alla schermata di richiesta accesso
+    LaunchedEffect(pendingInviteToken) {
+        if (pendingInviteToken != null) {
+            navController.navigate(Routes.inviteRequestRoute(pendingInviteToken)) {
+                launchSingleTop = true
+            }
+            onInviteTokenConsumed()
+        }
+    }
 
     /** Naviga verso una destinazione principale pulendo lo stack ed evitando duplicati (§ bug fix backstack). */
     val navigateTopLevel: (String) -> Unit = { route ->
@@ -287,6 +304,22 @@ fun UgoCalcNavHost(navController: NavHostController, startAuthenticated: Boolean
                         popUpTo(0) { inclusive = true }
                     }
                 },
+            )
+        }
+
+        composable(
+            route = Routes.INVITE_REQUEST,
+            arguments = listOf(navArgument("token") { type = NavType.StringType }),
+        ) { backStackEntry ->
+            val token = backStackEntry.arguments?.getString("token").orEmpty()
+            InviteRequestScreen(
+                token = token,
+                onApproved = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                },
+                onBack = safeBack,
             )
         }
     }

@@ -5,6 +5,8 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.util.Log
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
+import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
+import com.ugocalc.app.domain.model.AiModelCatalog
 import dagger.hilt.android.HiltAndroidApp
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
@@ -19,9 +21,13 @@ class UgoCalcApplication : Application(), Configuration.Provider {
     @Inject
     lateinit var workerFactory: HiltWorkerFactory
 
+    @Inject
+    lateinit var apiKeyStore: SecureApiKeyStore
+
     override fun onCreate() {
         super.onCreate()
         PDFBoxResourceLoader.init(applicationContext)
+        AiModelCatalog.setBedrockModels(apiKeyStore.getBedrockAvailableModels())
         createNotificationChannel()
         scheduleBenchmarkWorker()
         initializeAmplify()

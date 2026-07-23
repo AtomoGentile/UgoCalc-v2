@@ -1,10 +1,12 @@
 package com.ugocalc.app.data.auth
 
+import android.app.Activity
 import android.util.Log
 import com.amplifyframework.auth.AuthUserAttribute
 import com.amplifyframework.auth.AuthUserAttributeKey
 import com.amplifyframework.auth.cognito.AWSCognitoAuthSession
 import com.amplifyframework.auth.options.AuthSignUpOptions
+import com.amplifyframework.auth.options.AuthWebUISignInOptions
 import com.amplifyframework.core.Amplify
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
@@ -109,6 +111,41 @@ object CognitoAuthManager {
                     )
                 },
                 { _ -> cont.resume(null) }
+            )
+        }
+
+    suspend fun signInWithGoogle(activity: Activity): AuthResult =
+        suspendCancellableCoroutine { cont ->
+            Amplify.Auth.signInWithSocialWebUI(
+                com.amplifyframework.auth.AuthProvider.google(),
+                activity,
+                AuthWebUISignInOptions.builder().build(),
+                { result ->
+                    if (result.isSignedIn) {
+                        Amplify.Auth.getCurrentUser(
+                            { amplifyUser ->
+                                Amplify.Auth.fetchAuthSession(
+                                    { session ->
+                                        val token = extractToken(session)
+                                        cont.resume(AuthResult.Success(
+                                            AuthUser(amplifyUser.userId, amplifyUser.username, token)
+                                        ))
+                                    },
+                                    { _ ->
+                                        cont.resume(AuthResult.Success(AuthUser("", "", "")))
+                                    }
+                                )
+                            },
+                            { _ -> cont.resume(AuthResult.Success(AuthUser("", "", ""))) }
+                        )
+                    } else {
+                        cont.resume(AuthResult.Error("Login Google non completato"))
+                    }
+                },
+                { error ->
+                    Log.e(TAG, "signInWithGoogle error", error)
+                    cont.resume(AuthResult.Error(error.message ?: "Login Google fallito"))
+                }
             )
         }
 

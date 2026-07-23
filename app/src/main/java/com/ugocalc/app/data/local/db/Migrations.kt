@@ -183,6 +183,47 @@ val MIGRATION_14_15 = object : Migration(14, 15) {
     }
 }
 
+/** Shadow mode: aggiunge `failureReason` a `v2_analysis_records` per registrare i tentativi V2 non completati (NessunaFotoValida, FallbackAV1, SchemaNonSupportato, eccezioni). */
+val MIGRATION_17_18 = object : Migration(17, 18) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE v2_analysis_records ADD COLUMN failureReason TEXT")
+    }
+}
+
+/** Inference sync: aggiunge `clientId` a `v2_analysis_records` per idempotenza cross-device. UUID generato al momento dell'insert; i record precedenti ricevono un UUID derivato dall'id locale. */
+val MIGRATION_18_19 = object : Migration(18, 19) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE v2_analysis_records ADD COLUMN clientId TEXT")
+        db.execSQL("UPDATE v2_analysis_records SET clientId = 'local-' || id WHERE clientId IS NULL")
+    }
+}
+
+/**
+ * Unifica i bias correction tra modalità CASA e RISTORANTE (§8): l'errore sistematico dell'AI
+ * dipende dalla morfologia dell'alimento, non dal contesto di consumo — tenerli separati dimezzava
+ * i dati per segmento. La tabella viene ricreata senza `sessionMode` nella chiave; i fattori si
+ * ricalcolano automaticamente da `v2_analysis_records` (con dati da entrambe le modalità) al
+ * prossimo `recalculateAll` in foreground, come già avvenuto per [MIGRATION_7_8].
+ */
+val MIGRATION_19_20 = object : Migration(19, 20) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("DROP TABLE IF EXISTS bias_corrections")
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `bias_corrections` (
+                `strategy` TEXT NOT NULL,
+                `aiModelId` TEXT NOT NULL,
+                `foodCategory` TEXT NOT NULL,
+                `factor` REAL NOT NULL,
+                `sampleCount` INTEGER NOT NULL,
+                `updatedAtEpochMillis` INTEGER NOT NULL,
+                PRIMARY KEY(`strategy`, `aiModelId`, `foodCategory`)
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /** CloudSync (Prompt 5): coda offline-first degli eventi da trasmettere al backend AWS. */
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(db: SupportSQLiteDatabase) {

@@ -24,5 +24,11 @@ enum class Confidence {
             MEDIO -> 65
             BASSO -> 35
         }
+
+        fun fromScore(score: ConfidenceScore): Confidence = when {
+            score.percent >= 85 -> ALTO
+            score.percent >= 60 -> MEDIO
+            else -> BASSO
+        }
     }
 }

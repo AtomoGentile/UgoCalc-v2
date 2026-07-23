@@ -21,7 +21,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setTextScale(scale: Float) = dataStore.setTextScale(scale)
     suspend fun setPreferredModelIds(ids: Set<String>) = dataStore.setPreferredModelIds(ids)
     suspend fun setConfidenceIndicatorEnabled(enabled: Boolean) = dataStore.setConfidenceIndicatorEnabled(enabled)
-    suspend fun setConfidenceThresholdPercent(percent: Int) = dataStore.setConfidenceThresholdPercent(percent)
+    suspend fun setConfidenceAlertThresholdPercent(percent: Int) = dataStore.setConfidenceAlertThresholdPercent(percent)
     suspend fun setNotificationsEnabled(enabled: Boolean) = dataStore.setNotificationsEnabled(enabled)
     suspend fun setFavoritesEnabled(enabled: Boolean) = dataStore.setFavoritesEnabled(enabled)
     suspend fun setPrimaryColor(argb: Int?) = dataStore.setPrimaryColor(argb)
@@ -43,18 +43,29 @@ class SettingsRepository @Inject constructor(
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) = dataStore.setV2ShadowModeEnabled(enabled)
     suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) = dataStore.setV2VisibleModeEnabled(enabled)
+    suspend fun setGlobalBiasEnabled(enabled: Boolean) = dataStore.setGlobalBiasEnabled(enabled)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)
     fun clearApiKey(provider: AiProviderType) = apiKeyStore.clearApiKey(provider)
     fun hasAnyApiKeyConfigured(): Boolean = apiKeyStore.hasAnyApiKey()
 
+    // ── AWS Bedrock Mantle credentials ─────────────────────────────────────────
+    fun getBedrockMantleApiKey(): String? = apiKeyStore.getBedrockMantleApiKey()
+    fun getBedrockMantleProjectId(): String = apiKeyStore.getBedrockMantleProjectId()
+    fun getBedrockRegion(): String = apiKeyStore.getBedrockRegion()
+    fun setBedrockCredentials(mantleApiKey: String, projectId: String, region: String) =
+        apiKeyStore.setBedrockCredentials(mantleApiKey, projectId, region)
+    fun clearBedrockCredentials() = apiKeyStore.clearBedrockCredentials()
+    fun hasBedrockCredentials(): Boolean = apiKeyStore.hasBedrockCredentials()
+    fun getBedrockAvailableModels(): List<String> = apiKeyStore.getBedrockAvailableModels()
+    fun setBedrockAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockAvailableModels(modelIds)
+
     /** Resetta tutte le impostazioni ai valori di default e rimuove le API key salvate. */
     suspend fun resetAll() {
-        // Cancella tutti i dati delle impostazioni
         dataStore.clearAll()
-        // Rimuove le API key per tutti i provider
         AiProviderType.entries.forEach { apiKeyStore.clearApiKey(it) }
+        apiKeyStore.clearBedrockCredentials()
     }
 }
 

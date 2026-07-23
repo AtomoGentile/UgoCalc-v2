@@ -5,6 +5,8 @@ set -euo pipefail
 
 STAGE="${1:-prod}"
 PROFILE="${2:-default}"
+GOOGLE_CLIENT_ID="${3:-}"
+GOOGLE_CLIENT_SECRET="${4:-}"
 REGION="us-east-1"
 APP="ugocalc"
 STACK="${APP}-${STAGE}"
@@ -63,6 +65,8 @@ aws cloudformation deploy \
     Stage="${STAGE}" \
     LambdaS3Bucket="${S3_BUCKET}" \
     LambdaS3Key="${ZIP}" \
+    GoogleClientId="${GOOGLE_CLIENT_ID}" \
+    GoogleClientSecret="${GOOGLE_CLIENT_SECRET}" \
   --region "${REGION}" \
   --profile "${PROFILE}"
 

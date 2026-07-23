@@ -8,7 +8,6 @@ import com.ugocalc.app.data.repository.GroundTruthLevel
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
-import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -73,12 +72,9 @@ class GroundTruthEntryViewModel @Inject constructor(
             telemetryRepository.recordGroundTruth(recordId, pesiG, livello)
 
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
-            val sessionMode = SessionMode.entries.firstOrNull { it.name == entry.record.sessionMode }
-            if (sessionMode != null) {
-                entry.stime.filter { it.nome in pesiG.keys }.forEach { stima ->
-                    val categoria = FoodCategoryRouter.categorize(stima.nome)
-                    biasCorrectionRepository.recalculate(sessionMode, stima.strategia, entry.record.aiModelId, categoria, consentGiven)
-                }
+            entry.stime.filter { it.nome in pesiG.keys }.forEach { stima ->
+                val categoria = FoodCategoryRouter.categorize(stima.nome)
+                biasCorrectionRepository.recalculate(stima.strategia, entry.record.aiModelId, categoria, consentGiven)
             }
 
             _uiState.value = _uiState.value.copy(

@@ -19,11 +19,13 @@ object NutritionCalculator {
     fun calculate(estimates: List<WeightEstimate>, matches: Map<String, NormalizedFoodEntry>): NutritionReport {
         val righe = estimates.map { estimate ->
             val entry = matches[estimate.nome]
+            // Usa pesoCrudoG per i calcoli CHO/grassi: le tabelle CREA/INRAN sono su base cruda.
+            val pesoPerCalcolo = estimate.pesoCrudoG
             FoodNutritionLine(
                 nome = estimate.nome,
-                pesoG = estimate.pesoG,
-                choG = entry?.let { it.choPer100g * estimate.pesoG / 100.0 },
-                grassiG = entry?.let { it.grassiPer100g * estimate.pesoG / 100.0 },
+                pesoG = estimate.pesoCrudoG,
+                choG = entry?.let { it.choPer100g * pesoPerCalcolo / 100.0 },
+                grassiG = entry?.let { it.grassiPer100g * pesoPerCalcolo / 100.0 },
                 spiegazione = estimate.catenaCalcolo.sintesi,
                 escluso = entry == null,
             )

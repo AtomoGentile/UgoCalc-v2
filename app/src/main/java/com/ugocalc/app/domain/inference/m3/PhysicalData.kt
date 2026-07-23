@@ -97,13 +97,37 @@ open class PhysicalData(
         entry(500.0, "scodella", "scodella", "boccale"),
     )
 
+    /**
+     * Resa di cottura: peso_cotto / peso_crudo. Fonte: CREA/INRAN, tabelle di conversione.
+     * Per alimenti che non cambiano peso con la cottura (frutta fresca, pane, formaggi, latticini,
+     * uova, condimenti), resa = 1.0 (default).
+     */
+    private val cookingYields: List<Entry> = listOf(
+        // Cereali (cottura per assorbimento acqua: resa > 1)
+        entry(2.2, "pasta lunga secca → cotta (CREA)", "spaghetti", "linguine", "tagliatelle", "fettuccine", "bucatini", "vermicelli"),
+        entry(2.1, "pasta corta secca → cotta (CREA)", "penne", "rigatoni", "maccheroni", "fusilli", "farfalle", "caserecce", "mezze maniche", "pasta"),
+        entry(2.7, "riso secco → cotto (CREA)", "riso", "risotto"),
+        entry(2.5, "orzo/farro/quinoa secchi → cotti (CREA)", "orzo", "farro", "quinoa", "couscous", "cous cous", "grano saraceno"),
+        entry(2.2, "legumi secchi → cotti (CREA)", "fagioli", "ceci", "lenticchie", "piselli secchi"),
+        // Proteine (perdita acqua in cottura: resa < 1)
+        entry(0.75, "carne cruda → cotta (CREA)", "carne", "bistecca", "fettina", "scaloppina", "cotoletta",
+            "pollo", "petto", "tacchino", "maiale", "manzo", "vitello", "agnello", "arrosto"),
+        entry(0.78, "pesce crudo → cotto (CREA)", "pesce", "filetto", "salmone", "tonno", "merluzzo", "orata",
+            "branzino", "spigola"),
+        entry(0.85, "verdura cruda → cotta (CREA)", "zucchine", "melanzane", "peperoni", "carote", "broccoli",
+            "spinaci", "cavolfiore", "finocchi"),
+    )
+
     private val defaultDensity = PhysicalValue(0.90, "densità generica", isDefault = true)
     private val defaultUnitWeight = PhysicalValue(50.0, "peso unitario generico", isDefault = true)
     private val defaultCapacity = PhysicalValue(250.0, "capacità generica", isDefault = true)
+    // resa = 1.0: frutta fresca, pane, formaggi, uova, condimenti, ecc. non cambiano peso rilevante
+    private val defaultYield = PhysicalValue(1.0, "resa unitaria (nessuna cottura)", isDefault = true)
 
     fun density(nome: String): PhysicalValue = resolve(nome, densities, defaultDensity)
     fun unitWeight(nome: String): PhysicalValue = resolve(nome, unitWeights, defaultUnitWeight)
     fun capacity(contenitore: String): PhysicalValue = resolve(contenitore, capacities, defaultCapacity)
+    fun cookingYield(nome: String): PhysicalValue = resolve(nome, cookingYields, defaultYield)
 
     private fun resolve(nome: String, table: List<Entry>, default: PhysicalValue): PhysicalValue {
         val normalizzato = StrategyRouter.normalize(nome)

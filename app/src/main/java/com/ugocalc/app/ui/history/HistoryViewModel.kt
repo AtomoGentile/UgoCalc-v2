@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -65,7 +66,8 @@ class HistoryViewModel @Inject constructor(
 
     /** Id delle voci di cronologia già tra i preferiti, per mostrare la stellina piena o vuota. */
     val favoritedHistoryIds: StateFlow<Set<Long>> = favoritesRepository.observeFavorites()
-        .combine(history) { favorites, _ -> favorites.mapNotNull { it.historyEntryId }.toSet() }
+        .map { favorites -> favorites.mapNotNull { it.historyEntryId }.toSet() }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     val chartEnabled: StateFlow<Boolean> = settingsRepository.settings

@@ -24,4 +24,7 @@ interface CloudSyncQueueDao {
 
     @Query("DELETE FROM cloud_sync_queue WHERE syncedAtEpochMillis IS NOT NULL AND syncedAtEpochMillis < :beforeEpochMillis")
     suspend fun pruneOldSynced(beforeEpochMillis: Long)
+
+    @Query("DELETE FROM cloud_sync_queue WHERE userId = :userId")
+    suspend fun deleteByUserId(userId: String)
 }

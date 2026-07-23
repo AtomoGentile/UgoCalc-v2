@@ -14,7 +14,7 @@ const dynamo = new DynamoDBClient({});
 exports.handler = async () => {
   const result = await dynamo.send(new GetItemCommand({
     TableName: TABLE,
-    Key: marshall({ PK: 'android', SK: 'latest' }),
+    Key: marshall({ PK: 'android' }),
   }));
 
   if (!result.Item) {

@@ -149,16 +149,7 @@ fun BiasEvolutionScreen(
                 }
                 HorizontalDivider()
             }
-            if (uiState.corrections.isEmpty()) {
-                item {
-                    Text(
-                        if (uiState.loading) "Caricamento..." else "Nessuna correzione calcolata finora.",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = UgoGrey,
-                        modifier = Modifier.padding(vertical = 16.dp),
-                    )
-                }
-            } else {
+            if (uiState.corrections.isNotEmpty()) {
                 item(key = "fattori_appresi_header") {
                     Text(
                         "Fattori appresi",
@@ -168,10 +159,20 @@ fun BiasEvolutionScreen(
                 }
                 items(
                     items = uiState.corrections,
-                    key = { "${it.correction.sessionMode}_${it.correction.strategy}_${it.correction.aiModelId}_${it.correction.foodCategory}" }
+                    key = { "${it.correction.strategy}_${it.correction.aiModelId}_${it.correction.foodCategory}" },
+                    contentType = { "bias_correction" }
                 ) { correction ->
                     BiasCorrectionRow(correction, dayDateFormat)
                     HorizontalDivider()
+                }
+            } else if (!uiState.loading) {
+                item {
+                    Text(
+                        "Nessuna correzione calcolata finora.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = UgoGrey,
+                        modifier = Modifier.padding(vertical = 16.dp),
+                    )
                 }
             }
 
@@ -185,7 +186,8 @@ fun BiasEvolutionScreen(
                 }
                 items(
                     items = uiState.recentV2Records,
-                    key = { it.id }
+                    key = { it.id },
+                    contentType = { "v2_record" }
                 ) { record ->
                     V2RecordSummaryRow(record, onOpenV2Details, onDelete = { viewModel.deleteRecord(record.id) }, fullDateFormat)
                     HorizontalDivider()
@@ -202,8 +204,9 @@ private fun V2RecordSummaryRow(
     onDelete: () -> Unit,
     dateFormat: SimpleDateFormat,
 ) {
+    val failed = record.failureReason != null
     Card(
-        onClick = { onClick(record.id) },
+        onClick = { if (!failed) onClick(record.id) },
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
     ) {
         Row(
@@ -213,18 +216,27 @@ private fun V2RecordSummaryRow(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     "${dateFormat.format(Date(record.analyzedAtEpochMillis))} - ${record.sessionMode}",
-                    fontWeight = FontWeight.Bold
+                    fontWeight = FontWeight.Bold,
+                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     "Modello: ${record.aiModelId}",
                     style = MaterialTheme.typography.bodySmall,
-                    color = UgoGrey
+                    color = UgoGrey,
                 )
-                Text(
-                    "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                )
+                if (failed) {
+                    Text(
+                        "Non completata: ${record.failureReason}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                } else {
+                    Text(
+                        "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                    )
+                }
             }
             androidx.compose.material3.IconButton(onClick = onDelete) {
                 androidx.compose.material3.Icon(
@@ -243,7 +255,7 @@ private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats, dateFormat: Sim
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                "${sessionModeLabel(correction.sessionMode)} - ${foodCategoryLabel(correction.foodCategory)} (${strategyLabel(correction.strategy)})",
+                "${foodCategoryLabel(correction.foodCategory)} (${strategyLabel(correction.strategy)})",
                 fontWeight = FontWeight.Bold,
             )
             Text("Modello: ${correction.aiModelId}", style = MaterialTheme.typography.bodySmall)
@@ -347,12 +359,6 @@ private fun formatGrams(value: Double) = "${formatNumber(value)} g"
 private fun formatSignedGrams(value: Double): String {
     val prefix = if (value >= 0.0) "+" else ""
     return "$prefix${formatGrams(value)}"
-}
-
-private fun sessionModeLabel(raw: String) = when (raw) {
-    "CASA" -> "Casa"
-    "RISTORANTE" -> "Ristorante"
-    else -> raw
 }
 
 private fun strategyLabel(raw: String) = when (raw) {

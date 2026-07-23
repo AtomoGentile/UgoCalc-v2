@@ -33,3 +33,7 @@ gradle-app.setting
 
 # Log e cache
 *.log
+
+# Lambda build artifacts
+infra/*.zip
+lambda/node_modules/

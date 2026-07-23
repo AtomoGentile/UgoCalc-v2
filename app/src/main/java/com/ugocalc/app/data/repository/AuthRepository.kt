@@ -1,15 +1,26 @@
 package com.ugocalc.app.data.repository
 
+import android.app.Activity
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.ugocalc.app.data.auth.AuthResult
 import com.ugocalc.app.data.auth.AuthUser
 import com.ugocalc.app.data.auth.CognitoAuthManager
+import com.ugocalc.app.data.local.db.dao.CloudSyncQueueDao
+import com.ugocalc.app.sync.CloudSyncManager
+import com.ugocalc.app.workers.InferencePullWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -17,7 +28,9 @@ private val Context.dataStore by preferencesDataStore(name = "auth_preferences")
 
 @Singleton
 class AuthRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val cloudSyncQueueDao: CloudSyncQueueDao,
+    private val workManager: WorkManager,
 ) {
     private object PreferencesKeys {
         val USER_ID = stringPreferencesKey("user_id")
@@ -64,6 +77,12 @@ class AuthRepository @Inject constructor(
         return result
     }
 
+    suspend fun signInWithGoogle(activity: Activity): AuthResult {
+        val result = CognitoAuthManager.signInWithGoogle(activity)
+        if (result is AuthResult.Success) saveUser(result.user)
+        return result
+    }
+
     suspend fun updateEmail(newEmail: String): AuthResult {
         return CognitoAuthManager.updateEmail(newEmail)
     }
@@ -89,12 +108,22 @@ class AuthRepository @Inject constructor(
     }
 
     private suspend fun saveUser(user: AuthUser) {
+        cloudSyncQueueDao.deleteByUserId(CloudSyncManager.DEFAULT_USER_ID)
         context.dataStore.edit { preferences ->
             preferences[PreferencesKeys.USER_ID] = user.userId
             preferences[PreferencesKeys.USER_EMAIL] = user.email
             preferences[PreferencesKeys.ACCESS_TOKEN] = user.accessToken
             preferences[PreferencesKeys.LOGGED_IN] = "true"
         }
+        scheduleInferencePull()
+    }
+
+    private fun scheduleInferencePull() {
+        val request = OneTimeWorkRequestBuilder<InferencePullWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        workManager.enqueueUniqueWork("inference_pull_on_login", ExistingWorkPolicy.REPLACE, request)
     }
 
     private suspend fun clearUser() {

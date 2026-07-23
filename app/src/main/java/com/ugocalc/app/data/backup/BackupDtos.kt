@@ -93,7 +93,7 @@ data class FoodEntryDto(
 
 @Serializable
 data class BiasCorrectionDto(
-    val sessionMode: String,
+    val sessionMode: String? = null, // opzionale: presente nei backup < schema 6, ignorato in import
     val strategy: String,
     val aiModelId: String,
     val foodCategory: String,

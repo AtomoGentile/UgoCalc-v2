@@ -3,8 +3,10 @@ package com.ugocalc.app.ui.bias
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.repository.PhysicalDataRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.model.AmbiguityResolution
+import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.VerificationReport
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.ui.AnalysisSessionStore
@@ -28,7 +30,7 @@ class V2ResultViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val sessionStore: AnalysisSessionStore,
     private val telemetryRepository: V2TelemetryRepository,
-    private val physicalDataRepository: com.ugocalc.app.data.repository.PhysicalDataRepository,
+    private val physicalDataRepository: PhysicalDataRepository,
     private val json: Json,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(V2ResultUiState())
@@ -43,7 +45,7 @@ class V2ResultViewModel @Inject constructor(
             viewModelScope.launch {
                 val record = telemetryRepository.getById(recordId) ?: return@launch
                 val stime = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
-                val sceneGraph = json.decodeFromString<com.ugocalc.app.domain.inference.model.SceneGraph>(record.sceneGraphJson)
+                val sceneGraph = json.decodeFromString<SceneGraph>(record.sceneGraphJson)
                 val verification = json.decodeFromString<VerificationReport>(record.verificationReportJson)
                 _uiState.update { it.copy(
                     reasoning = sceneGraph.ragionamento,

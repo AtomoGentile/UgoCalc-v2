@@ -31,7 +31,6 @@ import com.ugocalc.app.data.local.db.entity.RecipeIngredientEntity
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.domain.model.OfficialFileType
-import kotlinx.coroutines.flow.first
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -106,7 +105,7 @@ class BackupRepository @Inject constructor(
                 sessionMode = recipe.sessionMode,
                 name = recipe.name,
                 description = recipe.description,
-                ingredients = ingredients
+                ingredients = ingredients,
             )
         }
 
@@ -137,7 +136,6 @@ class BackupRepository @Inject constructor(
 
         val biasCorrections = biasCorrectionDao.getAll().map {
             BiasCorrectionDto(
-                sessionMode = it.sessionMode,
                 strategy = it.strategy,
                 aiModelId = it.aiModelId,
                 foodCategory = it.foodCategory,
@@ -323,7 +321,6 @@ class BackupRepository @Inject constructor(
         archive.biasCorrections.forEach {
             biasCorrectionDao.upsert(
                 BiasCorrectionEntity(
-                    sessionMode = it.sessionMode,
                     strategy = it.strategy,
                     aiModelId = it.aiModelId,
                     foodCategory = it.foodCategory,

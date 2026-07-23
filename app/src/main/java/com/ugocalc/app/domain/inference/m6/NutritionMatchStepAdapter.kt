@@ -21,17 +21,17 @@ class NutritionMatchStepAdapter @Inject constructor(
     private val matchFoodsAcrossTables: MatchFoodsAcrossTablesUseCase,
     private val recipeRepository: RecipeRepository,
 ) {
-    private val RECIPE_MIN_CONFIDENCE = Confidence.ALTO // only automatic decomposition when confidence is ALTO
+    private val recipeMinConfidence = Confidence.ALTO // only automatic decomposition when confidence is ALTO
 
     suspend fun match(model: AiModel, stime: List<WeightEstimate>, sessionMode: SessionMode): Map<String, NormalizedFoodEntry> {
         val expandedRecognized = mutableListOf<RecognizedFood>()
 
         for (est in stime) {
-            if (est.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && est.confidenza == RECIPE_MIN_CONFIDENCE) {
+            if (est.strategia == EstimationStrategy.COMPOSTO_OCCLUSO && Confidence.fromScore(est.confidenza) == recipeMinConfidence) {
                 // Try to find a recipe matching the recognized name in the current session mode
                 val recipe = try {
                     recipeRepository.findByNameFuzzy(est.nome.trim(), sessionMode)
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
 
@@ -39,14 +39,16 @@ class NutritionMatchStepAdapter @Inject constructor(
                     // Normalize percentages in case they don't sum to 100
                     val total = recipe.ingredients.sumOf { it.percentage }.takeIf { it > 0.0 } ?: 100.0
                     recipe.ingredients.forEach { ing ->
-                        val pct = if (total > 0.0) ing.percentage / total else 0.0
-                        val pesoIng = est.pesoG * pct
+                        val pct = ing.percentage / total
+                        // Usa pesoCrudoG: la ricetta è definita su ingredienti crudi.
+                        val pesoIng = est.pesoCrudoG * pct
                         expandedRecognized.add(
                             RecognizedFood(
                                 nome = ing.name,
                                 pesoStimatoG = pesoIng,
                                 commento = "${est.catenaCalcolo.sintesi} — decomposizione ricetta '${recipe.name}' (${(pct * 100).toInt()}%)",
-                                confidenza = est.confidenza,
+                                confidenza = Confidence.fromScore(est.confidenza),
+                                confidenzaPeso = est.confidenza,
                                 decomposition = com.ugocalc.app.domain.model.DecompositionInfo(
                                     recipeId = recipe.id,
                                     recipeName = recipe.name,
@@ -65,9 +67,10 @@ class NutritionMatchStepAdapter @Inject constructor(
             expandedRecognized.add(
                 RecognizedFood(
                     nome = est.nome,
-                    pesoStimatoG = est.pesoG,
+                    pesoStimatoG = est.pesoCrudoG,
                     commento = est.catenaCalcolo.sintesi,
-                    confidenza = est.confidenza,
+                    confidenza = Confidence.fromScore(est.confidenza),
+                    confidenzaPeso = est.confidenza,
                 )
             )
         }

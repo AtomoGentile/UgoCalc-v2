@@ -5,6 +5,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.Handler
+import android.os.HandlerThread
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,7 +33,8 @@ class GyroscopeMotionTracker @Inject constructor(@ApplicationContext context: Co
         // Se il device non ha un giroscopio, nessuna registrazione: peakMotionNear resterà sempre
         // null, degradazione esplicita (nessun campo popolato), mai un valore inventato.
         if (sensorManager != null && gyroscope != null) {
-            sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_UI)
+            val thread = HandlerThread("gyroscope-tracker").also { it.start() }
+            sensorManager.registerListener(this, gyroscope, SensorManager.SENSOR_DELAY_UI, Handler(thread.looper))
         }
     }
 

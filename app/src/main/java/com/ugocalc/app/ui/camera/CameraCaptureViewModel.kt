@@ -8,6 +8,7 @@ import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.ScaleCalibrationRepository
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.di.ShadowAnalysisScope
 import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.SessionPhoto
@@ -106,6 +107,7 @@ class CameraCaptureViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val v2PipelineFactory: V2AnalysisPipelineFactory,
     private val benchmarkRepository: BenchmarkRepository,
+    private val telemetryRepository: V2TelemetryRepository,
     private val scaleCalibrationRepository: ScaleCalibrationRepository,
     private val gyroscopeTracker: GyroscopeMotionTracker,
     @param:ApplicationContext private val context: Context,
@@ -126,9 +128,12 @@ class CameraCaptureViewModel @Inject constructor(
                 }
         }
         viewModelScope.launch {
-            sessionStore.session.collect { session ->
-                _uiState.update { it.copy(selectedCalibrationIds = session.selectedCalibrationIds) }
-            }
+            sessionStore.session
+                .map { it.selectedCalibrationIds }
+                .distinctUntilChanged()
+                .collect { ids ->
+                    _uiState.update { it.copy(selectedCalibrationIds = ids) }
+                }
         }
     }
 
@@ -291,7 +296,7 @@ class CameraCaptureViewModel @Inject constructor(
         shadowScope.launch {
             if (!settingsRepository.settings.first().v2ShadowModeEnabled) return@launch
             val sessionMode = sessionStore.session.value.sessionMode
-            runCatching {
+            val outcome = runCatching {
                 val photos = capturedPhotos.mapIndexed { index, photo ->
                     val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
                     val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
@@ -304,9 +309,28 @@ class CameraCaptureViewModel @Inject constructor(
                 val calibrations = if (selectedIds.isEmpty()) null else {
                     scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
                 }
-                val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
-                if (outcome is PipelineOutcome.Verificato && outcome.telemetryId >= 0) {
-                    benchmarkRepository.linkV2Record(sessionId, outcome.telemetryId)
+                v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
+            }
+            when {
+                outcome.isFailure -> {
+                    val msg = outcome.exceptionOrNull()?.message ?: "errore sconosciuto"
+                    Log.e("V2Shadow", "Pipeline exception in shadow mode: $msg", outcome.exceptionOrNull())
+                    telemetryRepository.recordFailure("Eccezione: $msg", model, sessionMode, sessionId)
+                }
+                outcome.getOrNull() is PipelineOutcome.Verificato -> {
+                    val verificato = outcome.getOrNull() as PipelineOutcome.Verificato
+                    if (verificato.telemetryId >= 0) benchmarkRepository.linkV2Record(sessionId, verificato.telemetryId)
+                }
+                outcome.getOrNull() is PipelineOutcome.NessunaFotoValida -> {
+                    telemetryRepository.recordFailure("NessunaFotoValida", model, sessionMode, sessionId)
+                }
+                outcome.getOrNull() is PipelineOutcome.FallbackAV1 -> {
+                    val motivo = (outcome.getOrNull() as PipelineOutcome.FallbackAV1).motivo
+                    telemetryRepository.recordFailure("FallbackAV1: $motivo", model, sessionMode, sessionId)
+                }
+                outcome.getOrNull() is PipelineOutcome.SchemaNonSupportato -> {
+                    val s = outcome.getOrNull() as PipelineOutcome.SchemaNonSupportato
+                    telemetryRepository.recordFailure("SchemaNonSupportato: trovata v${s.trovata} attesa v${s.attesa}", model, sessionMode, sessionId)
                 }
             }
         }

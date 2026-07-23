@@ -12,6 +12,7 @@ data class RecognizedFood(
     /** Ragionamento dell'IA sull'identificazione e lo stato di questo alimento (§ richiesta utente). */
     val ragionamento: String = "",
     val confidenza: Confidence,
+    @SerialName("confidenza_peso") val confidenzaPeso: ConfidenceScore? = null,
     val decomposition: DecompositionInfo? = null,
     /** Se vero, l'alimento è considerato trascurabile (es. spezie, condimenti minimi) e non pesa sul totale visivo. */
     val isTrascurabile: Boolean = false,
@@ -34,6 +35,7 @@ data class VisionAnalysisResult(
     /** Ragionamento globale dell'IA sulla scena (§ richiesta utente). */
     val ragionamento: String = "",
     val confidenzaGlobale: Confidence,
+    @SerialName("confidenza_globale_peso") val confidenzaGlobalePeso: ConfidenceScore? = null,
     val fattoriIncertezza: List<String> = emptyList(),
     val avvertenze: String = "",
     /**

@@ -137,7 +137,7 @@ private fun V2WeightEstimateCard(
                 color = UgoGrey
             )
             Text(
-                "Peso stimato: ${stima.pesoG.toInt()} g (Range: ${stima.intervallo.minG.toInt()}-${stima.intervallo.maxG.toInt()} g)",
+                "Peso stimato: ${stima.pesoCrudoG.toInt()} g crudo (${stima.pesoG.toInt()} g cotto — Range: ${stima.intervallo.minG.toInt()}-${stima.intervallo.maxG.toInt()} g crudo)",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(top = 4.dp)

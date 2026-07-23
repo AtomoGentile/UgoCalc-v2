@@ -1,5 +1,8 @@
 package com.ugocalc.app.ui.auth
 
+import android.content.Intent
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,6 +16,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -40,9 +44,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
@@ -56,7 +62,9 @@ fun AccountSettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showApprovalDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.inviteResult) {
         when (val result = uiState.inviteResult) {
@@ -67,6 +75,49 @@ fun AccountSettingsScreen(
             null -> {}
         }
         if (uiState.inviteResult != null) viewModel.dismissInviteResult()
+    }
+
+    LaunchedEffect(uiState.pendingWhatsAppEmail) {
+        val email = uiState.pendingWhatsAppEmail ?: return@LaunchedEffect
+        val msg = "Ti ho invitato ad accedere al mio account UgoCalc! Registrati con questa email: $email"
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, msg)
+        }
+        context.startActivity(Intent.createChooser(intent, "Invia invito"))
+        viewModel.clearPendingWhatsAppEmail()
+    }
+
+    // Share link generato via token
+    LaunchedEffect(uiState.pendingLinkToShare) {
+        val link = uiState.pendingLinkToShare ?: return@LaunchedEffect
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, "Unisciti al mio account UgoCalc! Apri questo link: $link")
+        }
+        context.startActivity(Intent.createChooser(intent, "Condividi invito"))
+        viewModel.clearPendingLinkToShare()
+    }
+
+    // Quando il guest ha attivato il token, mostra il dialog di approvazione
+    LaunchedEffect(uiState.guestArrived) {
+        if (uiState.guestArrived) showApprovalDialog = true
+    }
+
+    // Snackbar per risultato approvazione
+    LaunchedEffect(uiState.approvalResult) {
+        val result = uiState.approvalResult ?: return@LaunchedEffect
+        snackbarHostState.showSnackbar(if (result) "Accesso approvato" else "Accesso negato")
+        viewModel.dismissApprovalResult()
+    }
+
+    // Snackbar per errore generazione link
+    LaunchedEffect(uiState.generateLinkResult) {
+        val result = uiState.generateLinkResult ?: return@LaunchedEffect
+        if (result is GenerateLinkResult.Error) {
+            snackbarHostState.showSnackbar("Errore: ${result.message}")
+        }
+        viewModel.dismissGenerateLinkResult()
     }
 
     LaunchedEffect(uiState.accountActionResult) {
@@ -80,6 +131,68 @@ fun AccountSettingsScreen(
             else -> {}
         }
         if (uiState.accountActionResult != null) viewModel.dismissAccountActionResult()
+    }
+
+    // Dialog di approvazione: l'owner conferma con biometria prima di approvare
+    if (showApprovalDialog) {
+        AlertDialog(
+            onDismissRequest = { /* non chiudibile cliccando fuori */ },
+            title = { Text("Richiesta di accesso") },
+            text = {
+                Text(
+                    "Qualcuno ha usato il tuo link di invito e sta aspettando la tua autorizzazione.\n\n" +
+                        "Vuoi concedere l'accesso al tuo account?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showApprovalDialog = false
+                        val activity = context as? androidx.fragment.app.FragmentActivity ?: return@Button
+                        val canUseBiometric = BiometricManager.from(context).canAuthenticate(
+                            BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                                BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                        ) == BiometricManager.BIOMETRIC_SUCCESS
+                        if (canUseBiometric) {
+                            val prompt = BiometricPrompt(
+                                activity,
+                                ContextCompat.getMainExecutor(context),
+                                object : BiometricPrompt.AuthenticationCallback() {
+                                    override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                                        viewModel.approveRequest(true)
+                                    }
+                                    override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                                        // annullato: non facciamo nulla
+                                    }
+                                }
+                            )
+                            val info = BiometricPrompt.PromptInfo.Builder()
+                                .setTitle("Autorizza accesso")
+                                .setSubtitle("Conferma per approvare la richiesta")
+                                .setAllowedAuthenticators(
+                                    BiometricManager.Authenticators.BIOMETRIC_WEAK or
+                                        BiometricManager.Authenticators.DEVICE_CREDENTIAL
+                                )
+                                .build()
+                            prompt.authenticate(info)
+                        } else {
+                            // nessuna biometria disponibile: approva direttamente
+                            viewModel.approveRequest(true)
+                        }
+                    }
+                ) {
+                    Text("Approva")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showApprovalDialog = false
+                    viewModel.approveRequest(false)
+                }) {
+                    Text("Nega")
+                }
+            },
+        )
     }
 
     if (showDeleteDialog) {
@@ -236,6 +349,43 @@ fun AccountSettingsScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = viewModel::generateInviteLink,
+                enabled = !uiState.isLoading,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Icon(Icons.Default.Link, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Genera link di invito")
+                }
+            }
+            if (uiState.pendingApprovalToken != null && !uiState.guestArrived) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Link attivo — in attesa che il guest lo utilizzi…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = viewModel::cancelOwnerPolling) { Text("Annulla") }
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Oppure invita direttamente tramite email:",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = uiState.inviteEmail,
                 onValueChange = viewModel::setInviteEmail,
@@ -256,6 +406,18 @@ fun AccountSettingsScreen(
                     Icon(Icons.Default.PersonAdd, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
                     Text("Invia invito")
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = viewModel::sendInviteViaWhatsApp,
+                enabled = !uiState.isLoading && uiState.inviteEmail.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Condividi invito")
                 }
             }
 

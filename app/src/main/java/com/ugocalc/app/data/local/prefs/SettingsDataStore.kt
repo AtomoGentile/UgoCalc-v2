@@ -9,8 +9,10 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,9 +26,9 @@ data class UserSettings(
     val textScale: Float = 1.0f,
     /** "Modelli preferiti": se non vuoto, salta del tutto la schermata di scelta modello (§2.2) e avvia l'analisi con questi. */
     val preferredModelIds: Set<String> = emptySet(),
-    /** "Livello di confidenza" attivo/non attivo e relativa soglia (§2.2, default 70%). */
+    /** "Livello di confidenza" attivo/non attivo e relativa soglia di allerta (default 60%). */
     val confidenceIndicatorEnabled: Boolean = false,
-    val confidenceThresholdPercent: Int = Confidence.DEFAULT_THRESHOLD_PERCENT,
+    val confidenceAlertThresholdPercent: Int = ConfidenceScore.DEFAULT_ALERT_THRESHOLD_PERCENT,
     val notificationsEnabled: Boolean = true,
     /** Mostra la sezione "Preferiti" in Homepage (§2.2, voce di attivazione richiesta dall'utente). */
     val favoritesEnabled: Boolean = true,
@@ -83,6 +85,7 @@ data class UserSettings(
      * principale visibile all'utente.
      */
     val v2VisibleModeEnabled: Boolean = false,
+    val globalBiasEnabled: Boolean = false,
 )
 
 @Singleton
@@ -93,7 +96,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val TEXT_SCALE = stringPreferencesKey("text_scale")
         val PREFERRED_MODEL_IDS = stringSetPreferencesKey("preferred_model_ids")
         val CONFIDENCE_ENABLED = booleanPreferencesKey("confidence_enabled")
-        val CONFIDENCE_THRESHOLD = intPreferencesKey("confidence_threshold")
+        val CONFIDENCE_ALERT_THRESHOLD = intPreferencesKey("confidence_alert_threshold")
         val NOTIFICATIONS_ENABLED = booleanPreferencesKey("notifications_enabled")
         val FAVORITES_ENABLED = booleanPreferencesKey("favorites_enabled")
         val PRIMARY_COLOR = intPreferencesKey("primary_color_argb")
@@ -115,6 +118,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
         val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
+        val GLOBAL_BIAS_ENABLED = booleanPreferencesKey("global_bias_enabled")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -123,7 +127,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             textScale = prefs[Keys.TEXT_SCALE]?.toFloatOrNull() ?: 1.0f,
             preferredModelIds = prefs[Keys.PREFERRED_MODEL_IDS] ?: emptySet(),
             confidenceIndicatorEnabled = prefs[Keys.CONFIDENCE_ENABLED] ?: false,
-            confidenceThresholdPercent = prefs[Keys.CONFIDENCE_THRESHOLD] ?: Confidence.DEFAULT_THRESHOLD_PERCENT,
+            confidenceAlertThresholdPercent = prefs[Keys.CONFIDENCE_ALERT_THRESHOLD] ?: ConfidenceScore.DEFAULT_ALERT_THRESHOLD_PERCENT,
             notificationsEnabled = prefs[Keys.NOTIFICATIONS_ENABLED] ?: true,
             favoritesEnabled = prefs[Keys.FAVORITES_ENABLED] ?: true,
             primaryColorArgb = prefs[Keys.PRIMARY_COLOR],
@@ -145,16 +149,17 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
             v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
+            globalBiasEnabled = prefs[Keys.GLOBAL_BIAS_ENABLED] ?: false,
         )
-    }
+    }.distinctUntilChanged()
 
     suspend fun setTheme(theme: AppTheme) = context.dataStore.edit { it[Keys.THEME] = theme.name }
     suspend fun setTextScale(scale: Float) = context.dataStore.edit { it[Keys.TEXT_SCALE] = scale.toString() }
     suspend fun setPreferredModelIds(ids: Set<String>) = context.dataStore.edit { it[Keys.PREFERRED_MODEL_IDS] = ids }
     suspend fun setConfidenceIndicatorEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.CONFIDENCE_ENABLED] = enabled }
-    suspend fun setConfidenceThresholdPercent(percent: Int) =
-        context.dataStore.edit { it[Keys.CONFIDENCE_THRESHOLD] = percent.coerceIn(0, 100) }
+    suspend fun setConfidenceAlertThresholdPercent(percent: Int) =
+        context.dataStore.edit { it[Keys.CONFIDENCE_ALERT_THRESHOLD] = percent.coerceIn(0, 100) }
     suspend fun setNotificationsEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.NOTIFICATIONS_ENABLED] = enabled }
     suspend fun setFavoritesEnabled(enabled: Boolean) =
@@ -214,6 +219,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.V2_VISIBLE_MODE_ENABLED] = enabled }
+    suspend fun setGlobalBiasEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.GLOBAL_BIAS_ENABLED] = enabled }
 
     suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }
