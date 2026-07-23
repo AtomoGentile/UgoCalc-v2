@@ -15,6 +15,8 @@ sealed class AuthState {
     data object Idle : AuthState()
     data object Loading : AuthState()
     data class Success(val user: AuthUser) : AuthState()
+    data class NeedsConfirmation(val email: String) : AuthState()
+    data object ConfirmationComplete : AuthState()
     data class Error(val message: String) : AuthState()
 }
 
@@ -35,6 +37,19 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.signUp(email, password)
             _authState.value = when (result) {
                 is AuthResult.Success -> AuthState.Success(result.user)
+                is AuthResult.NeedsConfirmation -> AuthState.NeedsConfirmation(result.email)
+                is AuthResult.Error -> AuthState.Error(result.message)
+            }
+        }
+    }
+
+    fun confirmSignUp(email: String, code: String) {
+        viewModelScope.launch {
+            _authState.value = AuthState.Loading
+            val result = authRepository.confirmSignUp(email, code)
+            _authState.value = when (result) {
+                is AuthResult.Success -> AuthState.ConfirmationComplete
+                is AuthResult.NeedsConfirmation -> AuthState.NeedsConfirmation(result.email)
                 is AuthResult.Error -> AuthState.Error(result.message)
             }
         }
@@ -46,6 +61,7 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.signIn(email, password)
             _authState.value = when (result) {
                 is AuthResult.Success -> AuthState.Success(result.user)
+                is AuthResult.NeedsConfirmation -> AuthState.NeedsConfirmation(result.email)
                 is AuthResult.Error -> AuthState.Error(result.message)
             }
         }

@@ -50,10 +50,18 @@ fun AuthScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var confirmationCode by remember { mutableStateOf("") }
+    var pendingEmail by remember { mutableStateOf("") }
 
     LaunchedEffect(authState) {
         when (val state = authState) {
             is AuthState.Success -> onAuthenticated()
+            is AuthState.NeedsConfirmation -> pendingEmail = state.email
+            is AuthState.ConfirmationComplete -> {
+                snackbarHostState.showSnackbar("Account confermato! Accedi ora.")
+                selectedTab = 0
+                confirmationCode = ""
+            }
             is AuthState.Error -> snackbarHostState.showSnackbar(state.message)
             else -> {}
         }
@@ -76,89 +84,128 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
         ) {
-            Text(
-                text = "Accedi al tuo account",
-                style = MaterialTheme.typography.headlineSmall,
-            )
-            Spacer(Modifier.height(24.dp))
+            val isLoading = authState is AuthState.Loading
 
-            TabRow(selectedTabIndex = selectedTab) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text("Accedi") },
+            if (pendingEmail.isNotBlank()) {
+                // — Confirmation screen —
+                Text(
+                    text = "Verifica email",
+                    style = MaterialTheme.typography.headlineSmall,
                 )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text("Registrati") },
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = "Abbiamo inviato un codice a $pendingEmail. Inseriscilo qui sotto.",
+                    style = MaterialTheme.typography.bodyMedium,
                 )
-            }
+                Spacer(Modifier.height(24.dp))
+                OutlinedTextField(
+                    value = confirmationCode,
+                    onValueChange = { confirmationCode = it.trim() },
+                    label = { Text("Codice di verifica") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(24.dp))
+                Button(
+                    onClick = { viewModel.confirmSignUp(pendingEmail, confirmationCode) },
+                    enabled = !isLoading && confirmationCode.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text("Conferma account")
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { pendingEmail = "" }) {
+                    Text("Torna al login")
+                }
+            } else {
+                // — Login / signup screen —
+                Text(
+                    text = "Accedi al tuo account",
+                    style = MaterialTheme.typography.headlineSmall,
+                )
+                Spacer(Modifier.height(24.dp))
 
-            Spacer(Modifier.height(24.dp))
+                TabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("Accedi") },
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("Registrati") },
+                    )
+                }
 
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it.trim() },
-                label = { Text("Email") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(12.dp))
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-            )
+                Spacer(Modifier.height(24.dp))
 
-            if (selectedTab == 1) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it.trim() },
+                    label = { Text("Email") },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    modifier = Modifier.fillMaxWidth(),
+                )
                 Spacer(Modifier.height(12.dp))
                 OutlinedTextField(
-                    value = confirmPassword,
-                    onValueChange = { confirmPassword = it },
-                    label = { Text("Conferma password") },
+                    value = password,
+                    onValueChange = { password = it },
+                    label = { Text("Password") },
                     singleLine = true,
                     visualTransformation = PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                     modifier = Modifier.fillMaxWidth(),
                 )
-            }
 
-            Spacer(Modifier.height(24.dp))
-
-            val isLoading = authState is AuthState.Loading
-
-            Button(
-                onClick = {
-                    if (selectedTab == 0) {
-                        viewModel.signIn(email, password)
-                    } else {
-                        if (password == confirmPassword) {
-                            viewModel.signUp(email, password)
-                        } else {
-                            viewModel.setError("Le password non coincidono")
-                        }
-                    }
-                },
-                enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                } else {
-                    Text(if (selectedTab == 0) "Accedi" else "Crea account")
+                if (selectedTab == 1) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = confirmPassword,
+                        onValueChange = { confirmPassword = it },
+                        label = { Text("Conferma password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                 }
-            }
 
-            if (selectedTab == 0) {
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { selectedTab = 1 }) {
-                    Text("Non hai un account? Registrati")
+                Spacer(Modifier.height(24.dp))
+
+                Button(
+                    onClick = {
+                        if (selectedTab == 0) {
+                            viewModel.signIn(email, password)
+                        } else {
+                            if (password == confirmPassword) {
+                                viewModel.signUp(email, password)
+                            } else {
+                                viewModel.setError("Le password non coincidono")
+                            }
+                        }
+                    },
+                    enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    if (isLoading) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    } else {
+                        Text(if (selectedTab == 0) "Accedi" else "Crea account")
+                    }
+                }
+
+                if (selectedTab == 0) {
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { selectedTab = 1 }) {
+                        Text("Non hai un account? Registrati")
+                    }
                 }
             }
         }

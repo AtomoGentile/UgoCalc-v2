@@ -14,6 +14,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,15 +29,19 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.ui.components.BackIconButton
@@ -51,6 +56,7 @@ fun AccountSettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.inviteResult) {
         when (val result = uiState.inviteResult) {
@@ -61,6 +67,50 @@ fun AccountSettingsScreen(
             null -> {}
         }
         if (uiState.inviteResult != null) viewModel.dismissInviteResult()
+    }
+
+    LaunchedEffect(uiState.accountActionResult) {
+        when (val result = uiState.accountActionResult) {
+            is AccountActionResult.EmailUpdated ->
+                snackbarHostState.showSnackbar("Email aggiornata. Controlla la casella per la verifica.")
+            is AccountActionResult.PasswordUpdated ->
+                snackbarHostState.showSnackbar("Password aggiornata.")
+            is AccountActionResult.Error ->
+                snackbarHostState.showSnackbar("Errore: ${result.message}")
+            else -> {}
+        }
+        if (uiState.accountActionResult != null) viewModel.dismissAccountActionResult()
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Elimina account") },
+            text = {
+                Text(
+                    "Questa azione è irreversibile. Il tuo account e tutti i dati associati " +
+                        "verranno eliminati definitivamente. Sei sicuro?"
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        viewModel.deleteUser(onDeleted = onSignedOut)
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error,
+                    ),
+                ) {
+                    Text("Elimina definitivamente")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Annulla")
+                }
+            },
+        )
     }
 
     Scaffold(
@@ -96,6 +146,87 @@ fun AccountSettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))
 
+            // — Modifica email —
+            Text("Modifica email", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.newEmail,
+                onValueChange = viewModel::setNewEmail,
+                label = { Text("Nuova email") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = viewModel::updateEmail,
+                enabled = !uiState.isLoading && uiState.newEmail.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Aggiorna email")
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(24.dp))
+
+            // — Modifica password —
+            Text("Modifica password", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.oldPassword,
+                onValueChange = viewModel::setOldPassword,
+                label = { Text("Password attuale") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.newPassword,
+                onValueChange = viewModel::setNewPassword,
+                label = { Text("Nuova password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = uiState.confirmNewPassword,
+                onValueChange = viewModel::setConfirmNewPassword,
+                label = { Text("Conferma nuova password") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(8.dp))
+            Button(
+                onClick = viewModel::updatePassword,
+                enabled = !uiState.isLoading &&
+                    uiState.oldPassword.isNotBlank() &&
+                    uiState.newPassword.isNotBlank() &&
+                    uiState.confirmNewPassword.isNotBlank(),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (uiState.isLoading) {
+                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                } else {
+                    Text("Aggiorna password")
+                }
+            }
+
+            Spacer(Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(Modifier.height(24.dp))
+
+            // — Condivisione account —
             Text("Condivisione account", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
@@ -132,6 +263,7 @@ fun AccountSettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))
 
+            // — Bias globale —
             Text("Bias globale", style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
             Text(
@@ -160,6 +292,7 @@ fun AccountSettingsScreen(
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))
 
+            // — Azioni account —
             OutlinedButton(
                 onClick = {
                     viewModel.signOut()
@@ -171,6 +304,19 @@ fun AccountSettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text("Esci dall'account")
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Button(
+                onClick = { showDeleteDialog = true },
+                enabled = !uiState.isLoading,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.error,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text("Elimina account")
             }
 
             Spacer(Modifier.height(32.dp))

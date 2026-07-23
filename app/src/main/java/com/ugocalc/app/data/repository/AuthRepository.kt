@@ -52,11 +52,29 @@ class AuthRepository @Inject constructor(
         return result
     }
 
+    suspend fun confirmSignUp(email: String, code: String): AuthResult {
+        return CognitoAuthManager.confirmSignUp(email, code)
+    }
+
     suspend fun signIn(email: String, password: String): AuthResult {
         val result = CognitoAuthManager.signIn(email, password)
         if (result is AuthResult.Success) {
             saveUser(result.user)
         }
+        return result
+    }
+
+    suspend fun updateEmail(newEmail: String): AuthResult {
+        return CognitoAuthManager.updateEmail(newEmail)
+    }
+
+    suspend fun updatePassword(oldPassword: String, newPassword: String): AuthResult {
+        return CognitoAuthManager.updatePassword(oldPassword, newPassword)
+    }
+
+    suspend fun deleteUser(): AuthResult {
+        val result = CognitoAuthManager.deleteUser()
+        if (result is AuthResult.Success) clearUser()
         return result
     }
 
