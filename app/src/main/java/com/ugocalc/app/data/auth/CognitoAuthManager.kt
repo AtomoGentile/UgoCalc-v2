@@ -1,10 +1,12 @@
 package com.ugocalc.app.data.auth
 
 import android.util.Log
+import com.amplifyframework.auth.AuthUserAttributeKey
+import com.amplifyframework.auth.cognito.AWSCognitoAuthSession
+import com.amplifyframework.auth.options.AuthSignUpOptions
 import com.amplifyframework.core.Amplify
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
 
 data class AuthUser(
     val userId: String,
@@ -20,106 +22,87 @@ sealed class AuthResult {
 object CognitoAuthManager {
     private const val TAG = "CognitoAuthManager"
 
-    suspend fun signUp(email: String, password: String): AuthResult = suspendCancellableCoroutine { continuation ->
-        try {
+    suspend fun signUp(email: String, password: String): AuthResult =
+        suspendCancellableCoroutine { cont ->
             Amplify.Auth.signUp(
-                username = email,
-                password = password,
-                options = com.amplifyframework.auth.AuthSignUpOptions.builder()
-                    .userAttribute("email", email)
-                    .build()
-            ).onSuccess { result ->
-                if (result.isSignUpComplete) {
-                    continuation.resume(AuthResult.Success(
-                        AuthUser(
-                            userId = email,
-                            email = email,
-                            accessToken = ""
-                        )
-                    ))
-                } else {
-                    continuation.resume(AuthResult.Error("Confirmation required: ${result.nextStep}"))
+                email,
+                password,
+                AuthSignUpOptions.builder()
+                    .userAttribute(AuthUserAttributeKey.email(), email)
+                    .build(),
+                { result ->
+                    if (result.isSignUpComplete) {
+                        cont.resume(AuthResult.Success(AuthUser(email, email, "")))
+                    } else {
+                        cont.resume(AuthResult.Error("Verifica email richiesta"))
+                    }
+                },
+                { error ->
+                    Log.e(TAG, "signUp error", error)
+                    cont.resume(AuthResult.Error(error.message ?: "Registrazione fallita"))
                 }
-            }.onError { error ->
-                continuation.resume(AuthResult.Error("Sign up failed: ${error.message}"))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "signUp exception", e)
-            continuation.resumeWithException(e)
+            )
         }
-    }
 
-    suspend fun signIn(email: String, password: String): AuthResult = suspendCancellableCoroutine { continuation ->
-        try {
+    suspend fun signIn(email: String, password: String): AuthResult =
+        suspendCancellableCoroutine { cont ->
             Amplify.Auth.signIn(
-                username = email,
-                password = password
-            ).onSuccess {
-                fetchCurrentUserWithToken { user, token ->
-                    continuation.resume(AuthResult.Success(
-                        AuthUser(
-                            userId = user,
-                            email = email,
-                            accessToken = token
-                        )
-                    ))
+                email,
+                password,
+                { _ ->
+                    Amplify.Auth.getCurrentUser(
+                        { amplifyUser ->
+                            Amplify.Auth.fetchAuthSession(
+                                { session ->
+                                    val token = extractToken(session)
+                                    cont.resume(AuthResult.Success(
+                                        AuthUser(amplifyUser.userId, amplifyUser.username, token)
+                                    ))
+                                },
+                                { _ ->
+                                    cont.resume(AuthResult.Success(AuthUser(email, email, "")))
+                                }
+                            )
+                        },
+                        { _ -> cont.resume(AuthResult.Success(AuthUser(email, email, ""))) }
+                    )
+                },
+                { error ->
+                    Log.e(TAG, "signIn error", error)
+                    cont.resume(AuthResult.Error(error.message ?: "Accesso fallito"))
                 }
-            }.onError { error ->
-                continuation.resume(AuthResult.Error("Sign in failed: ${error.message}"))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "signIn exception", e)
-            continuation.resumeWithException(e)
+            )
         }
-    }
 
-    suspend fun getCurrentUser(): AuthUser? = suspendCancellableCoroutine { continuation ->
-        try {
-            Amplify.Auth.getCurrentUser { user ->
-                Amplify.Auth.fetchAuthSession { session ->
-                    val accessToken = session.userPoolTokens?.accessToken ?: ""
-                    continuation.resume(AuthUser(
-                        userId = user.userId,
-                        email = user.username,
-                        accessToken = accessToken
-                    ))
-                }.onError {
-                    continuation.resume(null)
-                }
-            }.onError {
-                continuation.resume(null)
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "getCurrentUser exception", e)
-            continuation.resumeWithException(e)
+    suspend fun getCurrentUser(): AuthUser? =
+        suspendCancellableCoroutine { cont ->
+            Amplify.Auth.getCurrentUser(
+                { amplifyUser ->
+                    Amplify.Auth.fetchAuthSession(
+                        { session ->
+                            val token = extractToken(session)
+                            cont.resume(AuthUser(amplifyUser.userId, amplifyUser.username, token))
+                        },
+                        { _ ->
+                            cont.resume(AuthUser(amplifyUser.userId, amplifyUser.username, ""))
+                        }
+                    )
+                },
+                { _ -> cont.resume(null) }
+            )
         }
-    }
 
-    suspend fun signOut(): AuthResult = suspendCancellableCoroutine { continuation ->
-        try {
-            Amplify.Auth.signOut().onSuccess {
-                continuation.resume(AuthResult.Success(
-                    AuthUser(userId = "", email = "", accessToken = "")
-                ))
-            }.onError { error ->
-                continuation.resume(AuthResult.Error("Sign out failed: ${error.message}"))
+    suspend fun signOut(): AuthResult =
+        suspendCancellableCoroutine { cont ->
+            Amplify.Auth.signOut {
+                cont.resume(AuthResult.Success(AuthUser("", "", "")))
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "signOut exception", e)
-            continuation.resumeWithException(e)
         }
-    }
 
-    private fun fetchCurrentUserWithToken(callback: (String, String) -> Unit) {
-        try {
-            Amplify.Auth.getCurrentUser { user ->
-                Amplify.Auth.fetchAuthSession { session ->
-                    val accessToken = session.userPoolTokens?.accessToken ?: ""
-                    callback(user.userId, accessToken)
-                }
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "fetchCurrentUserWithToken error", e)
-        }
+    private fun extractToken(session: com.amplifyframework.auth.AuthSession): String = try {
+        val cognitoSession = session as AWSCognitoAuthSession
+        cognitoSession.userPoolTokensResult.value?.accessToken ?: ""
+    } catch (_: Exception) {
+        ""
     }
 }
