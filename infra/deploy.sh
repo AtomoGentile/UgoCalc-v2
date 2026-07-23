@@ -31,11 +31,18 @@ echo "    Created infra/${ZIP}"
 # 2. Ensure S3 bucket exists
 echo "--- Ensuring S3 bucket ${S3_BUCKET} ---"
 aws s3api head-bucket --bucket "${S3_BUCKET}" --profile "${PROFILE}" 2>/dev/null || \
-  aws s3api create-bucket \
-    --bucket "${S3_BUCKET}" \
-    --region "${REGION}" \
-    --create-bucket-configuration LocationConstraint="${REGION}" \
-    --profile "${PROFILE}"
+  if [ "${REGION}" = "us-east-1" ]; then
+    aws s3api create-bucket \
+      --bucket "${S3_BUCKET}" \
+      --region "${REGION}" \
+      --profile "${PROFILE}"
+  else
+    aws s3api create-bucket \
+      --bucket "${S3_BUCKET}" \
+      --region "${REGION}" \
+      --create-bucket-configuration LocationConstraint="${REGION}" \
+      --profile "${PROFILE}"
+  fi
 aws s3api put-bucket-versioning \
   --bucket "${S3_BUCKET}" \
   --versioning-configuration Status=Enabled \
