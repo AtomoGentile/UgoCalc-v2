@@ -396,27 +396,51 @@ private fun BiasCorrectionDetailScreen(
         } else {
             // Lista categorie con correzioni (incluse vuote)
             val grouped = data as Map<String, List<BiasCorrectionWithUsageStats>>
+            val hasAnyCorrections = grouped.values.any { it.isNotEmpty() }
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                grouped.forEach { (foodCat, items) ->
+                if (!hasAnyCorrections) {
                     item {
-                        Text(
-                            if (items.isEmpty()) "${foodCategoryLabel(foodCat)} (0)" else foodCategoryLabel(foodCat),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
-                            color = if (items.isEmpty()) UgoGrey else MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    if (items.isNotEmpty()) {
-                        items(items.size) { index ->
-                            BiasCorrectionDetailItem(items[index])
-                            if (index < items.size - 1) {
-                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                            }
+                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "Nessuna correzione calcolata ancora",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(bottom = 12.dp),
+                            )
+                            Text(
+                                when (category) {
+                                    "Applicabile" -> "Registra il peso vero di almeno 2-3 analisi per ogni categoria alimentare perché il sistema possa calcolare fattori di correzione affidabili."
+                                    "BiasInstabile" -> "I dati non sono ancora sufficienti per identificare correzioni instabili."
+                                    else -> "Nessun dato disponibile."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = UgoGrey,
+                                textAlign = TextAlign.Center,
+                            )
                         }
                     }
-                    item {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                } else {
+                    grouped.forEach { (foodCat, items) ->
+                        item {
+                            Text(
+                                if (items.isEmpty()) "${foodCategoryLabel(foodCat)} (0)" else foodCategoryLabel(foodCat),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
+                                color = if (items.isEmpty()) UgoGrey else MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                        if (items.isNotEmpty()) {
+                            items(items.size) { index ->
+                                BiasCorrectionDetailItem(items[index])
+                                if (index < items.size - 1) {
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                }
+                            }
+                        }
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
+                        }
                     }
                 }
             }
