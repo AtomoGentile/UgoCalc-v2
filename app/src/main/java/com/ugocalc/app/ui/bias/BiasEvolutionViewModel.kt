@@ -67,8 +67,12 @@ class BiasEvolutionViewModel @Inject constructor(
     ) { settings, corrections, allV2, selectedModel, displayLimit ->
         val enabledModelIds = settings.shadowModelIds.takeIf { it.isNotEmpty() }
             ?: settings.preferredModelIds
-        val availableModelIds = allV2.map { it.aiModelId }.distinct().sorted()
-            .filter { it in enabledModelIds }
+        val availableModelIds = if (enabledModelIds.isNotEmpty()) {
+            allV2.map { it.aiModelId }.distinct().sorted()
+                .filter { it in enabledModelIds }
+        } else {
+            allV2.map { it.aiModelId }.distinct().sorted()
+        }
         val effectiveSelectedModel = selectedModel ?: availableModelIds.firstOrNull()
 
         val filteredCorrections = if (effectiveSelectedModel != null) {
