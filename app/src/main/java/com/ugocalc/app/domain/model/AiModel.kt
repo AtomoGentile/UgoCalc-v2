@@ -65,7 +65,23 @@ object AiModelCatalog {
         ),
     )
 
-    val ALL get() = STATIC + BEDROCK_MANTLE_OPTIONS + BEDROCK_IAM_OPTIONS
+    val ALL: List<AiModel> get() {
+        val mantleById = BEDROCK_MANTLE_OPTIONS.associateBy { it.id }
+        val iamById = BEDROCK_IAM_OPTIONS.associateBy { it.id }
+        val allBedrockIds = (mantleById.keys + iamById.keys).distinct()
+        val bedrock = allBedrockIds.map { id ->
+            val inMantle = mantleById[id] != null
+            val inIam = iamById[id] != null
+            val base = iamById[id] ?: mantleById[id]!!
+            val subtitle = when {
+                inMantle && inIam -> "Bedrock Mantle · IAM"
+                inIam -> "Bedrock IAM"
+                else -> "Bedrock Mantle"
+            }
+            base.copy(subtitle = subtitle)
+        }
+        return STATIC + bedrock
+    }
 
     private var bedrockModels: List<AiModel> = emptyList()
     private var iamModels: List<AiModel> = emptyList()
