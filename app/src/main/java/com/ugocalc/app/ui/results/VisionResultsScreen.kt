@@ -103,6 +103,17 @@ fun VisionResultsScreen(
                         ) { Text("Ambiguità risolte (${uiState.v2AmbiguitaRisolte.size})") }
                     }
 
+                    if (uiState.shadowV2Results.isNotEmpty()) {
+                        Button(
+                            onClick = onNavigateToV2Details,
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        ) { Text("Vedi V2 (${uiState.shadowV2Results.size})") }
+                    }
+
                     Button(
                         onClick = { viewModel.receiveCho() },
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

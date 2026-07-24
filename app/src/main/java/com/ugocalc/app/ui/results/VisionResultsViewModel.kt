@@ -26,6 +26,7 @@ data class VisionResultsUiState(
     val matchingDone: Boolean = false,
     val usingV2Engine: Boolean = false,
     val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
+    val shadowV2Results: Map<String, AnalysisSessionStore.V2ShadowResult> = emptyMap(),
 ) {
     val allFailed: Boolean get() = outcomes.isNotEmpty() && outcomes.all { it is ModelVisionOutcome.Failure }
     val successfulOutcomes: List<ModelVisionOutcome.Success> get() = outcomes.filterIsInstance<ModelVisionOutcome.Success>()
@@ -44,15 +45,16 @@ class VisionResultsViewModel @Inject constructor(
 
     init {
         sessionStore.session
-            .map { s -> listOf(s.visionOutcomes, s.referenceModelId, s.usingV2Engine, s.v2AmbiguitaRisolte) }
+            .map { s -> listOf(s.visionOutcomes, s.referenceModelId, s.usingV2Engine, s.v2AmbiguitaRisolte, s.shadowV2Results) }
             .distinctUntilChanged()
-            .onEach { (outcomes, referenceModelId, usingV2Engine, v2Ambiguita) ->
+            .onEach { (outcomes, referenceModelId, usingV2Engine, v2Ambiguita, shadowResults) ->
                 @Suppress("UNCHECKED_CAST")
                 _uiState.value = _uiState.value.copy(
                     outcomes = outcomes as List<ModelVisionOutcome>,
                     referenceModelId = referenceModelId as String?,
                     usingV2Engine = usingV2Engine as Boolean,
                     v2AmbiguitaRisolte = v2Ambiguita as List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>,
+                    shadowV2Results = shadowResults as Map<String, AnalysisSessionStore.V2ShadowResult>,
                 )
             }.launchIn(viewModelScope)
     }

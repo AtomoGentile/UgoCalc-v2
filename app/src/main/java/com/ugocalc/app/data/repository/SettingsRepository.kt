@@ -41,6 +41,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setLastSeenVersionCode(versionCode: Int) = dataStore.setLastSeenVersionCode(versionCode)
     suspend fun setBiasDataConsentGiven(given: Boolean) = dataStore.setBiasDataConsentGiven(given)
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) = dataStore.setV2ShadowModeEnabled(enabled)
+    suspend fun setShadowModelIds(ids: Set<String>) = dataStore.setShadowModelIds(ids)
     suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) = dataStore.setV2VisibleModeEnabled(enabled)
     suspend fun setGlobalBiasEnabled(enabled: Boolean) = dataStore.setGlobalBiasEnabled(enabled)
@@ -61,11 +62,21 @@ class SettingsRepository @Inject constructor(
     fun getBedrockAvailableModels(): List<String> = apiKeyStore.getBedrockAvailableModels()
     fun setBedrockAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockAvailableModels(modelIds)
 
+    // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
+    fun getBedrockIamAccessKey(): String? = apiKeyStore.getBedrockIamAccessKey()
+    fun getBedrockIamSecretKey(): String? = apiKeyStore.getBedrockIamSecretKey()
+    fun getBedrockIamRegion(): String = apiKeyStore.getBedrockIamRegion()
+    fun setBedrockIamCredentials(accessKey: String, secretKey: String, region: String) =
+        apiKeyStore.setBedrockIamCredentials(accessKey, secretKey, region)
+    fun clearBedrockIamCredentials() = apiKeyStore.clearBedrockIamCredentials()
+    fun hasBedrockIamCredentials(): Boolean = apiKeyStore.hasBedrockIamCredentials()
+
     /** Resetta tutte le impostazioni ai valori di default e rimuove le API key salvate. */
     suspend fun resetAll() {
         dataStore.clearAll()
         AiProviderType.entries.forEach { apiKeyStore.clearApiKey(it) }
         apiKeyStore.clearBedrockCredentials()
+        apiKeyStore.clearBedrockIamCredentials()
     }
 }
 

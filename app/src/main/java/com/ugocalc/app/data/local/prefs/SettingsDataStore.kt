@@ -71,6 +71,8 @@ data class UserSettings(
      * mostrata. Falso di default.
      */
     val v2ShadowModeEnabled: Boolean = false,
+    /** Modelli specifici da testare in shadow mode (quando [v2ShadowModeEnabled] è true). Se vuoto, usa il modello di riferimento come V1. */
+    val shadowModelIds: Set<String> = emptySet(),
     /**
      * Modalità Casa/Ristorante attiva a livello di app (§ richiesta utente, icona in topAppBar
      * Homepage): pilota sia l'icona mostrata sia quale set di colori personalizzati viene applicato
@@ -116,6 +118,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val LAST_SEEN_VERSION_CODE = intPreferencesKey("last_seen_version_code")
         val BIAS_DATA_CONSENT_GIVEN = booleanPreferencesKey("bias_data_consent_given")
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
+        val SHADOW_MODEL_IDS = stringSetPreferencesKey("shadow_model_ids")
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
         val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
         val GLOBAL_BIAS_ENABLED = booleanPreferencesKey("global_bias_enabled")
@@ -147,6 +150,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             lastSeenVersionCode = prefs[Keys.LAST_SEEN_VERSION_CODE] ?: 0,
             biasDataConsentGiven = prefs[Keys.BIAS_DATA_CONSENT_GIVEN] ?: false,
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
+            shadowModelIds = prefs[Keys.SHADOW_MODEL_IDS] ?: emptySet(),
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
             v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
             globalBiasEnabled = prefs[Keys.GLOBAL_BIAS_ENABLED] ?: false,
@@ -215,6 +219,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.BIAS_DATA_CONSENT_GIVEN] = given }
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.V2_SHADOW_MODE_ENABLED] = enabled }
+    suspend fun setShadowModelIds(ids: Set<String>) =
+        context.dataStore.edit { it[Keys.SHADOW_MODEL_IDS] = ids }
     suspend fun setActiveSessionMode(mode: SessionMode) =
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) =

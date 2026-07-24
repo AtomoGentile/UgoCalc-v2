@@ -291,46 +291,64 @@ class CameraCaptureViewModel @Inject constructor(
      * ha già salvato la stima V1 sulle stesse foto.
      */
     private fun runV2ShadowAnalysisIfEnabled(capturedPhotos: List<CapturedPhoto>, models: List<AiModel>) {
-        val model = models.firstOrNull() ?: return
         val sessionId = sessionStore.session.value.sessionId
         shadowScope.launch {
-            if (!settingsRepository.settings.first().v2ShadowModeEnabled) return@launch
+            val settings = settingsRepository.settings.first()
+            if (!settings.v2ShadowModeEnabled) return@launch
             val sessionMode = sessionStore.session.value.sessionMode
-            val outcome = runCatching {
-                val photos = capturedPhotos.mapIndexed { index, photo ->
-                    val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
-                    val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
-                        extractCameraMetadata(photo.bytes),
-                        context
-                    )
-                    SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
+            val shadowModelIds = if (settings.shadowModelIds.isNotEmpty()) settings.shadowModelIds else setOf(models.firstOrNull()?.id ?: return@launch)
+            val shadowModels = models.filter { it.id in shadowModelIds }
+            if (shadowModels.isEmpty()) return@launch
+            for (model in shadowModels) {
+                val outcome = runCatching {
+                    val photos = capturedPhotos.mapIndexed { index, photo ->
+                        val motion = gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                        val cameraMetadata = CameraMetadataHelper.enrichWithPhysicalSize(
+                            extractCameraMetadata(photo.bytes),
+                            context
+                        )
+                        SessionPhoto(computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, buildAngleDescription(photo)), photo.bytes)
+                    }
+                    val selectedIds = sessionStore.session.value.selectedCalibrationIds
+                    val calibrations = if (selectedIds.isEmpty()) null else {
+                        scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
+                    }
+                    v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
                 }
-                val selectedIds = sessionStore.session.value.selectedCalibrationIds
-                val calibrations = if (selectedIds.isEmpty()) null else {
-                    scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
-                }
-                v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations)
-            }
-            when {
-                outcome.isFailure -> {
-                    val msg = outcome.exceptionOrNull()?.message ?: "errore sconosciuto"
-                    Log.e("V2Shadow", "Pipeline exception in shadow mode: $msg", outcome.exceptionOrNull())
-                    telemetryRepository.recordFailure("Eccezione: $msg", model, sessionMode, sessionId)
-                }
-                outcome.getOrNull() is PipelineOutcome.Verificato -> {
-                    val verificato = outcome.getOrNull() as PipelineOutcome.Verificato
-                    if (verificato.telemetryId >= 0) benchmarkRepository.linkV2Record(sessionId, verificato.telemetryId)
-                }
-                outcome.getOrNull() is PipelineOutcome.NessunaFotoValida -> {
-                    telemetryRepository.recordFailure("NessunaFotoValida", model, sessionMode, sessionId)
-                }
-                outcome.getOrNull() is PipelineOutcome.FallbackAV1 -> {
-                    val motivo = (outcome.getOrNull() as PipelineOutcome.FallbackAV1).motivo
-                    telemetryRepository.recordFailure("FallbackAV1: $motivo", model, sessionMode, sessionId)
-                }
-                outcome.getOrNull() is PipelineOutcome.SchemaNonSupportato -> {
-                    val s = outcome.getOrNull() as PipelineOutcome.SchemaNonSupportato
-                    telemetryRepository.recordFailure("SchemaNonSupportato: trovata v${s.trovata} attesa v${s.attesa}", model, sessionMode, sessionId)
+                when {
+                    outcome.isFailure -> {
+                        val msg = outcome.exceptionOrNull()?.message ?: "errore sconosciuto"
+                        Log.e("V2Shadow", "Pipeline exception for ${model.displayName}: $msg", outcome.exceptionOrNull())
+                        telemetryRepository.recordFailure("Eccezione: $msg", model, sessionMode, sessionId)
+                        sessionStore.setShadowV2Result(model, AnalysisSessionStore.PipelineOutcomeForShadow.Failure("Eccezione: $msg"))
+                    }
+                    outcome.getOrNull() is PipelineOutcome.Verificato -> {
+                        val verificato = outcome.getOrNull() as PipelineOutcome.Verificato
+                        if (verificato.telemetryId >= 0) benchmarkRepository.linkV2Record(sessionId, verificato.telemetryId)
+                        sessionStore.setShadowV2Result(
+                            model,
+                            AnalysisSessionStore.PipelineOutcomeForShadow.Success(
+                                visionOutcome = verificato.toModelVisionSuccess(model),
+                                totals = verificato.toAnalysisTotals(),
+                                stime = verificato.stime,
+                                ambiguita = verificato.verifica.ambiguitaRisolta
+                            )
+                        )
+                    }
+                    outcome.getOrNull() is PipelineOutcome.NessunaFotoValida -> {
+                        telemetryRepository.recordFailure("NessunaFotoValida", model, sessionMode, sessionId)
+                        sessionStore.setShadowV2Result(model, AnalysisSessionStore.PipelineOutcomeForShadow.Failure("NessunaFotoValida"))
+                    }
+                    outcome.getOrNull() is PipelineOutcome.FallbackAV1 -> {
+                        val motivo = (outcome.getOrNull() as PipelineOutcome.FallbackAV1).motivo
+                        telemetryRepository.recordFailure("FallbackAV1: $motivo", model, sessionMode, sessionId)
+                        sessionStore.setShadowV2Result(model, AnalysisSessionStore.PipelineOutcomeForShadow.Failure("FallbackAV1: $motivo"))
+                    }
+                    outcome.getOrNull() is PipelineOutcome.SchemaNonSupportato -> {
+                        val s = outcome.getOrNull() as PipelineOutcome.SchemaNonSupportato
+                        telemetryRepository.recordFailure("SchemaNonSupportato: trovata v${s.trovata} attesa v${s.attesa}", model, sessionMode, sessionId)
+                        sessionStore.setShadowV2Result(model, AnalysisSessionStore.PipelineOutcomeForShadow.Failure("SchemaNonSupportato"))
+                    }
                 }
             }
         }

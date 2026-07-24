@@ -9,6 +9,7 @@ import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.domain.model.AiProviderType
+import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,6 +20,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.runBlocking
+import com.ugocalc.app.domain.model.AiModel
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -43,6 +46,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val historyRepository: HistoryRepository,
     tableRepository: TableRepository,
+    private val connectivityObserver: ConnectivityObserver,
     @Named("no_auth") private val httpClient: OkHttpClient,
 ) : ViewModel() {
 
@@ -74,6 +78,12 @@ class SettingsViewModel @Inject constructor(
         val current = state.value.userSettings.preferredModelIds
         val updated = if (id in current) current - id else current + id
         settingsRepository.setPreferredModelIds(updated)
+    }
+    /** Aggiunge/rimuove un modello dalla shadow mode (testing V2). */
+    fun toggleShadowModel(id: String) = viewModelScope.launch {
+        val current = state.value.userSettings.shadowModelIds
+        val updated = if (id in current) current - id else current + id
+        settingsRepository.setShadowModelIds(updated)
     }
     fun setConfidenceIndicatorEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setConfidenceIndicatorEnabled(enabled) }
     fun setConfidenceAlertThresholdPercent(percent: Int) = viewModelScope.launch { settingsRepository.setConfidenceAlertThresholdPercent(percent) }
@@ -133,9 +143,98 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
+
+    private val _bedrockIamTestResult = MutableStateFlow<BedrockTestResult>(BedrockTestResult.Idle)
+    val bedrockIamTestResult: StateFlow<BedrockTestResult> = _bedrockIamTestResult.asStateFlow()
+
+    fun getBedrockIamAccessKey(): String = settingsRepository.getBedrockIamAccessKey().orEmpty()
+    fun getBedrockIamSecretKey(): String = settingsRepository.getBedrockIamSecretKey().orEmpty()
+    fun getBedrockIamRegion(): String = settingsRepository.getBedrockIamRegion()
+
+    fun setBedrockIamCredentials(accessKey: String, secretKey: String, region: String) {
+        if (accessKey.isBlank() || secretKey.isBlank()) {
+            settingsRepository.clearBedrockIamCredentials()
+        } else {
+            settingsRepository.setBedrockIamCredentials(accessKey, secretKey, region)
+        }
+    }
+
+    fun testBedrockIamConnection(accessKey: String, secretKey: String, region: String) {
+        if (accessKey.isBlank() || secretKey.isBlank()) {
+            _bedrockIamTestResult.value = BedrockTestResult.Error("Inserisci Access Key e Secret Key")
+            return
+        }
+        _bedrockIamTestResult.value = BedrockTestResult.Loading
+        viewModelScope.launch {
+            _bedrockIamTestResult.value = try {
+                withContext(Dispatchers.IO) {
+                    val modelId = "anthropic.claude-sonnet-5-20251001-v1:0"
+                    val bodyStr = """{"anthropic_version":"bedrock-2023-05-31","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}"""
+                    val bodyBytes = bodyStr.toByteArray()
+                    val encodedModelId = java.net.URLEncoder.encode(modelId, "UTF-8")
+                    val url = "https://bedrock-runtime.$region.amazonaws.com/model/$encodedModelId/invoke"
+                    val baseRequest = okhttp3.Request.Builder()
+                        .url(url)
+                        .header("Content-Type", "application/json")
+                        .post(bodyBytes.toRequestBody("application/json".toMediaType()))
+                        .build()
+                    val signedRequest = com.ugocalc.app.data.remote.ai.client.AwsSigV4Signer.sign(
+                        baseRequest, accessKey, secretKey, region, bodyBytes
+                    )
+                    httpClient.newCall(signedRequest).execute().use { response ->
+                        if (response.isSuccessful || response.code == 400) {
+                            BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
+                        } else {
+                            BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                BedrockTestResult.Error(e.message ?: "Errore di rete sconosciuto")
+            }
+        }
+    }
+
+    // ── Bedrock Mantle model picker ────────────────────────────────────────────
+
+    /** true quando va mostrato il dialog di selezione modelli Bedrock. */
+    private val _showBedrockModelPicker = MutableStateFlow(false)
+    val showBedrockModelPicker: StateFlow<Boolean> = _showBedrockModelPicker.asStateFlow()
+
+    /** ID dei modelli Bedrock abilitati (quelli che compaiono in "Analizza"). */
+    private val _enabledBedrockModelIds = MutableStateFlow(
+        settingsRepository.getBedrockAvailableModels().toSet()
+    )
+    val enabledBedrockModelIds: StateFlow<Set<String>> = _enabledBedrockModelIds.asStateFlow()
+
+    fun openBedrockModelPicker() { _showBedrockModelPicker.value = true }
+    fun dismissBedrockModelPicker() { _showBedrockModelPicker.value = false }
+
+    fun saveBedrockEnabledModels(ids: Set<String>) {
+        settingsRepository.setBedrockAvailableModels(ids.toList())
+        AiModelCatalog.setBedrockModels(ids.toList())
+        _enabledBedrockModelIds.value = ids
+        _showBedrockModelPicker.value = false
+    }
+
     fun clearHistory() = viewModelScope.launch { historyRepository.clearHistory() }
 
     fun resetAllSettings() = viewModelScope.launch { settingsRepository.resetAll() }
 
-    val availableModels = AiModelCatalog.ALL
+    val availableModels: List<AiModel> by lazy {
+        runBlocking {
+            val isOffline = !connectivityObserver.isOnlineNow()
+            AiModelCatalog.ALL.filter { model ->
+                if (isOffline) false
+                else when (model.provider) {
+                    AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT ->
+                        settingsRepository.hasBedrockCredentials()
+                    AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT ->
+                        settingsRepository.hasBedrockIamCredentials()
+                    else -> settingsRepository.getApiKey(model.provider) != null
+                }
+            }
+        }
+    }
 }

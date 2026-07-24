@@ -44,11 +44,28 @@ class AnalysisSessionStore @Inject constructor() {
         val selectedCalibrationIds: Set<Long> = emptySet(),
         /** Risoluzioni di ambiguità effettuate da M4 (§13 punto 2). */
         val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
+        /** Risultati V2 della shadow mode per testing (uno per modello testato): vuoto se la shadow è ancora in esecuzione o disabilitata. */
+        val shadowV2Results: Map<String, V2ShadowResult> = emptyMap(),
         /** Alimento trovato dallo scanner codici a barre (§ richiesta utente), in attesa che ManualFoodEntryScreen lo raccolga. */
         val pendingManualEntry: NormalizedFoodEntry? = null,
         /** Righe già quantificate, in attesa che ManualFoodEntryScreen le carichi direttamente nel passo Quantità (§ richiesta utente: preferiti che riaprono la modifica quantità). */
         val pendingManualRows: List<PendingManualRow>? = null,
     )
+
+    data class V2ShadowResult(
+        val model: AiModel,
+        val outcome: PipelineOutcomeForShadow,
+    )
+
+    sealed class PipelineOutcomeForShadow {
+        data class Success(
+            val visionOutcome: ModelVisionOutcome.Success,
+            val totals: AnalysisTotals,
+            val stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
+            val ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>,
+        ) : PipelineOutcomeForShadow()
+        data class Failure(val reason: String) : PipelineOutcomeForShadow()
+    }
 
     private val _session = MutableStateFlow(Session())
     val session: StateFlow<Session> = _session
@@ -93,6 +110,12 @@ class AnalysisSessionStore @Inject constructor() {
         )
     }
 
+    fun setShadowV2Result(model: AiModel, result: PipelineOutcomeForShadow) {
+        _session.update { current ->
+            current.copy(shadowV2Results = current.shadowV2Results + (model.id to V2ShadowResult(model, result)))
+        }
+    }
+
     fun reset() { _session.update { Session() } }
 
     fun setPendingManualEntry(entry: NormalizedFoodEntry) = _session.update { it.copy(pendingManualEntry = entry) }
@@ -115,6 +138,6 @@ class AnalysisSessionStore @Inject constructor() {
 
     /** Riprova l'analisi (§2.4 punto 4) mantenendo gli stessi modelli selezionati, per ri-scattare le foto. */
     fun resetForRetry() = _session.update {
-        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList())
+        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList(), shadowV2Results = emptyMap())
     }
 }
