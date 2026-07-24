@@ -11,6 +11,8 @@ import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -33,25 +35,32 @@ class ModelSelectionViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val isOffline = !connectivityObserver.isOnlineNow()
-            // §2.4 punto 1: senza connessione nessun provider cloud è raggiungibile.
-            val models = AiModelCatalog.ALL.filter { model ->
+            val allAvailable = AiModelCatalog.ALL.filter { model ->
                 if (isOffline) false
-                else if (model.provider == AiProviderType.BEDROCK_CLAUDE || model.provider == AiProviderType.BEDROCK_GPT) {
-                    settingsRepository.hasBedrockCredentials()
-                } else {
-                    settingsRepository.getApiKey(model.provider) != null
+                else when (model.provider) {
+                    AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT ->
+                        settingsRepository.hasBedrockCredentials()
+                    AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT ->
+                        settingsRepository.hasBedrockIamCredentials()
+                    else -> settingsRepository.getApiKey(model.provider) != null
                 }
             }
 
-            val settings = settingsRepository.settings
-            settings.collect { userSettings ->
-                val preselected = userSettings.preferredModelIds
-                _uiState.value = _uiState.value.copy(
-                    availableModels = models,
-                    isOffline = isOffline,
-                    selectedModelIds = if (_uiState.value.selectedModelIds.isEmpty()) preselected else _uiState.value.selectedModelIds,
-                )
-            }
+            settingsRepository.settings
+                .onEach { userSettings ->
+                    val enabledModelIds = userSettings.preferredModelIds
+                    val models = if (enabledModelIds.isEmpty()) {
+                        allAvailable
+                    } else {
+                        allAvailable.filter { it.id in enabledModelIds }
+                    }
+                    _uiState.value = _uiState.value.copy(
+                        availableModels = models,
+                        isOffline = isOffline,
+                        selectedModelIds = if (_uiState.value.selectedModelIds.isEmpty()) enabledModelIds else _uiState.value.selectedModelIds,
+                    )
+                }
+                .launchIn(viewModelScope)
         }
     }
 
