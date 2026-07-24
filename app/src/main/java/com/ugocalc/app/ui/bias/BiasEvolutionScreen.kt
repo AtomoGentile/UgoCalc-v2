@@ -1,14 +1,19 @@
 package com.ugocalc.app.ui.bias
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -17,17 +22,19 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.ugocalc.app.data.repository.BiasCorrectionUsageStats
 import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
@@ -58,6 +65,8 @@ fun BiasEvolutionScreen(
     val uiState by viewModel.uiState.collectAsState()
     val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
     val dayDateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
+
+    var showBiasDetailDialog by remember { mutableStateOf(false) }
 
     Scaffold(topBar = { TopAppBar(title = { Text("BIAS ed evoluzione del comportamento") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -149,21 +158,10 @@ fun BiasEvolutionScreen(
                 }
                 HorizontalDivider()
             }
+            // Summary delle correzioni BIAS
             if (uiState.corrections.isNotEmpty()) {
-                item(key = "fattori_appresi_header") {
-                    Text(
-                        "Fattori appresi",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp),
-                    )
-                }
-                items(
-                    items = uiState.corrections,
-                    key = { "${it.correction.strategy}_${it.correction.aiModelId}_${it.correction.foodCategory}" },
-                    contentType = { "bias_correction" }
-                ) { correction ->
-                    BiasCorrectionRow(correction, dayDateFormat)
-                    HorizontalDivider()
+                item(key = "bias_summary") {
+                    BiasSummaryHeader(uiState.corrections, onClickDetails = { showBiasDetailDialog = true })
                 }
             } else if (!uiState.loading) {
                 item {
@@ -176,179 +174,27 @@ fun BiasEvolutionScreen(
                 }
             }
 
+            // Dropdown Ultime analisi
             if (uiState.recentV2Records.isNotEmpty()) {
-                item(key = "recent_v2_header") {
-                    Text(
-                        "Ultime analisi V2",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
+                item(key = "recent_v2_dropdown") {
+                    UltimeAnalisiDropdown(
+                        records = uiState.recentV2Records,
+                        onOpenV2Details = onOpenV2Details,
+                        onDelete = { viewModel.deleteRecord(it) },
+                        dateFormat = fullDateFormat
                     )
-                }
-                items(
-                    items = uiState.recentV2Records,
-                    key = { it.id },
-                    contentType = { "v2_record" }
-                ) { record ->
-                    V2RecordSummaryRow(record, onOpenV2Details, onDelete = { viewModel.deleteRecord(record.id) }, fullDateFormat)
-                    HorizontalDivider()
                 }
             }
         }
     }
-}
 
-@Composable
-private fun V2RecordSummaryRow(
-    record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity,
-    onClick: (Long) -> Unit,
-    onDelete: () -> Unit,
-    dateFormat: SimpleDateFormat,
-) {
-    val failed = record.failureReason != null
-    Card(
-        onClick = { if (!failed) onClick(record.id) },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    "${dateFormat.format(Date(record.analyzedAtEpochMillis))} - ${record.sessionMode}",
-                    fontWeight = FontWeight.Bold,
-                    color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    "Modello: ${record.aiModelId}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = UgoGrey,
-                )
-                if (failed) {
-                    Text(
-                        "Non completata: ${record.failureReason}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                } else {
-                    Text(
-                        "Tocca per vedere il dettaglio tecnico e il ragionamento AI",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                    )
-                }
-            }
-            androidx.compose.material3.IconButton(onClick = onDelete) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.Default.Delete,
-                    contentDescription = "Elimina",
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun BiasCorrectionRow(row: BiasCorrectionWithUsageStats, dateFormat: SimpleDateFormat) {
-    val correction = row.correction
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(
-                "${foodCategoryLabel(correction.foodCategory)} (${strategyLabel(correction.strategy)})",
-                fontWeight = FontWeight.Bold,
-            )
-            Text("Modello: ${correction.aiModelId}", style = MaterialTheme.typography.bodySmall)
-
-            when (val result = row.calculationResult) {
-                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile -> {
-                    Text(
-                        "Fattore ${formatFactor(correction.factor)}x su ${correction.sampleCount} correzioni - aggiornato il ${dateFormat.format(Date(correction.updatedAtEpochMillis))}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                }
-                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti -> {
-                    Text(
-                        "STATO: CORREZIONE NON ATTIVA (Dati insufficienti)",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = UgoGrey,
-                    )
-                    Text(
-                        "Campione: ${result.campione}/${com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SAMPLE_COUNT} necessari. Il sistema inizierà a correggere questo segmento solo dopo aver raccolto abbastanza pesi veri.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = UgoGrey,
-                    )
-                }
-                is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile -> {
-                    Text(
-                        "STATO: CORREZIONE DISATTIVATA (Bias instabile)",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                    Text(
-                        "Concordanza: ${(result.concordanza * 100).toInt()}% (minimo ${(com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SIGN_AGREEMENT * 100).toInt()}%). " +
-                                "Gli errori in questo segmento non hanno una direzione costante (alcuni sovrastevano, altri sottostimavano), quindi un fattore fisso peggiorerebbe la precisione.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-
-            // Sotto questa soglia il fattore è comunque "Applicabile" per il calcolatore (§8), ma un
-            // campione così piccolo per una categoria specifica può anche segnalare che il
-            // riconoscimento AI la incontra raramente — un avviso utile, non solo una statistica.
-            if (row.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile && correction.sampleCount < LOW_SAMPLE_WARNING_THRESHOLD) {
-                Text(
-                    "Campione ridotto per questa categoria (${correction.sampleCount} osservazioni): il fattore potrebbe non essere ancora affidabile.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            row.usageStats?.let { stats ->
-                BiasUsageStatsBlock(stats)
-            }
-        }
-    }
-}
-
-@Composable
-private fun BiasUsageStatsBlock(stats: BiasCorrectionUsageStats) {
-    Column(modifier = Modifier.padding(top = 8.dp)) {
-        Text(
-            "Statistiche d'uso (${stats.observationCount} osservazioni)",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Text(
-            "Pesi medi: stimato ${formatGrams(stats.meanEstimatedWeightG)} -> corretto ${formatGrams(stats.meanCorrectedWeightG)} (vero ${formatGrams(stats.meanGroundTruthWeightG)})",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            "Correzione stimata: ${formatSignedGrams(stats.meanAppliedCorrectionG)} per alimento",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            "Errore medio: ${formatSignedGrams(stats.meanErrorG)} - MAE ${formatGrams(stats.meanAbsoluteErrorG)}",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            "Errore quadratico medio: ${formatNumber(stats.meanSquaredErrorG2)} g^2 - RMSE ${formatGrams(stats.rootMeanSquaredErrorG)}",
-            style = MaterialTheme.typography.bodySmall,
-        )
-        Text(
-            "Dopo correzione stimata: errore medio ${formatSignedGrams(stats.correctedMeanErrorG)} - MAE ${formatGrams(stats.correctedMeanAbsoluteErrorG)} - RMSE ${formatGrams(stats.correctedRootMeanSquaredErrorG)}",
-            style = MaterialTheme.typography.bodySmall,
-            color = UgoGrey,
+    if (showBiasDetailDialog) {
+        BiasCorrectionDetailDialog(
+            corrections = uiState.corrections,
+            onDismiss = { showBiasDetailDialog = false }
         )
     }
 }
-
-/** Soglia puramente informativa in UI (§14): ben sopra il minimo di [com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SAMPLE_COUNT] richiesto per calcolare un fattore, per segnalare quando una categoria resta comunque poco osservata. */
-private const val LOW_SAMPLE_WARNING_THRESHOLD = 10
 
 private fun formatFactor(value: Double) = String.format(Locale.ITALIAN, "%.2f", value)
 
@@ -394,3 +240,255 @@ private fun foodCategoryLabel(raw: String) = when (raw) {
     "ALTRO_BLOCCO" -> "Altro blocco"
     else -> raw
 }
+
+@Composable
+private fun BiasCorrectionDetailDialog(
+    corrections: List<BiasCorrectionWithUsageStats>,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Dettagli correzioni BIAS") },
+        text = {
+            LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                items(corrections.size) { index ->
+                    val correction = corrections[index]
+                    BiasCorrectionDetailItem(correction)
+                    if (index < corrections.size - 1) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Chiudi")
+            }
+        },
+        modifier = Modifier.fillMaxWidth(0.9f),
+    )
+}
+
+@Composable
+private fun BiasCorrectionDetailItem(row: BiasCorrectionWithUsageStats) {
+    val correction = row.correction
+    Column(modifier = Modifier.padding(8.dp)) {
+        Text(
+            "${foodCategoryLabel(correction.foodCategory)} (${strategyLabel(correction.strategy)})",
+            fontWeight = FontWeight.Bold,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        Text(
+            "Modello: ${correction.aiModelId}",
+            style = MaterialTheme.typography.bodySmall,
+            color = UgoGrey,
+        )
+
+        when (val result = row.calculationResult) {
+            is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile -> {
+                Text(
+                    "✓ ATTIVO — Fattore ${formatFactor(correction.factor)}x",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Text(
+                    "Su ${correction.sampleCount} correzioni",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = UgoGrey,
+                )
+            }
+            is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile -> {
+                Text(
+                    "✗ INSTABILE — Concordanza ${(result.concordanza * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+                Text(
+                    "Minimo richiesto: ${(com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SIGN_AGREEMENT * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = UgoGrey,
+                )
+            }
+            is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti -> {
+                Text(
+                    "⊘ INSUFFICIENTE — ${result.campione}/${com.ugocalc.app.domain.inference.m8.BiasCorrectionCalculator.MIN_SAMPLE_COUNT}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = UgoGrey,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+
+        row.usageStats?.let { stats ->
+            Column(modifier = Modifier.padding(top = 8.dp)) {
+                Text(
+                    "Statistiche: ${stats.observationCount} osservazioni",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = UgoGrey,
+                )
+                Text(
+                    "Errore: MAE ${formatGrams(stats.meanAbsoluteErrorG)} | RMSE ${formatGrams(stats.rootMeanSquaredErrorG)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = UgoGrey,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BiasSummaryHeader(
+    corrections: List<BiasCorrectionWithUsageStats>,
+    onClickDetails: () -> Unit,
+) {
+    val active = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile }
+    val unstable = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile }
+    val insufficient = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti }
+
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+        onClick = onClickDetails,
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                "Riepilogo correzioni BIAS",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly) {
+                StatusBadge(
+                    label = "Attivi",
+                    count = active,
+                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                )
+                StatusBadge(
+                    label = "Instabili",
+                    count = unstable,
+                    color = MaterialTheme.colorScheme.error
+                )
+                StatusBadge(
+                    label = "Insufficienti",
+                    count = insufficient,
+                    color = UgoGrey
+                )
+            }
+            if (corrections.isNotEmpty()) {
+                Text(
+                    "Tocca per dettagli",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = UgoGrey,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatusBadge(label: String, count: Int, color: androidx.compose.ui.graphics.Color) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(8.dp),
+    ) {
+        Text(
+            count.toString(),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = color,
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = UgoGrey,
+        )
+    }
+}
+
+@Composable
+private fun UltimeAnalisiDropdown(
+    records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity>,
+    onOpenV2Details: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+    dateFormat: SimpleDateFormat,
+) {
+    var expanded by androidx.compose.runtime.mutableStateOf(false)
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Column {
+            androidx.compose.material3.TextButton(
+                onClick = { expanded = !expanded },
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+            ) {
+                Text(
+                    "Ultime analisi (${records.size})",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                )
+                androidx.compose.material3.Icon(
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = "Espandi",
+                )
+            }
+
+            if (expanded) {
+                HorizontalDivider()
+                Column(modifier = Modifier.padding(8.dp)) {
+                    records.forEach { record ->
+                        V2RecordMinimalRow(record, onOpenV2Details, onDelete, dateFormat)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun V2RecordMinimalRow(
+    record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity,
+    onClick: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+    dateFormat: SimpleDateFormat,
+) {
+    val failed = record.failureReason != null
+    androidx.compose.material3.TextButton(
+        onClick = { if (!failed) onClick(record.id) },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 8.dp)) {
+            Text(
+                dateFormat.format(java.util.Date(record.analyzedAtEpochMillis)),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = if (failed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                record.sessionMode,
+                style = MaterialTheme.typography.labelSmall,
+                color = UgoGrey,
+            )
+        }
+        androidx.compose.material3.IconButton(
+            onClick = { onDelete(record.id) },
+            modifier = Modifier.padding(0.dp),
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Elimina",
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
