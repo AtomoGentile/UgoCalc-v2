@@ -1,6 +1,7 @@
 package com.ugocalc.app.ui.bias
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -33,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
@@ -71,8 +73,10 @@ fun BiasEvolutionScreen(
     if (selectedBiasCategory != null) {
         BiasCorrectionDetailScreen(
             corrections = uiState.corrections,
+            recentV2Records = uiState.recentV2Records,
             category = selectedBiasCategory!!,
-            onBack = { selectedBiasCategory = null }
+            onBack = { selectedBiasCategory = null },
+            onOpenV2Details = onOpenV2Details
         )
         return
     }
@@ -219,6 +223,56 @@ private fun strategyLabel(raw: String) = when (raw) {
     else -> raw
 }
 
+@Composable
+private fun V2RecordDetailRow(
+    record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity,
+    onOpenDetails: (Long) -> Unit,
+    onDelete: (Long) -> Unit,
+) {
+    val failed = record.failureReason != null
+    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
+
+    Card(
+        onClick = { if (!failed) onOpenDetails(record.id) },
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                dateFormat.format(Date(record.analyzedAtEpochMillis)),
+                fontWeight = FontWeight.Bold,
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                "Modello: ${record.aiModelId}",
+                style = MaterialTheme.typography.bodySmall,
+                color = UgoGrey,
+            )
+            Text(
+                "Modalità: ${record.sessionMode}",
+                style = MaterialTheme.typography.bodySmall,
+                color = UgoGrey,
+            )
+            if (failed) {
+                Text(
+                    "❌ Fallita: ${record.failureReason}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            } else {
+                Text(
+                    "✓ Completata — tocca per dettagli",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
 private fun foodCategoryLabel(raw: String) = when (raw) {
     "PIATTI_COMPOSTI" -> "Piatti composti"
     "BEVANDE" -> "Bevande"
@@ -247,23 +301,36 @@ private fun foodCategoryLabel(raw: String) = when (raw) {
 @Composable
 private fun BiasCorrectionDetailScreen(
     corrections: List<BiasCorrectionWithUsageStats>,
+    recentV2Records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity> = emptyList(),
     category: String,
     onBack: () -> Unit,
+    onOpenV2Details: (Long) -> Unit = {},
 ) {
-    val filteredCorrections = corrections.filter { correction ->
-        when (category) {
-            "Applicabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile
-            "BiasInstabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile
-            "DatiInsufficienti" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti
-            else -> false
-        }
+    val categoryLabel = when (category) {
+        "Applicabile" -> "Categorie Alimentari - Correzioni Attive"
+        "BiasInstabile" -> "Categorie Alimentari - Correzioni Instabili"
+        "DatiInsufficienti" -> "Misurazioni (Dati Insufficienti)"
+        else -> "Correzioni"
     }
 
-    val categoryLabel = when (category) {
-        "Applicabile" -> "Correzioni Attive"
-        "BiasInstabile" -> "Correzioni Instabili"
-        "DatiInsufficienti" -> "Correzioni Insufficienti"
-        else -> "Correzioni"
+    val content = when (category) {
+        "DatiInsufficienti" -> {
+            // Mostri le misurazioni V2 senza ground truth
+            val insufficientRecords = recentV2Records.filter { it.groundTruthPesiJson == null }
+            Pair(insufficientRecords.isEmpty(), insufficientRecords as Any)
+        }
+        else -> {
+            // Raggruppa per categoria alimentare
+            val filtered = corrections.filter { correction ->
+                when (category) {
+                    "Applicabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile
+                    "BiasInstabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile
+                    else -> false
+                }
+            }
+            val grouped = filtered.groupBy { it.correction.foodCategory }
+            Pair(grouped.isEmpty(), grouped as Any)
+        }
     }
 
     Scaffold(
@@ -275,15 +342,44 @@ private fun BiasCorrectionDetailScreen(
             )
         }
     ) { padding ->
-        if (filteredCorrections.isEmpty()) {
+        val (isEmpty, data) = content
+
+        if (isEmpty) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                Text("Nessuna correzione in questa categoria", style = MaterialTheme.typography.bodyMedium)
+                Text("Nessun elemento in questa categoria", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else if (category == "DatiInsufficienti") {
+            // Lista misurazioni
+            val records = data as List<*>
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+                items(records.size) { index ->
+                    val record = records[index] as com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
+                    V2RecordDetailRow(record, onOpenV2Details, { /* delete */ })
+                    if (index < records.size - 1) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    }
+                }
             }
         } else {
+            // Lista categorie con correzioni
+            val grouped = data as Map<String, List<BiasCorrectionWithUsageStats>>
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                items(filteredCorrections.size) { index ->
-                    BiasCorrectionDetailItem(filteredCorrections[index])
-                    if (index < filteredCorrections.size - 1) {
+                grouped.forEach { (foodCat, items) ->
+                    item {
+                        Text(
+                            foodCategoryLabel(foodCat),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
+                        )
+                    }
+                    items(items.size) { index ->
+                        BiasCorrectionDetailItem(items[index])
+                        if (index < items.size - 1) {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                    }
+                    item {
                         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     }
                 }
