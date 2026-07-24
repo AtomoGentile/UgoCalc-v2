@@ -191,9 +191,9 @@ fun BiasEvolutionScreen(
                 HorizontalDivider()
             }
             // Summary delle correzioni BIAS
-            if (uiState.corrections.isNotEmpty() || uiState.recentV2Records.isNotEmpty()) {
+            if (uiState.corrections.isNotEmpty() || uiState.allV2Records.isNotEmpty()) {
                 item(key = "bias_summary") {
-                    BiasSummaryHeader(uiState.corrections, uiState.recentV2Records, onSelectCategory = { selectedBiasCategory = it })
+                    BiasSummaryHeader(uiState.corrections, uiState.allV2Records, onSelectCategory = { selectedBiasCategory = it })
                 }
             } else if (!uiState.loading) {
                 item {
