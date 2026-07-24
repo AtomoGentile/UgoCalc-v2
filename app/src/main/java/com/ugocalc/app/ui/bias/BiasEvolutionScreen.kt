@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -18,6 +19,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -81,8 +83,25 @@ fun BiasEvolutionScreen(
         return
     }
 
-    Scaffold(topBar = { TopAppBar(title = { Text("BIAS ed evoluzione del comportamento") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("BIAS ed evoluzione del comportamento") },
+                navigationIcon = { BackIconButton(onBack) },
+                colors = ugoTopAppBarColors()
+            )
+        }
+    ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+            if (uiState.availableModels.isNotEmpty()) {
+                item(key = "model_selector") {
+                    ModelSelectorChip(
+                        models = uiState.availableModels,
+                        selectedModel = uiState.selectedModelId,
+                        onModelSelected = { viewModel.selectModel(it) }
+                    )
+                }
+            }
             item {
                 Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
                     Text(
@@ -188,12 +207,15 @@ fun BiasEvolutionScreen(
             }
 
             // Dropdown Ultime analisi
-            if (uiState.recentV2Records.isNotEmpty()) {
+            if (uiState.allV2Records.isNotEmpty()) {
                 item(key = "recent_v2_dropdown") {
                     UltimeAnalisiDropdown(
                         records = uiState.recentV2Records,
+                        totalRecords = uiState.allV2Records.size,
+                        displayedCount = uiState.recentV2Records.size,
                         onOpenV2Details = onOpenV2Details,
                         onDelete = { viewModel.deleteRecord(it) },
+                        onLoadMore = { viewModel.loadMoreRecords() },
                         dateFormat = fullDateFormat
                     )
                 }
@@ -539,10 +561,48 @@ private fun StatusBadgeButton(
 }
 
 @Composable
+private fun ModelSelectorChip(
+    models: List<String>,
+    selectedModel: String?,
+    onModelSelected: (String?) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
+        Text(
+            "Filtra per modello:",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(bottom = 8.dp),
+        )
+        androidx.compose.foundation.lazy.LazyRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                androidx.compose.material3.FilterChip(
+                    selected = selectedModel == null,
+                    onClick = { onModelSelected(null) },
+                    label = { Text("Tutti") }
+                )
+            }
+            items(models) { model ->
+                androidx.compose.material3.FilterChip(
+                    selected = selectedModel == model,
+                    onClick = { onModelSelected(model) },
+                    label = { Text(model) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun UltimeAnalisiDropdown(
     records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity>,
+    totalRecords: Int,
+    displayedCount: Int,
     onOpenV2Details: (Long) -> Unit,
     onDelete: (Long) -> Unit,
+    onLoadMore: () -> Unit,
     dateFormat: SimpleDateFormat,
 ) {
     var expanded by androidx.compose.runtime.mutableStateOf(false)
@@ -554,11 +614,11 @@ private fun UltimeAnalisiDropdown(
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
             ) {
                 Text(
-                    "Ultime analisi (${records.size})",
+                    "Ultime analisi ($displayedCount/$totalRecords)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f).padding(end = 8.dp),
-                    textAlign = androidx.compose.ui.text.style.TextAlign.Start,
+                    textAlign = TextAlign.Start,
                 )
                 androidx.compose.material3.Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
@@ -571,6 +631,17 @@ private fun UltimeAnalisiDropdown(
                 Column(modifier = Modifier.padding(8.dp)) {
                     records.forEach { record ->
                         V2RecordMinimalRow(record, onOpenV2Details, onDelete, dateFormat)
+                    }
+                    if (displayedCount < totalRecords) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        Button(
+                            onClick = onLoadMore,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                        ) {
+                            Text("Carica altri (${totalRecords - displayedCount} rimanenti)")
+                        }
                     }
                 }
             }

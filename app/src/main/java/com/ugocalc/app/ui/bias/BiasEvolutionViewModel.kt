@@ -33,6 +33,10 @@ data class BiasEvolutionUiState(
     val v2Promoted: Boolean = false,
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
     val recentV2Records: List<V2AnalysisRecordEntity> = emptyList(),
+    val allV2Records: List<V2AnalysisRecordEntity> = emptyList(),
+    val availableModels: List<String> = emptyList(),
+    val selectedModelId: String? = null,
+    val recordsDisplayLimit: Int = 10,
 )
 
 /**
@@ -49,16 +53,39 @@ class BiasEvolutionViewModel @Inject constructor(
     private val telemetryRepository: V2TelemetryRepository,
 ) : ViewModel() {
 
+    private val _selectedModelId = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+    private val _recordsDisplayLimit = kotlinx.coroutines.flow.MutableStateFlow(10)
+
     @OptIn(ExperimentalCoroutinesApi::class)
     val uiState: StateFlow<BiasEvolutionUiState> = combine(
         settingsRepository.settings,
         biasCorrectionRepository.getAllCorrectionsWithUsageStatsFlow(),
-        telemetryRepository.getAllRecordsFlow().map { it.take(10) }
-    ) { settings, corrections, recentV2 ->
-        Triple(settings, corrections, recentV2)
-    }.flatMapLatest { (settings, corrections, recentV2) ->
+        telemetryRepository.getAllRecordsFlow(),
+        _selectedModelId,
+        _recordsDisplayLimit
+    ) { settings, corrections, allV2, selectedModel, displayLimit ->
+        val availableModels = allV2.map { it.aiModelId }.distinct().sorted()
+        val effectiveSelectedModel = selectedModel ?: availableModels.firstOrNull()
+
+        val filteredCorrections = if (effectiveSelectedModel != null) {
+            corrections.filter { it.correction.aiModelId == effectiveSelectedModel }
+        } else {
+            corrections
+        }
+
+        val filteredRecords = if (effectiveSelectedModel != null) {
+            allV2.filter { it.aiModelId == effectiveSelectedModel }
+        } else {
+            allV2
+        }
+
+        Triple(Pair(settings, filteredCorrections), filteredRecords, Triple(availableModels, effectiveSelectedModel, displayLimit))
+    }.flatMapLatest { (settingsAndCorrections, filteredRecords, modelsInfo) ->
         flow {
+            val (settings, corrections) = settingsAndCorrections
+            val (availableModels, selectedModel, displayLimit) = modelsInfo
             val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
+
             emit(
                 BiasEvolutionUiState(
                     loading = false,
@@ -67,7 +94,11 @@ class BiasEvolutionViewModel @Inject constructor(
                     v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
                     v2Promoted = promotion.promoteV2,
                     corrections = corrections,
-                    recentV2Records = recentV2
+                    recentV2Records = filteredRecords.take(displayLimit),
+                    allV2Records = filteredRecords,
+                    availableModels = availableModels,
+                    selectedModelId = selectedModel,
+                    recordsDisplayLimit = displayLimit
                 )
             )
         }.flowOn(Dispatchers.Default)
@@ -93,5 +124,14 @@ class BiasEvolutionViewModel @Inject constructor(
         viewModelScope.launch {
             telemetryRepository.deleteRecord(recordId)
         }
+    }
+
+    fun selectModel(modelId: String?) {
+        _selectedModelId.value = modelId
+        _recordsDisplayLimit.value = 10
+    }
+
+    fun loadMoreRecords() {
+        _recordsDisplayLimit.value += 10
     }
 }
