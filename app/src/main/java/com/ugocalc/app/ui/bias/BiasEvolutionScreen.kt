@@ -66,7 +66,16 @@ fun BiasEvolutionScreen(
     val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
     val dayDateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
 
-    var showBiasDetailDialog by remember { mutableStateOf(false) }
+    var selectedBiasCategory by remember { mutableStateOf<String?>(null) }
+
+    if (selectedBiasCategory != null) {
+        BiasCorrectionDetailScreen(
+            corrections = uiState.corrections,
+            category = selectedBiasCategory!!,
+            onBack = { selectedBiasCategory = null }
+        )
+        return
+    }
 
     Scaffold(topBar = { TopAppBar(title = { Text("BIAS ed evoluzione del comportamento") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
@@ -161,7 +170,7 @@ fun BiasEvolutionScreen(
             // Summary delle correzioni BIAS
             if (uiState.corrections.isNotEmpty()) {
                 item(key = "bias_summary") {
-                    BiasSummaryHeader(uiState.corrections, onClickDetails = { showBiasDetailDialog = true })
+                    BiasSummaryHeader(uiState.corrections, onSelectCategory = { selectedBiasCategory = it })
                 }
             } else if (!uiState.loading) {
                 item {
@@ -186,13 +195,6 @@ fun BiasEvolutionScreen(
                 }
             }
         }
-    }
-
-    if (showBiasDetailDialog) {
-        BiasCorrectionDetailDialog(
-            corrections = uiState.corrections,
-            onDismiss = { showBiasDetailDialog = false }
-        )
     }
 }
 
@@ -241,32 +243,53 @@ private fun foodCategoryLabel(raw: String) = when (raw) {
     else -> raw
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun BiasCorrectionDetailDialog(
+private fun BiasCorrectionDetailScreen(
     corrections: List<BiasCorrectionWithUsageStats>,
-    onDismiss: () -> Unit,
+    category: String,
+    onBack: () -> Unit,
 ) {
-    androidx.compose.material3.AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Dettagli correzioni BIAS") },
-        text = {
-            LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                items(corrections.size) { index ->
-                    val correction = corrections[index]
-                    BiasCorrectionDetailItem(correction)
-                    if (index < corrections.size - 1) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+    val filteredCorrections = corrections.filter { correction ->
+        when (category) {
+            "Applicabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile
+            "BiasInstabile" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile
+            "DatiInsufficienti" -> correction.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti
+            else -> false
+        }
+    }
+
+    val categoryLabel = when (category) {
+        "Applicabile" -> "Correzioni Attive"
+        "BiasInstabile" -> "Correzioni Instabili"
+        "DatiInsufficienti" -> "Correzioni Insufficienti"
+        else -> "Correzioni"
+    }
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(categoryLabel) },
+                navigationIcon = { BackIconButton(onBack) },
+                colors = ugoTopAppBarColors()
+            )
+        }
+    ) { padding ->
+        if (filteredCorrections.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+                Text("Nessuna correzione in questa categoria", style = MaterialTheme.typography.bodyMedium)
+            }
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+                items(filteredCorrections.size) { index ->
+                    BiasCorrectionDetailItem(filteredCorrections[index])
+                    if (index < filteredCorrections.size - 1) {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Chiudi")
-            }
-        },
-        modifier = Modifier.fillMaxWidth(0.9f),
-    )
+        }
+    }
 }
 
 @Composable
@@ -345,7 +368,7 @@ private fun BiasCorrectionDetailItem(row: BiasCorrectionWithUsageStats) {
 @Composable
 private fun BiasSummaryHeader(
     corrections: List<BiasCorrectionWithUsageStats>,
-    onClickDetails: () -> Unit,
+    onSelectCategory: (String) -> Unit,
 ) {
     val active = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile }
     val unstable = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile }
@@ -353,7 +376,6 @@ private fun BiasSummaryHeader(
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-        onClick = onClickDetails,
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -362,21 +384,24 @@ private fun BiasSummaryHeader(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = androidx.compose.foundation.layout.Arrangement.SpaceEvenly) {
-                StatusBadge(
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                StatusBadgeButton(
                     label = "Attivi",
                     count = active,
-                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50)
+                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                    onClick = { onSelectCategory("Applicabile") }
                 )
-                StatusBadge(
+                StatusBadgeButton(
                     label = "Instabili",
                     count = unstable,
-                    color = MaterialTheme.colorScheme.error
+                    color = MaterialTheme.colorScheme.error,
+                    onClick = { onSelectCategory("BiasInstabile") }
                 )
-                StatusBadge(
+                StatusBadgeButton(
                     label = "Insufficienti",
                     count = insufficient,
-                    color = UgoGrey
+                    color = UgoGrey,
+                    onClick = { onSelectCategory("DatiInsufficienti") }
                 )
             }
             if (corrections.isNotEmpty()) {
@@ -392,22 +417,28 @@ private fun BiasSummaryHeader(
 }
 
 @Composable
-private fun StatusBadge(label: String, count: Int, color: androidx.compose.ui.graphics.Color) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(8.dp),
-    ) {
-        Text(
-            count.toString(),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            color = color,
-        )
-        Text(
-            label,
-            style = MaterialTheme.typography.labelSmall,
-            color = UgoGrey,
-        )
+private fun StatusBadgeButton(
+    label: String,
+    count: Int,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+) {
+    androidx.compose.material3.TextButton(onClick = onClick, modifier = Modifier.padding(8.dp)) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                count.toString(),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = color,
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = UgoGrey,
+            )
+        }
     }
 }
 
