@@ -191,9 +191,9 @@ fun BiasEvolutionScreen(
                 HorizontalDivider()
             }
             // Summary delle correzioni BIAS
-            if (uiState.corrections.isNotEmpty()) {
+            if (uiState.corrections.isNotEmpty() || uiState.recentV2Records.isNotEmpty()) {
                 item(key = "bias_summary") {
-                    BiasSummaryHeader(uiState.corrections, onSelectCategory = { selectedBiasCategory = it })
+                    BiasSummaryHeader(uiState.corrections, uiState.recentV2Records, onSelectCategory = { selectedBiasCategory = it })
                 }
             } else if (!uiState.loading) {
                 item {
@@ -500,11 +500,13 @@ private fun BiasCorrectionDetailItem(row: BiasCorrectionWithUsageStats) {
 @Composable
 private fun BiasSummaryHeader(
     corrections: List<BiasCorrectionWithUsageStats>,
+    recentV2Records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity> = emptyList(),
     onSelectCategory: (String) -> Unit,
 ) {
     val active = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile }
     val unstable = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile }
     val insufficient = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti }
+    val insufficientRecords = recentV2Records.count { it.groundTruthPesiJson == null }
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -530,13 +532,13 @@ private fun BiasSummaryHeader(
                     onClick = { onSelectCategory("BiasInstabile") }
                 )
                 StatusBadgeButton(
-                    label = "Insufficienti",
-                    count = insufficient,
+                    label = "Misurazioni",
+                    count = insufficientRecords,
                     color = UgoGrey,
                     onClick = { onSelectCategory("DatiInsufficienti") }
                 )
             }
-            if (corrections.isNotEmpty()) {
+            if (corrections.isNotEmpty() || insufficientRecords > 0) {
                 Text(
                     "Tocca per dettagli",
                     style = MaterialTheme.typography.labelSmall,
