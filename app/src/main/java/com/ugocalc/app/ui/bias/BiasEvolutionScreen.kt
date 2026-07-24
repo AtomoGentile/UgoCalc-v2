@@ -408,11 +408,7 @@ private fun BiasCorrectionDetailScreen(
                                 modifier = Modifier.padding(bottom = 12.dp),
                             )
                             Text(
-                                when (category) {
-                                    "Applicabile" -> "Registra il peso vero di almeno 2-3 analisi per ogni categoria alimentare perché il sistema possa calcolare fattori di correzione affidabili."
-                                    "BiasInstabile" -> "I dati non sono ancora sufficienti per identificare correzioni instabili."
-                                    else -> "Nessun dato disponibile."
-                                },
+                                "Registra il peso vero di una misurazione nella sezione 'Misurazioni' perché il sistema calcoli le correzioni.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = UgoGrey,
                                 textAlign = TextAlign.Center,
