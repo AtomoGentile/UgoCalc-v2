@@ -9,6 +9,7 @@ import com.ugocalc.app.data.repository.BiasCorrectionWithUsageStats
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
+import com.ugocalc.app.domain.model.AiModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
@@ -34,7 +35,7 @@ data class BiasEvolutionUiState(
     val corrections: List<BiasCorrectionWithUsageStats> = emptyList(),
     val recentV2Records: List<V2AnalysisRecordEntity> = emptyList(),
     val allV2Records: List<V2AnalysisRecordEntity> = emptyList(),
-    val availableModels: List<String> = emptyList(),
+    val availableModels: List<AiModel> = emptyList(),
     val selectedModelId: String? = null,
     val recordsDisplayLimit: Int = 10,
 )
@@ -64,8 +65,8 @@ class BiasEvolutionViewModel @Inject constructor(
         _selectedModelId,
         _recordsDisplayLimit
     ) { settings, corrections, allV2, selectedModel, displayLimit ->
-        val availableModels = allV2.map { it.aiModelId }.distinct().sorted()
-        val effectiveSelectedModel = selectedModel ?: availableModels.firstOrNull()
+        val availableModelIds = allV2.map { it.aiModelId }.distinct().sorted()
+        val effectiveSelectedModel = selectedModel ?: availableModelIds.firstOrNull()
 
         val filteredCorrections = if (effectiveSelectedModel != null) {
             corrections.filter { it.correction.aiModelId == effectiveSelectedModel }
@@ -79,11 +80,15 @@ class BiasEvolutionViewModel @Inject constructor(
             allV2
         }
 
-        Triple(Pair(settings, filteredCorrections), filteredRecords, Triple(availableModels, effectiveSelectedModel, displayLimit))
+        Triple(Pair(settings, filteredCorrections), filteredRecords, Triple(availableModelIds, effectiveSelectedModel, displayLimit))
     }.flatMapLatest { (settingsAndCorrections, filteredRecords, modelsInfo) ->
         flow {
             val (settings, corrections) = settingsAndCorrections
-            val (availableModels, selectedModel, displayLimit) = modelsInfo
+            val (availableModelIds, selectedModel, displayLimit) = modelsInfo
+            // Convert model IDs to AiModel objects for display
+            val availableModels = availableModelIds.mapNotNull { id ->
+                com.ugocalc.app.domain.model.AiModelCatalog.ALL.find { it.id == id }
+            }
             val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
 
             emit(

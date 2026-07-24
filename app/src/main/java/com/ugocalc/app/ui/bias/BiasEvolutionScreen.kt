@@ -95,7 +95,7 @@ fun BiasEvolutionScreen(
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
             if (uiState.availableModels.isNotEmpty()) {
                 item(key = "model_selector") {
-                    ModelSelectorChip(
+                    ModelSelectorChipBias(
                         models = uiState.availableModels,
                         selectedModel = uiState.selectedModelId,
                         onModelSelected = { viewModel.selectModel(it) }
@@ -575,8 +575,8 @@ private fun StatusBadgeButton(
 }
 
 @Composable
-private fun ModelSelectorChip(
-    models: List<String>,
+private fun ModelSelectorChipBias(
+    models: List<com.ugocalc.app.domain.model.AiModel>,
     selectedModel: String?,
     onModelSelected: (String?) -> Unit,
 ) {
@@ -600,9 +600,9 @@ private fun ModelSelectorChip(
             }
             items(models) { model ->
                 androidx.compose.material3.FilterChip(
-                    selected = selectedModel == model,
-                    onClick = { onModelSelected(model) },
-                    label = { Text(model) }
+                    selected = selectedModel == model.id,
+                    onClick = { onModelSelected(model.id) },
+                    label = { Text(if (model.subtitle.isNotEmpty()) "${model.displayName} (${model.subtitle})" else model.displayName) }
                 )
             }
         }
