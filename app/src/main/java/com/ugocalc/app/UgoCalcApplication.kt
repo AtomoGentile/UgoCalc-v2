@@ -27,8 +27,12 @@ class UgoCalcApplication : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         PDFBoxResourceLoader.init(applicationContext)
-        AiModelCatalog.setBedrockModels(apiKeyStore.getBedrockAvailableModels())
-        AiModelCatalog.setBedrockIamModels(apiKeyStore.getBedrockIamAvailableModels())
+        val mantleModels = apiKeyStore.getBedrockAvailableModels()
+        AiModelCatalog.setBedrockModels(mantleModels)
+        val iamModels = apiKeyStore.getBedrockIamAvailableModels().ifEmpty {
+            if (apiKeyStore.hasBedrockIamCredentials()) mantleModels else emptyList()
+        }
+        AiModelCatalog.setBedrockIamModels(iamModels)
         createNotificationChannel()
         scheduleBenchmarkWorker()
         initializeAmplify()

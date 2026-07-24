@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -34,24 +35,30 @@ fun ModelLogoBox(
     modifier: Modifier = Modifier,
 ) {
     if (logoRes != null) {
+        val painter = remember(logoRes) { painterResource(id = logoRes) }
         Image(
-            painter = painterResource(id = logoRes),
+            painter = painter,
             contentDescription = displayName,
             modifier = modifier,
             contentScale = ContentScale.Fit,
         )
     } else {
-        val providerName = subtitle.substringBefore(" ·").trim().ifBlank { displayName }
-        val initials = providerName
-            .split(" ", "-", "_")
-            .filter { it.isNotBlank() }
-            .take(2)
-            .joinToString("") { it.first().uppercaseChar().toString() }
-            .ifBlank { "?" }
-        val bgColor = providerColor(providerName)
+        val providerName = remember(subtitle, displayName) {
+            subtitle.substringBefore(" ·").trim().ifBlank { displayName }
+        }
+        val initials = remember(providerName) {
+            providerName
+                .split(" ", "-", "_")
+                .filter { it.isNotBlank() }
+                .take(2)
+                .joinToString("") { it.first().uppercaseChar().toString() }
+                .ifBlank { "?" }
+        }
+        val bgColor = remember(providerName) { providerColor(providerName) }
+        val shape = remember { RoundedCornerShape(8.dp) }
         Box(
             modifier = modifier
-                .clip(RoundedCornerShape(8.dp))
+                .clip(shape)
                 .background(bgColor),
             contentAlignment = Alignment.Center,
         ) {

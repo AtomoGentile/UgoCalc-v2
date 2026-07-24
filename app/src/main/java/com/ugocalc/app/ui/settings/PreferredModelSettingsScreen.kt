@@ -28,6 +28,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,7 +70,7 @@ fun PreferredModelSettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(viewModel.availableModels) { model ->
+                items(viewModel.availableModels, key = { it.id }) { model ->
                     val isSelected = model.id in state.userSettings.preferredModelIds
                     PreferredModelCard(
                         model = model,
@@ -86,16 +87,23 @@ fun PreferredModelSettingsScreen(
 private fun PreferredModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
+    val shape = remember { RoundedCornerShape(12.dp) }
+    val cardModifier = remember(isSelected) {
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(0.9f)
+            .border(borderWidth, borderColor, shape)
+    }
+    val elevation = remember(isSelected) {
+        CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
+    }
 
     Card(
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.9f)
-            .border(borderWidth, borderColor, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
+        modifier = cardModifier,
+        shape = shape,
         colors = CardDefaults.cardColors(containerColor = Color.White),
-        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
+        elevation = elevation,
     ) {
         Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Column(

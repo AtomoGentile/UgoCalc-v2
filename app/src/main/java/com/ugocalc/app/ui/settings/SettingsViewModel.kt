@@ -206,10 +206,13 @@ class SettingsViewModel @Inject constructor(
                         if (response.isSuccessful || response.code == 400) {
                             val fetchError = fetchAndSaveIamModels(accessKey, secretKey, region)
                             if (fetchError != null) {
-                                BedrockTestResult.Success("Connessione IAM riuscita (lista modelli: $fetchError)")
-                            } else {
-                                BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
+                                val fallback = settingsRepository.getBedrockAvailableModels()
+                                if (fallback.isNotEmpty()) {
+                                    settingsRepository.setBedrockIamAvailableModels(fallback)
+                                    AiModelCatalog.setBedrockIamModels(fallback)
+                                }
                             }
+                            BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
                         } else {
                             BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
                         }

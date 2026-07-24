@@ -446,60 +446,15 @@ private fun AllModelsPickerDialog(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.height(400.dp),
                 ) {
-                    items(models) { model ->
+                    items(models, key = { it.id }) { model ->
                         val isSelected = model.id in selected
-                        val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-                        val borderWidth = if (isSelected) 2.dp else 1.dp
-                        Card(
+                        ApiProviderModelCard(
+                            model = model,
+                            isSelected = isSelected,
                             onClick = {
                                 selected = if (isSelected) selected - model.id else selected + model.id
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .aspectRatio(1.1f)
-                                .border(borderWidth, borderColor, RoundedCornerShape(12.dp)),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White),
-                            elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
-                        ) {
-                            Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
-                                Column(
-                                    modifier = Modifier.fillMaxSize(),
-                                    verticalArrangement = Arrangement.Top,
-                                    horizontalAlignment = Alignment.CenterHorizontally,
-                                ) {
-                                    ModelLogoBox(
-                                        logoRes = model.logoRes,
-                                        displayName = model.displayName,
-                                        subtitle = model.subtitle,
-                                        modifier = Modifier
-                                            .weight(1f)
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 6.dp, vertical = 2.dp),
-                                    )
-                                    Text(
-                                        text = model.displayName,
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = Color(0xFF1C1B1F),
-                                    )
-                                    if (model.subtitle.isNotEmpty()) {
-                                        Text(
-                                            text = model.subtitle,
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF49454F),
-                                        )
-                                    }
-                                }
-                                if (isSelected) {
-                                    Icon(
-                                        imageVector = Icons.Filled.CheckCircle,
-                                        contentDescription = null,
-                                        modifier = Modifier.align(Alignment.TopEnd).size(18.dp),
-                                        tint = MaterialTheme.colorScheme.primary,
-                                    )
-                                }
-                            }
-                        }
+                        )
                     }
                 }
             }
@@ -514,4 +469,70 @@ private fun AllModelsPickerDialog(
             TextButton(onClick = onDismiss) { Text("Annulla") }
         },
     )
+}
+
+@Composable
+private fun ApiProviderModelCard(
+    model: com.ugocalc.app.domain.model.AiModel,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    val borderWidth = if (isSelected) 2.dp else 1.dp
+    val shape = remember { RoundedCornerShape(12.dp) }
+    val cardModifier = remember(isSelected) {
+        Modifier
+            .fillMaxWidth()
+            .aspectRatio(1.1f)
+            .border(borderWidth, borderColor, shape)
+    }
+    val elevation = remember(isSelected) {
+        CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
+    }
+
+    Card(
+        onClick = onClick,
+        modifier = cardModifier,
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = elevation,
+    ) {
+        Box(modifier = Modifier.fillMaxSize().padding(8.dp)) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.Top,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ModelLogoBox(
+                    logoRes = model.logoRes,
+                    displayName = model.displayName,
+                    subtitle = model.subtitle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 6.dp, vertical = 2.dp),
+                )
+                Text(
+                    text = model.displayName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color(0xFF1C1B1F),
+                )
+                if (model.subtitle.isNotEmpty()) {
+                    Text(
+                        text = model.subtitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color(0xFF49454F),
+                    )
+                }
+            }
+            if (isSelected) {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    modifier = Modifier.align(Alignment.TopEnd).size(18.dp),
+                    tint = MaterialTheme.colorScheme.primary,
+                )
+            }
+        }
+    }
 }
