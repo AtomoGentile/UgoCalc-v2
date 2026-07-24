@@ -134,6 +134,16 @@ class BenchmarkRepository @Inject constructor(
             groundTruthLivello = livello.jsonValue,
         )
         benchmarkDao.update(updated)
+        // Propaga il ground truth anche al record V2 linkato, così BiasCorrectionRepository
+        // può calcolare i fattori di correzione senza che l'utente registri il peso due volte.
+        meal.v2RecordId?.let { v2Id ->
+            v2Dao.getById(v2Id)?.let { v2Record ->
+                v2Dao.update(v2Record.copy(
+                    groundTruthPesiJson = json.encodeToString(pesiG),
+                    groundTruthLivello = livello.jsonValue,
+                ))
+            }
+        }
         cloudSyncManager.enqueue(
             eventType = CloudSyncEventType.BENCHMARK,
             payloadJson = json.encodeToString(updated),
