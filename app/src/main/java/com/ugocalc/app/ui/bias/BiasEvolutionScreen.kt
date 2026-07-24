@@ -295,6 +295,13 @@ private fun V2RecordDetailRow(
     }
 }
 
+private val ALL_FOOD_CATEGORIES = listOf(
+    "PIATTI_COMPOSTI", "BEVANDE", "ZUPPE_MINESTRE", "CONTABILE", "PASTA",
+    "RISO_E_CEREALI", "PATATE", "VERDURE_FOGLIA", "VERDURE_COMPATTE", "LEGUMI",
+    "FRUTTA", "CARNE", "PESCE_FILETTO", "MOLLUSCHI_GUSCIO", "FORMAGGIO",
+    "PANE", "PIZZA_FOCACCIA", "DOLCI", "TRASCURABILE", "ALTRO_BLOCCO"
+)
+
 private fun foodCategoryLabel(raw: String) = when (raw) {
     "PIATTI_COMPOSTI" -> "Piatti composti"
     "BEVANDE" -> "Bevande"
@@ -351,7 +358,11 @@ private fun BiasCorrectionDetailScreen(
                 }
             }
             val grouped = filtered.groupBy { it.correction.foodCategory }
-            Pair(grouped.isEmpty(), grouped as Any)
+            // Estendi con tutte le categorie, anche quelle vuote
+            val allCategories = ALL_FOOD_CATEGORIES.associateWith { cat ->
+                grouped[cat] ?: emptyList()
+            }
+            Pair(false, allCategories as Any)
         }
     }
 
@@ -383,22 +394,25 @@ private fun BiasCorrectionDetailScreen(
                 }
             }
         } else {
-            // Lista categorie con correzioni
+            // Lista categorie con correzioni (incluse vuote)
             val grouped = data as Map<String, List<BiasCorrectionWithUsageStats>>
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
                 grouped.forEach { (foodCat, items) ->
                     item {
                         Text(
-                            foodCategoryLabel(foodCat),
+                            if (items.isEmpty()) "${foodCategoryLabel(foodCat)} (0)" else foodCategoryLabel(foodCat),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
+                            color = if (items.isEmpty()) UgoGrey else MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                    items(items.size) { index ->
-                        BiasCorrectionDetailItem(items[index])
-                        if (index < items.size - 1) {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                    if (items.isNotEmpty()) {
+                        items(items.size) { index ->
+                            BiasCorrectionDetailItem(items[index])
+                            if (index < items.size - 1) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                            }
                         }
                     }
                     item {

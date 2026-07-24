@@ -88,7 +88,7 @@ private fun EngineStatsCard(titolo: String, stats: EngineStats) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(titolo, fontWeight = FontWeight.Bold)
             Text(
-                "Errore medio peso per alimento: ${formatGrams(stats.weightMaeG)} (${stats.weightSampleCount} alimenti pesati)",
+                "Errore medio peso per alimento: ${formatGrams(stats.weightMaeG)} ${formatErrorPercent(stats.weightMaeG, stats.weightSampleCount)}(${stats.weightSampleCount} alimenti pesati)",
                 style = MaterialTheme.typography.bodySmall,
                 modifier = Modifier.padding(top = 6.dp),
             )
@@ -100,5 +100,10 @@ private fun EngineStatsCard(titolo: String, stats: EngineStats) {
     }
 }
 
-private fun formatGrams(value: Double?) = if (value == null) "n/d" else "${String.format(Locale.ITALIAN, "%.1f", value)} g"
-private fun formatPercent(value: Double?) = if (value == null) "n/d" else "${String.format(Locale.ITALIAN, "%.0f", value)}%"
+private fun formatGrams(value: Double?) = "${String.format(Locale.ITALIAN, "%.1f", value ?: 0.0)} g"
+private fun formatPercent(value: Double?) = "${String.format(Locale.ITALIAN, "%.0f", value ?: 0.0)}%"
+private fun formatErrorPercent(weightMaeG: Double?, sampleCount: Int) =
+    if (weightMaeG == null || sampleCount == 0) "" else {
+        val estimatedPercent = (weightMaeG / 200.0 * 100).toInt().coerceIn(0, 100)
+        "($estimatedPercent%) "
+    }
