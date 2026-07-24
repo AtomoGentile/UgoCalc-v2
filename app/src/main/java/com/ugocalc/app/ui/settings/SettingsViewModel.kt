@@ -20,12 +20,12 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.runBlocking
 import com.ugocalc.app.domain.model.AiModel
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -130,7 +130,7 @@ class SettingsViewModel @Inject constructor(
                         .build()
                     httpClient.newCall(request).execute().use { response ->
                         if (response.isSuccessful || response.code == 400) {
-                            // 400 può indicare parametri invalidi ma key valida
+                            fetchAndSaveMantleModels(mantleApiKey, region)
                             BedrockTestResult.Success("Connessione Bedrock Mantle riuscita")
                         } else {
                             BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
@@ -141,6 +141,26 @@ class SettingsViewModel @Inject constructor(
                 BedrockTestResult.Error(e.message ?: "Errore di rete sconosciuto")
             }
         }
+    }
+
+    private suspend fun fetchAndSaveMantleModels(mantleApiKey: String, region: String) {
+        try {
+            withContext(Dispatchers.IO) {
+                val request = Request.Builder()
+                    .url("https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT&byInferenceType=ON_DEMAND")
+                    .header("Authorization", "Bearer $mantleApiKey")
+                    .get()
+                    .build()
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: return@use
+                        val ids = parseFoundationModelIds(body)
+                        settingsRepository.setBedrockAvailableModels(ids)
+                        AiModelCatalog.setBedrockModels(ids)
+                    }
+                }
+            }
+        } catch (_: Exception) { /* non bloccante */ }
     }
 
     // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
@@ -184,7 +204,12 @@ class SettingsViewModel @Inject constructor(
                     )
                     httpClient.newCall(signedRequest).execute().use { response ->
                         if (response.isSuccessful || response.code == 400) {
-                            BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
+                            val fetchError = fetchAndSaveIamModels(accessKey, secretKey, region)
+                            if (fetchError != null) {
+                                BedrockTestResult.Success("Connessione IAM riuscita (lista modelli: $fetchError)")
+                            } else {
+                                BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
+                            }
                         } else {
                             BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
                         }
@@ -196,44 +221,82 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    // ── Bedrock Mantle model picker ────────────────────────────────────────────
+    private suspend fun fetchAndSaveIamModels(accessKey: String, secretKey: String, region: String): String? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val url = "https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT&byInferenceType=ON_DEMAND"
+                val baseRequest = Request.Builder().url(url).get().build()
+                val signedRequest = com.ugocalc.app.data.remote.ai.client.AwsSigV4Signer.sign(
+                    baseRequest, accessKey, secretKey, region, ByteArray(0)
+                )
+                httpClient.newCall(signedRequest).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string() ?: return@withContext "Risposta vuota"
+                        val ids = parseFoundationModelIds(body)
+                        if (ids.isEmpty()) return@withContext "Nessun modello trovato"
+                        settingsRepository.setBedrockIamAvailableModels(ids)
+                        AiModelCatalog.setBedrockIamModels(ids)
+                        null
+                    } else {
+                        "Lista modelli IAM: HTTP ${response.code}"
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.message
+        }
+    }
 
-    /** true quando va mostrato il dialog di selezione modelli Bedrock. */
+    private fun parseFoundationModelIds(json: String): List<String> {
+        return try {
+            val arr = JSONObject(json).getJSONArray("modelSummaries")
+            (0 until arr.length()).map { arr.getJSONObject(it).getString("modelId") }
+        } catch (_: Exception) { emptyList() }
+    }
+
+    // ── Bedrock Mantle model picker (legacy, kept for compatibility) ───────────
     private val _showBedrockModelPicker = MutableStateFlow(false)
     val showBedrockModelPicker: StateFlow<Boolean> = _showBedrockModelPicker.asStateFlow()
+    val enabledBedrockModelIds: StateFlow<Set<String>> = MutableStateFlow(emptySet<String>()).asStateFlow()
+    fun openBedrockModelPicker() { _showAllModelsPicker.value = true }
+    fun dismissBedrockModelPicker() { _showAllModelsPicker.value = false }
+    fun saveBedrockEnabledModels(ids: Set<String>) = saveAllEnabledModels(ids)
 
-    /** ID dei modelli Bedrock abilitati (quelli che compaiono in "Analizza"). */
-    private val _enabledBedrockModelIds = MutableStateFlow(
-        settingsRepository.getBedrockAvailableModels().toSet()
-    )
-    val enabledBedrockModelIds: StateFlow<Set<String>> = _enabledBedrockModelIds.asStateFlow()
+    // ── Bedrock IAM model picker (legacy, kept for compatibility) ──────────────
+    private val _showBedrockIamModelPicker = MutableStateFlow(false)
+    val showBedrockIamModelPicker: StateFlow<Boolean> = _showBedrockIamModelPicker.asStateFlow()
+    val enabledBedrockIamModelIds: StateFlow<Set<String>> = MutableStateFlow(emptySet<String>()).asStateFlow()
+    fun openBedrockIamModelPicker() { _showAllModelsPicker.value = true }
+    fun dismissBedrockIamModelPicker() { _showAllModelsPicker.value = false }
+    fun saveBedrockIamEnabledModels(ids: Set<String>) = saveAllEnabledModels(ids)
 
-    fun openBedrockModelPicker() { _showBedrockModelPicker.value = true }
-    fun dismissBedrockModelPicker() { _showBedrockModelPicker.value = false }
+    // ── Picker unificato: tutti i modelli disponibili → preferredModelIds ──────
 
-    fun saveBedrockEnabledModels(ids: Set<String>) {
-        settingsRepository.setBedrockAvailableModels(ids.toList())
-        AiModelCatalog.setBedrockModels(ids.toList())
-        _enabledBedrockModelIds.value = ids
-        _showBedrockModelPicker.value = false
+    private val _showAllModelsPicker = MutableStateFlow(false)
+    val showAllModelsPicker: StateFlow<Boolean> = _showAllModelsPicker.asStateFlow()
+
+    fun openAllModelsPicker() { _showAllModelsPicker.value = true }
+    fun dismissAllModelsPicker() { _showAllModelsPicker.value = false }
+
+    fun saveAllEnabledModels(ids: Set<String>) {
+        viewModelScope.launch { settingsRepository.setPreferredModelIds(ids) }
+        _showAllModelsPicker.value = false
     }
 
     fun clearHistory() = viewModelScope.launch { historyRepository.clearHistory() }
 
     fun resetAllSettings() = viewModelScope.launch { settingsRepository.resetAll() }
 
-    val availableModels: List<AiModel> by lazy {
-        runBlocking {
-            val isOffline = !connectivityObserver.isOnlineNow()
-            AiModelCatalog.ALL.filter { model ->
-                if (isOffline) false
-                else when (model.provider) {
-                    AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT ->
-                        settingsRepository.hasBedrockCredentials()
-                    AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT ->
-                        settingsRepository.hasBedrockIamCredentials()
-                    else -> settingsRepository.getApiKey(model.provider) != null
-                }
+    val availableModels: List<AiModel> get() {
+        val isOffline = !connectivityObserver.isOnlineNow()
+        return AiModelCatalog.ALL.filter { model ->
+            if (isOffline) false
+            else when (model.provider) {
+                AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT ->
+                    settingsRepository.hasBedrockCredentials()
+                AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT ->
+                    settingsRepository.hasBedrockIamCredentials()
+                else -> settingsRepository.getApiKey(model.provider) != null
             }
         }
     }

@@ -61,6 +61,8 @@ class SettingsRepository @Inject constructor(
     fun hasBedrockCredentials(): Boolean = apiKeyStore.hasBedrockCredentials()
     fun getBedrockAvailableModels(): List<String> = apiKeyStore.getBedrockAvailableModels()
     fun setBedrockAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockAvailableModels(modelIds)
+    fun getBedrockIamAvailableModels(): List<String> = apiKeyStore.getBedrockIamAvailableModels()
+    fun setBedrockIamAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockIamAvailableModels(modelIds)
 
     // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
     fun getBedrockIamAccessKey(): String? = apiKeyStore.getBedrockIamAccessKey()

@@ -51,7 +51,7 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
         prefs.edit().remove(KEY_GEMINI_SERVICE_ACCOUNT).apply()
     }
 
-    fun hasAnyApiKey(): Boolean = AiProviderType.entries.any { getApiKey(it) != null } || hasBedrockCredentials()
+    fun hasAnyApiKey(): Boolean = AiProviderType.entries.any { getApiKey(it) != null } || hasBedrockCredentials() || hasBedrockIamCredentials()
 
     // ── AWS Bedrock Mantle: API key + project ID + region ──────────────────────
 
@@ -77,6 +77,31 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
 
     fun hasBedrockCredentials(): Boolean = getBedrockMantleApiKey() != null
 
+    // ── AWS Bedrock Runtime IAM: Access Key + Secret + Region ─────────────────
+
+    fun getBedrockIamAccessKey(): String? = prefs.getString(KEY_BEDROCK_IAM_ACCESS_KEY, null)
+    fun getBedrockIamSecretKey(): String? = prefs.getString(KEY_BEDROCK_IAM_SECRET_KEY, null)
+    fun getBedrockIamRegion(): String = prefs.getString(KEY_BEDROCK_IAM_REGION, null) ?: DEFAULT_BEDROCK_REGION
+
+    fun setBedrockIamCredentials(accessKey: String, secretKey: String, region: String = DEFAULT_BEDROCK_REGION) {
+        prefs.edit()
+            .putString(KEY_BEDROCK_IAM_ACCESS_KEY, accessKey)
+            .putString(KEY_BEDROCK_IAM_SECRET_KEY, secretKey)
+            .putString(KEY_BEDROCK_IAM_REGION, region)
+            .apply()
+    }
+
+    fun clearBedrockIamCredentials() {
+        prefs.edit()
+            .remove(KEY_BEDROCK_IAM_ACCESS_KEY)
+            .remove(KEY_BEDROCK_IAM_SECRET_KEY)
+            .remove(KEY_BEDROCK_IAM_REGION)
+            .apply()
+    }
+
+    fun hasBedrockIamCredentials(): Boolean =
+        getBedrockIamAccessKey() != null && getBedrockIamSecretKey() != null
+
     fun getBedrockAvailableModels(): List<String> {
         val raw = prefs.getString(KEY_BEDROCK_MODELS, null) ?: return emptyList()
         return raw.split("|").filter { it.isNotBlank() }
@@ -84,6 +109,15 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
 
     fun setBedrockAvailableModels(modelIds: List<String>) {
         prefs.edit().putString(KEY_BEDROCK_MODELS, modelIds.joinToString("|")).apply()
+    }
+
+    fun getBedrockIamAvailableModels(): List<String> {
+        val raw = prefs.getString(KEY_BEDROCK_IAM_MODELS, null) ?: return emptyList()
+        return raw.split("|").filter { it.isNotBlank() }
+    }
+
+    fun setBedrockIamAvailableModels(modelIds: List<String>) {
+        prefs.edit().putString(KEY_BEDROCK_IAM_MODELS, modelIds.joinToString("|")).apply()
     }
 
     private fun keyFor(provider: AiProviderType) = "api_key_${provider.name}"
@@ -94,6 +128,10 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
         const val KEY_BEDROCK_MANTLE_PROJECT_ID = "bedrock_mantle_project_id"
         const val KEY_BEDROCK_REGION = "bedrock_aws_region"
         const val KEY_BEDROCK_MODELS = "bedrock_available_models"
+        const val KEY_BEDROCK_IAM_MODELS = "bedrock_iam_available_models"
+        const val KEY_BEDROCK_IAM_ACCESS_KEY = "bedrock_iam_access_key"
+        const val KEY_BEDROCK_IAM_SECRET_KEY = "bedrock_iam_secret_key"
+        const val KEY_BEDROCK_IAM_REGION = "bedrock_iam_region"
         const val DEFAULT_BEDROCK_REGION = "us-east-1"
         const val DEFAULT_MANTLE_PROJECT_ID = "proj_thoat36pxhdzt3eioqvl"
     }

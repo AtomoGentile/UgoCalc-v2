@@ -1,6 +1,5 @@
 package com.ugocalc.app.ui.auth
 
-import android.content.Intent
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.layout.Column
@@ -13,11 +12,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -45,9 +42,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import android.content.Intent
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.ui.components.BackIconButton
@@ -75,17 +74,6 @@ fun AccountSettingsScreen(
             null -> {}
         }
         if (uiState.inviteResult != null) viewModel.dismissInviteResult()
-    }
-
-    LaunchedEffect(uiState.pendingWhatsAppEmail) {
-        val email = uiState.pendingWhatsAppEmail ?: return@LaunchedEffect
-        val msg = "Ti ho invitato ad accedere al mio account UgoCalc! Registrati con questa email: $email"
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, msg)
-        }
-        context.startActivity(Intent.createChooser(intent, "Invia invito"))
-        viewModel.clearPendingWhatsAppEmail()
     }
 
     // Share link generato via token
@@ -379,48 +367,6 @@ fun AccountSettingsScreen(
                     TextButton(onClick = viewModel::cancelOwnerPolling) { Text("Annulla") }
                 }
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "Oppure invita direttamente tramite email:",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = uiState.inviteEmail,
-                onValueChange = viewModel::setInviteEmail,
-                label = { Text("Email da invitare") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Spacer(Modifier.height(8.dp))
-            Button(
-                onClick = viewModel::sendInvite,
-                enabled = !uiState.isLoading && uiState.inviteEmail.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.PersonAdd, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Invia invito")
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = viewModel::sendInviteViaWhatsApp,
-                enabled = !uiState.isLoading && uiState.inviteEmail.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (uiState.isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Condividi invito")
-                }
-            }
-
             Spacer(Modifier.height(24.dp))
             HorizontalDivider()
             Spacer(Modifier.height(24.dp))

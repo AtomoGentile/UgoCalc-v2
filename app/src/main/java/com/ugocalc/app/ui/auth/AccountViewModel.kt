@@ -124,19 +124,10 @@ class AccountViewModel @Inject constructor(
     fun sendInviteViaWhatsApp() {
         val email = _uiState.value.inviteEmail.trim()
         if (email.isBlank()) return
-        viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoading = true, inviteResult = null)
-            val result = shareClient.invite(email)
-            _uiState.value = _uiState.value.copy(
-                isLoading = false,
-                inviteResult = when (result) {
-                    is ShareResult.Success -> InviteResult.Success(email)
-                    is ShareResult.Error -> InviteResult.Error(result.message)
-                },
-                inviteEmail = if (result is ShareResult.Success) "" else email,
-                pendingWhatsAppEmail = if (result is ShareResult.Success) email else null,
-            )
-        }
+        _uiState.value = _uiState.value.copy(
+            pendingWhatsAppEmail = email,
+            inviteEmail = "",
+        )
     }
 
     fun clearPendingWhatsAppEmail() {

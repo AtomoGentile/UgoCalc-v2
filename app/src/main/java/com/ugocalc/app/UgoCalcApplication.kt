@@ -28,6 +28,7 @@ class UgoCalcApplication : Application(), Configuration.Provider {
         super.onCreate()
         PDFBoxResourceLoader.init(applicationContext)
         AiModelCatalog.setBedrockModels(apiKeyStore.getBedrockAvailableModels())
+        AiModelCatalog.setBedrockIamModels(apiKeyStore.getBedrockIamAvailableModels())
         createNotificationChannel()
         scheduleBenchmarkWorker()
         initializeAmplify()

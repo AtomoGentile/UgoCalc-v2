@@ -22,11 +22,18 @@ cd "$(dirname "$0")/../lambda"
 npm ci --omit=dev
 # Zip: include source + node_modules, exclude tests and dev files
 rm -f "../infra/${ZIP}"
-zip -r "../infra/${ZIP}" . \
-  --exclude "*.test.js" \
-  --exclude "__tests__/*" \
-  --exclude "*.md" \
-  --exclude ".git*"
+if command -v zip &>/dev/null; then
+  zip -r "../infra/${ZIP}" . \
+    --exclude "*.test.js" \
+    --exclude "__tests__/*" \
+    --exclude "*.md" \
+    --exclude ".git*"
+else
+  # Fallback for Windows (Git Bash without zip): use PowerShell
+  SRC_WIN="$(pwd -W)"
+  DEST_WIN="$(cd ../infra && pwd -W)/${ZIP}"
+  powershell.exe -NoProfile -Command "Compress-Archive -Path '${SRC_WIN}\\*' -DestinationPath '${DEST_WIN}' -Force"
+fi
 cd - > /dev/null
 echo "    Created infra/${ZIP}"
 

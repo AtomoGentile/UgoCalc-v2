@@ -67,12 +67,8 @@ class BiasEvolutionViewModel @Inject constructor(
     ) { settings, corrections, allV2, selectedModel, displayLimit ->
         val enabledModelIds = settings.shadowModelIds.takeIf { it.isNotEmpty() }
             ?: settings.preferredModelIds
-        val availableModelIds = if (enabledModelIds.isNotEmpty()) {
-            allV2.map { it.aiModelId }.distinct().sorted()
-                .filter { it in enabledModelIds }
-        } else {
-            allV2.map { it.aiModelId }.distinct().sorted()
-        }
+        val availableModelIds = allV2.map { it.aiModelId }.distinct().sorted()
+            .filter { it in enabledModelIds }
         val effectiveSelectedModel = selectedModel ?: availableModelIds.firstOrNull()
 
         val filteredCorrections = if (effectiveSelectedModel != null) {
@@ -87,38 +83,30 @@ class BiasEvolutionViewModel @Inject constructor(
             allV2
         }
 
-        Triple(Pair(settings, filteredCorrections), filteredRecords, Triple(availableModelIds, effectiveSelectedModel, displayLimit))
-    }.flatMapLatest { (settingsAndCorrections, filteredRecords, modelsInfo) ->
-        flow {
-            val (settings, corrections) = settingsAndCorrections
-            val (availableModelIds, selectedModel, displayLimit) = modelsInfo
-            // Convert model IDs to AiModel objects for display
-            val availableModels = availableModelIds.mapNotNull { id ->
-                com.ugocalc.app.domain.model.AiModelCatalog.ALL.find { it.id == id }
-            }
-            val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
+        val availableModels = availableModelIds.mapNotNull { id ->
+            com.ugocalc.app.domain.model.AiModelCatalog.ALL.find { it.id == id }
+        }
+        val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
 
-            emit(
-                BiasEvolutionUiState(
-                    loading = false,
-                    consentGiven = settings.biasDataConsentGiven,
-                    v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
-                    v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
-                    v2Promoted = promotion.promoteV2,
-                    corrections = corrections,
-                    recentV2Records = filteredRecords.take(displayLimit),
-                    allV2Records = filteredRecords,
-                    availableModels = availableModels,
-                    selectedModelId = selectedModel,
-                    recordsDisplayLimit = displayLimit
-                )
-            )
-        }.flowOn(Dispatchers.Default)
-    }.stateIn(
-        scope = viewModelScope,
-        started = SharingStarted.WhileSubscribed(5000),
-        initialValue = BiasEvolutionUiState(loading = true)
-    )
+        BiasEvolutionUiState(
+            loading = false,
+            consentGiven = settings.biasDataConsentGiven,
+            v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
+            v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
+            v2Promoted = promotion.promoteV2,
+            corrections = filteredCorrections,
+            recentV2Records = filteredRecords.take(displayLimit),
+            allV2Records = filteredRecords,
+            availableModels = availableModels,
+            selectedModelId = effectiveSelectedModel,
+            recordsDisplayLimit = displayLimit
+        )
+    }.flowOn(Dispatchers.Default)
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = BiasEvolutionUiState(loading = true)
+        )
 
     fun setConsentGiven(given: Boolean) {
         viewModelScope.launch { settingsRepository.setBiasDataConsentGiven(given) }

@@ -429,6 +429,175 @@ class BedrockMantleGptClient @Inject constructor(
 }
 
 /**
+ * Chiama Claude tramite AWS Bedrock Runtime diretto con SigV4 (Access Key + Secret Key).
+ * Endpoint: POST https://bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke
+ * Auth: AWS Signature Version 4 (servizio bedrock-runtime)
+ *
+ * Il parametro apiKey arriva nel formato "accessKey|secretKey|region".
+ */
+@Singleton
+class BedrockIamClaudeClient @Inject constructor(
+    @Named("no_auth") private val okHttpClientNoAuth: OkHttpClient,
+    private val json: Json,
+) : AiTextCompletionClient {
+
+    override suspend fun completeJson(
+        apiKey: String,
+        modelId: String,
+        userText: String,
+        images: List<ImagePart>,
+    ): String = withContext(Dispatchers.IO) {
+        val (accessKey, secretKey, region) = parseCredentials(apiKey)
+        val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
+        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(modelId, "UTF-8")}/invoke"
+        val baseRequest = Request.Builder()
+            .url(url)
+            .header("Content-Type", "application/json")
+            .post(bodyBytes.toRequestBody("application/json".toMediaType()))
+            .build()
+        val signedRequest = AwsSigV4Signer.sign(baseRequest, accessKey, secretKey, region, bodyBytes)
+
+        okHttpClientNoAuth.newCall(signedRequest).execute().use { response ->
+            val bodyString = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val message = "Chiamata Bedrock Runtime IAM (Claude) fallita: HTTP ${response.code} $bodyString"
+                throw if (response.code == 503) ServiceUnavailableException(message) else AiCallException(message)
+            }
+            extractText(bodyString)
+        }
+    }
+
+    private fun buildRequestBody(userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+        put("anthropic_version", "bedrock-2023-05-31")
+        put("max_tokens", MAX_OUTPUT_TOKENS)
+        putJsonArray("messages") {
+            addJsonObject {
+                put("role", "user")
+                putJsonArray("content") {
+                    images.forEach { image ->
+                        addJsonObject {
+                            put("type", "image")
+                            putJsonObject("source") {
+                                put("type", "base64")
+                                put("media_type", image.mimeType)
+                                put("data", image.base64)
+                            }
+                        }
+                    }
+                    addJsonObject { put("type", "text"); put("text", userText) }
+                }
+            }
+        }
+    }
+
+    private fun extractText(rawResponseBody: String): String {
+        val root = try {
+            json.parseToJsonElement(rawResponseBody).jsonObject
+        } catch (e: Exception) {
+            throw AiCallException("Risposta Bedrock Runtime IAM (Claude) non valida (JSON malformato)", e)
+        }
+        return root["content"]?.jsonArray
+            ?.firstOrNull { it.jsonObject["type"]?.jsonPrimitive?.content == "text" }
+            ?.jsonObject?.get("text")?.jsonPrimitive?.content
+            ?: throw AiCallException("Risposta Bedrock Runtime IAM (Claude) priva di contenuto testuale")
+    }
+
+    override suspend fun searchOnline(apiKey: String, modelId: String, userText: String): String =
+        completeJson(apiKey, modelId, userText)
+
+    companion object {
+        private const val MAX_OUTPUT_TOKENS = 16384
+
+        fun parseCredentials(apiKey: String): Triple<String, String, String> {
+            val parts = apiKey.split('|')
+            require(parts.size == 3) {
+                "Credenziali Bedrock IAM non valide: formato atteso 'accessKey|secretKey|region'"
+            }
+            return Triple(parts[0], parts[1], parts[2])
+        }
+    }
+}
+
+/**
+ * Chiama modelli OpenAI su AWS Bedrock Runtime diretto con SigV4 (Access Key + Secret Key).
+ * Endpoint: POST https://bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke
+ * Usa il body OpenAI-compatible (messages/content) supportato da Bedrock per i modelli GPT.
+ *
+ * Il parametro apiKey arriva nel formato "accessKey|secretKey|region".
+ */
+@Singleton
+class BedrockIamGptClient @Inject constructor(
+    @Named("no_auth") private val okHttpClientNoAuth: OkHttpClient,
+    private val json: Json,
+) : AiTextCompletionClient {
+
+    override suspend fun completeJson(
+        apiKey: String,
+        modelId: String,
+        userText: String,
+        images: List<ImagePart>,
+    ): String = withContext(Dispatchers.IO) {
+        val (accessKey, secretKey, region) = BedrockIamClaudeClient.parseCredentials(apiKey)
+        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(modelId, "UTF-8")}/invoke"
+        val baseRequest = Request.Builder()
+            .url(url)
+            .header("Content-Type", "application/json")
+            .post(bodyBytes.toRequestBody("application/json".toMediaType()))
+            .build()
+        val signedRequest = AwsSigV4Signer.sign(baseRequest, accessKey, secretKey, region, bodyBytes)
+
+        okHttpClientNoAuth.newCall(signedRequest).execute().use { response ->
+            val bodyString = response.body?.string().orEmpty()
+            if (!response.isSuccessful) {
+                val message = "Chiamata Bedrock Runtime IAM (GPT) fallita: HTTP ${response.code} $bodyString"
+                throw if (response.code == 503) ServiceUnavailableException(message) else AiCallException(message)
+            }
+            extractText(bodyString)
+        }
+    }
+
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+        put("model", modelId)
+        put("max_tokens", MAX_OUTPUT_TOKENS)
+        putJsonArray("messages") {
+            addJsonObject {
+                put("role", "user")
+                putJsonArray("content") {
+                    images.forEach { image ->
+                        addJsonObject {
+                            put("type", "image_url")
+                            putJsonObject("image_url") { put("url", "data:${image.mimeType};base64,${image.base64}") }
+                        }
+                    }
+                    addJsonObject { put("type", "text"); put("text", userText) }
+                }
+            }
+        }
+    }
+
+    private fun extractText(rawResponseBody: String): String {
+        val root = try {
+            json.parseToJsonElement(rawResponseBody).jsonObject
+        } catch (e: Exception) {
+            throw AiCallException("Risposta Bedrock Runtime IAM (GPT) non valida (JSON malformato)", e)
+        }
+        return root["choices"]?.jsonArray?.getOrNull(0)?.jsonObject
+            ?.get("message")?.jsonObject
+            ?.get("content")?.jsonPrimitive?.content
+            ?: throw AiCallException("Risposta Bedrock Runtime IAM (GPT) priva di contenuto testuale")
+    }
+
+    override suspend fun searchOnline(apiKey: String, modelId: String, userText: String): String {
+        throw AiCallException("Ricerca online non disponibile per GPT su Bedrock Runtime IAM.")
+    }
+
+    companion object {
+        private const val MAX_OUTPUT_TOKENS = 16384
+    }
+}
+
+/**
  * Chiama Gemini tramite l'endpoint pubblico Google AI Studio (generativelanguage.googleapis.com),
  * autenticato con una semplice API key (fascia gratuita con limiti di frequenza, nessun account
  * Google Cloud/fatturazione richiesto — a differenza di Vertex AI).

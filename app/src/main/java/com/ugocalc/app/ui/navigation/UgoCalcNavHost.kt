@@ -43,6 +43,7 @@ import com.ugocalc.app.ui.settings.FavoritesSettingsScreen
 import com.ugocalc.app.ui.settings.HistoryChartSettingsScreen
 import com.ugocalc.app.ui.settings.PermissionsSettingsScreen
 import com.ugocalc.app.ui.settings.PreferredModelSettingsScreen
+import com.ugocalc.app.ui.settings.ShadowModelSettingsScreen
 import com.ugocalc.app.ui.settings.SettingsScreen
 import com.ugocalc.app.ui.settings.tables.DatabaseSearchScreen
 import com.ugocalc.app.ui.settings.tables.OfficialTablesListScreen
@@ -239,6 +240,7 @@ fun UgoCalcNavHost(
         composable(Routes.SETTINGS_PERMISSIONS) { PermissionsSettingsScreen(onBack = safeBack) }
         composable(Routes.SETTINGS_ACCESSIBILITY) { AccessibilitySettingsScreen(onBack = safeBack) }
         composable(Routes.SETTINGS_PREFERRED_MODEL) { PreferredModelSettingsScreen(onBack = safeBack) }
+        composable(Routes.SETTINGS_SHADOW_MODEL) { ShadowModelSettingsScreen(onBack = safeBack) }
         composable(Routes.SETTINGS_CONFIDENCE) { ConfidenceSettingsScreen(onBack = safeBack) }
 
         composable(Routes.SETTINGS) {
@@ -249,6 +251,7 @@ fun UgoCalcNavHost(
                 onOpenPermissions = { navController.navigate(Routes.SETTINGS_PERMISSIONS) },
                 onOpenAccessibility = { navController.navigate(Routes.SETTINGS_ACCESSIBILITY) },
                 onOpenPreferredModel = { navController.navigate(Routes.SETTINGS_PREFERRED_MODEL) },
+                onOpenShadowModel = { navController.navigate(Routes.SETTINGS_SHADOW_MODEL) },
                 onOpenConfidence = { navController.navigate(Routes.SETTINGS_CONFIDENCE) },
                 onOpenTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
                 onOpenChangelog = { navController.navigate(Routes.SETTINGS_CHANGELOG) },

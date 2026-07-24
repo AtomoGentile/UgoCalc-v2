@@ -480,6 +480,7 @@ Resources:
           INVITES_TABLE: ugocalc-invites
           COGNITO_USER_POOL_ID: !Ref UserPool
           COGNITO_CLIENT_ID: !Ref UserPoolClient
+          API_BASE_URL: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
 
   BiasLambda:
     Type: AWS::Lambda::Function
@@ -638,6 +639,13 @@ Resources:
     Properties:
       ApiId: !Ref HttpApi
       RouteKey: POST /share/approve
+      Target: !Sub integrations/${ShareIntegration}
+
+  InviteRedirectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref HttpApi
+      RouteKey: GET /invite
       Target: !Sub integrations/${ShareIntegration}
 
   BiasRoute:

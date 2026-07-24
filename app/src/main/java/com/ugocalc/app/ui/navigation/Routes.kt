@@ -25,6 +25,7 @@ object Routes {
     const val SETTINGS_PERMISSIONS = "settings_permissions"
     const val SETTINGS_ACCESSIBILITY = "settings_accessibility"
     const val SETTINGS_PREFERRED_MODEL = "settings_preferred_model"
+    const val SETTINGS_SHADOW_MODEL = "settings_shadow_model"
     const val SETTINGS_CONFIDENCE = "settings_confidence"
     const val SETTINGS_TABLES_LIST = "settings_tables_list"
     const val SETTINGS_TABLES_SEARCH = "settings_tables_search"

@@ -18,6 +18,7 @@ const crypto = require('crypto');
 
 const INVITES_TABLE  = process.env.INVITES_TABLE  || 'ugocalc-invites';
 const ACCOUNTS_TABLE = process.env.ACCOUNTS_TABLE || 'ugocalc-accounts';
+const API_BASE_URL   = process.env.API_BASE_URL   || '';
 const TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 ore
 
 const dynamo = new DynamoDBClient({});
@@ -30,6 +31,7 @@ exports.handler = async (event) => {
   if (method === 'POST' && rawPath.endsWith('/share/request'))  return handleRequest(event);
   if (method === 'GET'  && rawPath.endsWith('/share/status'))   return handleStatus(event);
   if (method === 'POST' && rawPath.endsWith('/share/approve'))  return handleApprove(event);
+  if (method === 'GET'  && rawPath.endsWith('/invite'))         return handleInviteRedirect(event);
   if (method === 'POST' && rawPath.endsWith('/share'))          return handleLegacyInvite(event);
 
   return response(404, { error: 'Not found' });
@@ -48,9 +50,10 @@ async function handleGenerate(event) {
     Item: marshall({ PK: token, ownerLoginId: callerLoginId, status: 'pending', ttl }),
   }));
 
+  const base = API_BASE_URL || `https://${event.requestContext?.domainName}/${event.requestContext?.stage || 'prod'}`;
   return response(200, {
     token,
-    deepLink: `ugocalc://invite?token=${token}`,
+    deepLink: `${base}/invite?token=${token}`,
   });
 }
 
@@ -81,9 +84,10 @@ async function handleRequest(event) {
   await dynamo.send(new UpdateItemCommand({
     TableName: INVITES_TABLE,
     Key: marshall({ PK: token }),
-    UpdateExpression: 'SET guestLoginId = :g',
+    UpdateExpression: 'SET guestLoginId = :g, #s = :ws',
     ConditionExpression: 'attribute_not_exists(guestLoginId)',
-    ExpressionAttributeValues: marshall({ ':g': guestLoginId }),
+    ExpressionAttributeNames: { '#s': 'status' },
+    ExpressionAttributeValues: marshall({ ':g': guestLoginId, ':ws': 'waiting_approval' }),
   }));
 
   return response(200, { status: 'waiting_approval' });
@@ -91,8 +95,8 @@ async function handleRequest(event) {
 
 // ─── GET /share/status?token=XXX ────────────────────────────────────────────
 async function handleStatus(event) {
-  const guestLoginId = await verifyToken(event.headers?.authorization || event.headers?.Authorization);
-  if (!guestLoginId) return response(401, { error: 'Unauthorized' });
+  const callerLoginId = await verifyToken(event.headers?.authorization || event.headers?.Authorization);
+  if (!callerLoginId) return response(401, { error: 'Unauthorized' });
 
   const token = event.queryStringParameters?.token;
   if (!token) return response(400, { error: 'token required' });
@@ -106,7 +110,10 @@ async function handleStatus(event) {
 
   const invite = unmarshall(result.Item);
 
-  if (invite.guestLoginId && invite.guestLoginId !== guestLoginId) return response(403, { error: 'Forbidden' });
+  // Ammetti sia l'owner (per il polling) sia il guest (per sapere se approvato)
+  const isOwner = invite.ownerLoginId === callerLoginId;
+  const isGuest = invite.guestLoginId && invite.guestLoginId === callerLoginId;
+  if (!isOwner && !isGuest) return response(403, { error: 'Forbidden' });
 
   return response(200, { status: invite.status });
 }
@@ -176,6 +183,21 @@ async function handleLegacyInvite(event) {
   }));
 
   return response(200, { ok: true, accountId: callerAccountId });
+}
+
+// ─── GET /invite?token=XXX — redirect browser → app deep link ───────────────
+async function handleInviteRedirect(event) {
+  const token = event.queryStringParameters?.token;
+  if (!token) return response(400, { error: 'token required' });
+
+  return {
+    statusCode: 301,
+    headers: {
+      Location: `ugocalc://invite?token=${token}`,
+      'Cache-Control': 'no-store',
+    },
+    body: '',
+  };
 }
 
 function response(statusCode, body) {

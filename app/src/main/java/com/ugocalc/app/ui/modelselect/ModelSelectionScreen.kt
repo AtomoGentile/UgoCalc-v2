@@ -1,6 +1,5 @@
 package com.ugocalc.app.ui.modelselect
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -35,11 +34,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.ui.components.ModelLogoBox
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 
 /** Schermata di selezione modello (§2.4 punto 1): griglia di card con logo e selezione visiva. */
@@ -117,35 +115,35 @@ private fun ModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) 
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
     ) {
-        Box(modifier = Modifier.fillMaxSize().padding(16.dp)) {
+        Box(modifier = Modifier.fillMaxSize().padding(12.dp)) {
             Column(
                 modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.Center,
+                verticalArrangement = Arrangement.Top,
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                if (model.logoRes != null) {
-                    Image(
-                        painter = painterResource(id = model.logoRes),
-                        contentDescription = model.displayName,
-                        modifier = Modifier
-                            .size(72.dp)
-                            .clip(RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
+                ModelLogoBox(
+                    logoRes = model.logoRes,
+                    displayName = model.displayName,
+                    subtitle = model.subtitle,
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+                Spacer(Modifier.height(8.dp))
                 Text(
                     text = model.displayName,
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color(0xFF1C1B1F),
                 )
                 if (model.subtitle.isNotEmpty()) {
                     Text(
                         text = model.subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color(0xFF49454F),
                     )
                 }
+                Spacer(Modifier.height(4.dp))
             }
 
             if (isSelected) {

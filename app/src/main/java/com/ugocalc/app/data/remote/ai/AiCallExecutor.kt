@@ -4,6 +4,8 @@ import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
 import com.ugocalc.app.data.remote.ai.client.AiCallException
 import com.ugocalc.app.data.remote.ai.client.AiTextCompletionClient
 import com.ugocalc.app.data.remote.ai.client.AnthropicCompletionClient
+import com.ugocalc.app.data.remote.ai.client.BedrockIamClaudeClient
+import com.ugocalc.app.data.remote.ai.client.BedrockIamGptClient
 import com.ugocalc.app.data.remote.ai.client.BedrockMantleClaudeClient
 import com.ugocalc.app.data.remote.ai.client.BedrockMantleGptClient
 import com.ugocalc.app.data.remote.ai.client.GeminiCompletionClient
@@ -34,6 +36,8 @@ class AiCallExecutor @Inject constructor(
     private val geminiClient: GeminiCompletionClient,
     private val bedrockClaudeClient: BedrockMantleClaudeClient,
     private val bedrockGptClient: BedrockMantleGptClient,
+    private val bedrockIamClaudeClient: BedrockIamClaudeClient,
+    private val bedrockIamGptClient: BedrockIamGptClient,
     private val apiKeyStore: SecureApiKeyStore,
     internal val json: Json,
 ) {
@@ -44,20 +48,33 @@ class AiCallExecutor @Inject constructor(
         AiProviderType.GEMINI -> geminiClient
         AiProviderType.BEDROCK_CLAUDE -> bedrockClaudeClient
         AiProviderType.BEDROCK_GPT -> bedrockGptClient
+        AiProviderType.BEDROCK_IAM_CLAUDE -> bedrockIamClaudeClient
+        AiProviderType.BEDROCK_IAM_GPT -> bedrockIamGptClient
     }
 
     internal fun apiKeyFor(model: AiModel): String {
-        if (model.provider == AiProviderType.BEDROCK_CLAUDE || model.provider == AiProviderType.BEDROCK_GPT) {
-            val mantleKey = apiKeyStore.getBedrockMantleApiKey()
-            if (mantleKey.isNullOrBlank()) {
-                throw AiCallException("API key Bedrock Mantle non configurata per ${model.displayName}")
+        return when (model.provider) {
+            AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT -> {
+                val mantleKey = apiKeyStore.getBedrockMantleApiKey()
+                if (mantleKey.isNullOrBlank()) {
+                    throw AiCallException("API key Bedrock Mantle non configurata per ${model.displayName}")
+                }
+                val projectId = apiKeyStore.getBedrockMantleProjectId()
+                val region = apiKeyStore.getBedrockRegion()
+                "$mantleKey|$projectId|$region"
             }
-            val projectId = apiKeyStore.getBedrockMantleProjectId()
-            val region = apiKeyStore.getBedrockRegion()
-            return "$mantleKey|$projectId|$region"
+            AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT -> {
+                val accessKey = apiKeyStore.getBedrockIamAccessKey()
+                val secretKey = apiKeyStore.getBedrockIamSecretKey()
+                if (accessKey.isNullOrBlank() || secretKey.isNullOrBlank()) {
+                    throw AiCallException("Credenziali IAM Bedrock non configurate per ${model.displayName}")
+                }
+                val region = apiKeyStore.getBedrockIamRegion()
+                "$accessKey|$secretKey|$region"
+            }
+            else -> apiKeyStore.getApiKey(model.provider)
+                ?: throw AiCallException("Nessuna API key configurata per ${model.displayName}")
         }
-        return apiKeyStore.getApiKey(model.provider)
-            ?: throw AiCallException("Nessuna API key configurata per ${model.displayName}")
     }
 
     /** Codifica immagini grezze in [ImagePart] pronte per [completeJson], come già fatto in V1. */

@@ -15,6 +15,7 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +40,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -56,6 +60,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -363,22 +368,11 @@ private fun PhotoGallery(
                 color = UgoGrey,
                 modifier = Modifier.padding(bottom = 8.dp),
             )
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                items(availableCalibrations) { cal ->
-                    val selected = cal.id in selectedCalibrationIds
-                    FilterChip(
-                        selected = selected,
-                        onClick = { onToggleCalibration(cal.id) },
-                        label = { Text(cal.name) },
-                        leadingIcon = if (selected) {
-                            { Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp)) }
-                        } else null,
-                    )
-                }
-            }
+            CalibrationSelector(
+                calibrations = availableCalibrations,
+                selectedIds = selectedCalibrationIds,
+                onToggle = onToggleCalibration,
+            )
         }
 
         Row(
@@ -486,6 +480,69 @@ private fun PhotoZoomReview(imageBytes: ByteArray, onRemove: () -> Unit, onClose
         ) {
             OutlinedButton(onClick = onRemove) { Text("Rimuovi foto") }
             Button(onClick = onClose) { Text("Torna alla galleria") }
+        }
+    }
+}
+
+@Composable
+private fun CalibrationSelector(
+    calibrations: List<ScaleCalibrationEntity>,
+    selectedIds: Set<Long>,
+    onToggle: (Long) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(
+            onClick = { expanded = !expanded },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    if (selectedIds.isEmpty()) "Seleziona calibrazioni..."
+                    else "${selectedIds.size} calibrazione${if (selectedIds.size != 1) "i" else ""} scelta${if (selectedIds.size != 1) "e" else ""}"
+                )
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
+            }
+        }
+
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.fillMaxWidth(0.9f),
+        ) {
+            calibrations.forEach { cal ->
+                val selected = cal.id in selectedIds
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            if (selected) {
+                                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp).padding(end = 8.dp))
+                            }
+                            Column {
+                                Text(cal.name, fontWeight = FontWeight.Medium)
+                                val dims = mutableListOf("${cal.valueCm}cm")
+                                cal.widthCm?.let { dims.add("$it cm") }
+                                cal.heightCm?.let { dims.add("$it cm") }
+                                Text(
+                                    "Dim: ${dims.joinToString(" × ")}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Color.Gray,
+                                )
+                            }
+                        }
+                    },
+                    onClick = { onToggle(cal.id) },
+                    contentPadding = PaddingValues(8.dp),
+                )
+            }
         }
     }
 }

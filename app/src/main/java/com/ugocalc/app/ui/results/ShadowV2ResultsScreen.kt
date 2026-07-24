@@ -69,12 +69,12 @@ private fun ShadowV2ResultCard(shadowResult: AnalysisSessionStore.V2ShadowResult
             when (val outcome = shadowResult.outcome) {
                 is AnalysisSessionStore.PipelineOutcomeForShadow.Success -> {
                     Text("✓ Successo", style = MaterialTheme.typography.bodySmall, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                    Text("CHO totali: ${outcome.totals.cho.toInt()}g", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
-                    Text("Grassi totali: ${outcome.totals.grassi.toInt()}g", style = MaterialTheme.typography.bodySmall)
+                    Text("CHO totali: ${outcome.totals.totalChoG.toInt()}g", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 4.dp))
+                    Text("Grassi totali: ${outcome.totals.totalGrassiG.toInt()}g", style = MaterialTheme.typography.bodySmall)
 
                     outcome.stime.forEach { stima ->
                         Text(
-                            "• ${stima.food.nome} — ${stima.weight.toInt()}g",
+                            "• ${stima.nome} — ${stima.pesoG.toInt()}g",
                             style = MaterialTheme.typography.bodySmall,
                             modifier = Modifier.padding(top = 4.dp)
                         )

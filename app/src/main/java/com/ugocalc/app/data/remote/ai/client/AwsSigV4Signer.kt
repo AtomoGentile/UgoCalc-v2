@@ -16,7 +16,7 @@ import javax.crypto.spec.SecretKeySpec
 object AwsSigV4Signer {
 
     private const val ALGORITHM = "AWS4-HMAC-SHA256"
-    private const val SERVICE = "bedrock-runtime"
+    private const val SERVICE = "bedrock"
 
     fun sign(
         request: Request,
@@ -31,7 +31,12 @@ object AwsSigV4Signer {
 
         val url = request.url
         val host = url.host
-        val canonicalUri = url.encodedPath.ifEmpty { "/" }
+        // SigV4 canonical URI: take the already-percent-encoded path from OkHttp, then
+        // URI-encode each character that is not unreserved AND not a forward slash.
+        // The '%' in any existing %XX escape must itself be encoded to %25, producing %25XX.
+        // Example: modelId "foo:bar" → OkHttp encodes ':' → "%3A" in encodedPath
+        //          → canonical URI encodes '%' of "%3A" → "%253A"  (AWS expected behavior).
+        val canonicalUri = uriEncodePath(url.encodedPath.ifEmpty { "/" })
         val canonicalQuerystring = url.encodedQuery.orEmpty()
 
         val payloadHash = sha256Hex(body)
@@ -93,6 +98,22 @@ object AwsSigV4Signer {
         MessageDigest.getInstance("SHA-256").digest(data).toHex()
 
     private fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
+
+    // SigV4: encode every byte except unreserved chars (A-Z a-z 0-9 - _ . ~) and '/'.
+    // Applied to the already-encoded path from OkHttp, so '%' → '%25', turning %3A → %253A.
+    private fun uriEncodePath(encodedPath: String): String = buildString {
+        for (ch in encodedPath) {
+            if (ch in 'A'..'Z' || ch in 'a'..'z' || ch in '0'..'9' ||
+                ch == '-' || ch == '_' || ch == '.' || ch == '~' || ch == '/') {
+                append(ch)
+            } else {
+                ch.toString().toByteArray(Charsets.UTF_8).forEach { byte ->
+                    append("%${"%02X".format(byte)}")
+                }
+            }
+        }
+    }
+
 
     private fun formatDate(date: Date, pattern: String): String {
         val sdf = SimpleDateFormat(pattern, Locale.US)

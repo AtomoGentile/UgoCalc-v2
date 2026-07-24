@@ -396,47 +396,27 @@ private fun BiasCorrectionDetailScreen(
         } else {
             // Lista categorie con correzioni (incluse vuote)
             val grouped = data as Map<String, List<BiasCorrectionWithUsageStats>>
-            val hasAnyCorrections = grouped.values.any { it.isNotEmpty() }
             LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                if (!hasAnyCorrections) {
+                grouped.forEach { (foodCat, items) ->
                     item {
-                        Column(modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                "Nessuna correzione calcolata ancora",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(bottom = 12.dp),
-                            )
-                            Text(
-                                "Registra il peso vero di una misurazione nella sezione 'Misurazioni' perché il sistema calcoli le correzioni.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = UgoGrey,
-                                textAlign = TextAlign.Center,
-                            )
-                        }
+                        Text(
+                            if (items.isEmpty()) "${foodCategoryLabel(foodCat)} (0)" else foodCategoryLabel(foodCat),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
+                            color = if (items.isEmpty()) UgoGrey else MaterialTheme.colorScheme.onSurface,
+                        )
                     }
-                } else {
-                    grouped.forEach { (foodCat, items) ->
-                        item {
-                            Text(
-                                if (items.isEmpty()) "${foodCategoryLabel(foodCat)} (0)" else foodCategoryLabel(foodCat),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 8.dp, horizontal = 0.dp),
-                                color = if (items.isEmpty()) UgoGrey else MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                        if (items.isNotEmpty()) {
-                            items(items.size) { index ->
-                                BiasCorrectionDetailItem(items[index])
-                                if (index < items.size - 1) {
-                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                                }
+                    if (items.isNotEmpty()) {
+                        items(items.size) { index ->
+                            BiasCorrectionDetailItem(items[index])
+                            if (index < items.size - 1) {
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                             }
                         }
-                        item {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
-                        }
+                    }
+                    item {
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                     }
                 }
             }
@@ -523,10 +503,10 @@ private fun BiasSummaryHeader(
     recentV2Records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity> = emptyList(),
     onSelectCategory: (String) -> Unit,
 ) {
-    val active = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile }
-    val unstable = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile }
-    val insufficient = corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti }
-    val insufficientRecords = recentV2Records.count { it.groundTruthPesiJson == null }
+    val active = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile } }
+    val unstable = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile } }
+    val insufficient = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti } }
+    val insufficientRecords = remember(recentV2Records) { recentV2Records.count { it.groundTruthPesiJson == null } }
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -641,7 +621,7 @@ private fun UltimeAnalisiDropdown(
     onLoadMore: () -> Unit,
     dateFormat: SimpleDateFormat,
 ) {
-    var expanded by androidx.compose.runtime.mutableStateOf(false)
+    var expanded by remember { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Column {
@@ -664,19 +644,23 @@ private fun UltimeAnalisiDropdown(
 
             if (expanded) {
                 HorizontalDivider()
-                Column(modifier = Modifier.padding(8.dp)) {
-                    records.forEach { record ->
-                        V2RecordMinimalRow(record, onOpenV2Details, onDelete, dateFormat)
+                LazyColumn(modifier = Modifier.padding(8.dp)) {
+                    items(records.size) { index ->
+                        V2RecordMinimalRow(records[index], onOpenV2Details, onDelete, dateFormat)
                     }
                     if (displayedCount < totalRecords) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        Button(
-                            onClick = onLoadMore,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(8.dp)
-                        ) {
-                            Text("Carica altri (${totalRecords - displayedCount} rimanenti)")
+                        item {
+                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        }
+                        item {
+                            Button(
+                                onClick = onLoadMore,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)
+                            ) {
+                                Text("Carica altri (${totalRecords - displayedCount} rimanenti)")
+                            }
                         }
                     }
                 }

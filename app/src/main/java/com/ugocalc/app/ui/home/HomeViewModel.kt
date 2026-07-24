@@ -124,7 +124,15 @@ class HomeViewModel @Inject constructor(
         // l'avviso "offline"/"nessun modello disponibile").
         combine(settingsRepository.settings, connectivityObserver.observe()) { settings, isOnline ->
             settings to if (!isOnline) emptyList()
-            else AiModelCatalog.ALL.filter { it.id in settings.preferredModelIds && settingsRepository.getApiKey(it.provider) != null }
+            else AiModelCatalog.ALL.filter { model ->
+                model.id in settings.preferredModelIds && when (model.provider) {
+                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
+                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
+                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
+                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
+                    else -> settingsRepository.getApiKey(model.provider) != null
+                }
+            }
         }.onEach { (settings, models) ->
             _uiState.value = _uiState.value.copy(
                 preferredModels = models,
