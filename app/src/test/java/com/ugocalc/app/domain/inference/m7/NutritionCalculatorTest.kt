@@ -4,7 +4,7 @@ import com.ugocalc.app.domain.inference.model.CalculationChain
 import com.ugocalc.app.domain.inference.model.ConfidenceInterval
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.WeightEstimate
-import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -16,6 +16,7 @@ class NutritionCalculatorTest {
         nome = nome,
         strategia = EstimationStrategy.DISTESA_SUL_PIATTO,
         pesoG = pesoG,
+        pesoCrudoG = pesoG,
         intervallo = ConfidenceInterval(pesoG * 0.8, pesoG * 1.2),
         catenaCalcolo = CalculationChain(
             formula = "frazione × area × altezza × riempimento × densità",
@@ -23,7 +24,7 @@ class NutritionCalculatorTest {
             fonti = emptyList(),
             sintesi = "$pesoG g — spiegazione di prova",
         ),
-        confidenza = Confidence.ALTO,
+        confidenza = ConfidenceScore(90),
     )
 
     @Test

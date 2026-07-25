@@ -13,15 +13,19 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.ugocalc.app.R
 import com.ugocalc.app.data.local.prefs.AppTheme
 
+val NunitoFamily = FontFamily.SansSerif
+
 /**
- * Famiglie di carattere (§ richiesta utente "colore, carattere se riesci"): solo font di sistema
- * (`FontFamily.SansSerif`/`Serif`/`Monospace`/`Cursive`), niente file di font da scaricare o
- * impacchettare — coprono comunque stili molto diversi tra loro.
+ * Famiglie di carattere (§ richiesta utente "colore, carattere se riesci"): Nunito come default
+ * (warm & friendly per food app), poi font di sistema (`FontFamily.SansSerif`/`Serif`/`Monospace`/`Cursive`)
  */
 enum class AppFontFamily(val label: String) {
     DEFAULT("Predefinito"),
@@ -31,7 +35,7 @@ enum class AppFontFamily(val label: String) {
     CURSIVE("Corsivo");
 
     val fontFamily: FontFamily? get() = when (this) {
-        DEFAULT -> null
+        DEFAULT -> NunitoFamily
         SANS_SERIF -> FontFamily.SansSerif
         SERIF -> FontFamily.Serif
         MONOSPACE -> FontFamily.Monospace
@@ -42,35 +46,56 @@ enum class AppFontFamily(val label: String) {
     val fontWeight: FontWeight? get() = if (this == MONOSPACE) FontWeight.Bold else null
 }
 
-val UgoGreen = Color(0xFF2E7D32) // Verde più acceso e vibrante (§ richiesta utente)
-val UgoRed = Color(0xFFC62828)
-val UgoGrey = Color(0xFF9E9E9E)
-/** Colore grassi nel grafico a torta CHO/grassi (§ schermata finale), distinto dal verde primario (CHO). */
-val UgoAmber = Color(0xFFF57C00)
-val UgoGold = Color(0xFFFBC02D)
-val UgoLime = Color(0xFF8BC34A)
+// Palette principale (warm & food-focused)
+val UgoGreen = Color(0xFF2E7D32) // Verde brand (invariato, top bar + bottoni)
+val UgoRed = Color(0xFFC62828) // Error rosso (invariato)
+val UgoGrey = Color(0xFF9E9E9E) // Placeholder/disabled
+
+// Nuova palette warm per light theme
+val WarmCream = Color(0xFFFDF8F2) // Background calda (crema)
+val WarmWhite = Color(0xFFFFFDF8) // Surface bianco caldo
+val WarmSand = Color(0xFFEDE0D0) // surfaceVariant sabbia
+val WarmTerracotta = Color(0xFFC0622B) // secondary terracotta (rimpiazza lime)
+val WarmAmber = Color(0xFFBF9B30) // tertiary amber (già esiste come RistoranteGold)
+
+// Nuova palette dark theme (charcoal/slate + accenti saturi)
+val DarkCharcoal = Color(0xFF37474F) // background slate-blue scuro
+val DarkSurface = Color(0xFF263238) // surface slate più scuro
+val DarkSurfaceVariant = Color(0xFF455A64) // surfaceVariant slate medio
+val DarkSecondaryVibrant = Color(0xFFFF9E5F) // secondary pesca saturo (rimpiazza lime, più vibrant)
 
 // Colori Ristorante (§ richiesta utente "colori diversi"): toni caldi, oro e bordeaux
 val RistoranteGold = Color(0xFFBF9B30)
 val RistoranteWine = Color(0xFF722F37)
 val RistoranteCream = Color(0xFFFFFDD0)
 
+// Spacing token (design system)
+val SpaceXS = 4.dp
+val SpaceS = 8.dp
+val SpaceM = 16.dp
+val SpaceL = 24.dp
+val SpaceXL = 32.dp
+
 private val LightColors = lightColorScheme(
     primary = UgoGreen,
-    secondary = Color(0xFF689F38), // Lime più saturo per staccare dal primario
-    tertiary = UgoGold,
+    secondary = WarmTerracotta, // Terracotta warm (food-focused)
+    tertiary = WarmAmber, // Amber warm
     error = UgoRed,
+    background = WarmCream, // Crema calda background
+    surface = WarmWhite, // Bianco caldo surface
 )
 
 private val DarkColors = darkColorScheme(
     primary = Color(0xFF66BB6A), // Verde acceso anche in dark mode
-    secondary = Color(0xFF9CCC65),
-    tertiary = Color(0xFFFFF176),
+    secondary = DarkSecondaryVibrant, // Pesca saturo, più vibrant
+    tertiary = Color(0xFFFFD54F), // Ambra più saturato
     error = Color(0xFFEF9A9A),
-    background = Color(0xFF001F1A),
-    surface = Color(0xFF001F1A),
+    background = DarkCharcoal, // Slate-blue scuro
+    surface = DarkSurface, // Slate surface
+    surfaceVariant = DarkSurfaceVariant, // Slate medio — usato per card/settings in dark
     onBackground = Color.White,
     onSurface = Color.White,
+    onSurfaceVariant = Color(0xFFCFD8DC), // Testo secondario — più leggibile su slate
 )
 
 private val RistoranteLightColors = lightColorScheme(
@@ -87,7 +112,7 @@ private val RistoranteDarkColors = darkColorScheme(
     secondary = Color(0xFFD32F2F),
     tertiary = Color(0xFFA1887F),
     error = Color(0xFFEF9A9A),
-    background = Color(0xFF2D2926),
+    background = Color(0xFF2D2926),  // Marrone scuro (mantenuto per distinzione Ristorante)
     surface = Color(0xFF2D2926),
     onBackground = Color.White,
     onSurface = Color.White,

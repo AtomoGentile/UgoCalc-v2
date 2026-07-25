@@ -42,6 +42,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setBiasDataConsentGiven(given: Boolean) = dataStore.setBiasDataConsentGiven(given)
     suspend fun setV2ShadowModeEnabled(enabled: Boolean) = dataStore.setV2ShadowModeEnabled(enabled)
     suspend fun setShadowModelIds(ids: Set<String>) = dataStore.setShadowModelIds(ids)
+    suspend fun setEnabledAnalysisModelIds(ids: Set<String>) = dataStore.setEnabledAnalysisModelIds(ids)
     suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) = dataStore.setV2VisibleModeEnabled(enabled)
     suspend fun setGlobalBiasEnabled(enabled: Boolean) = dataStore.setGlobalBiasEnabled(enabled)

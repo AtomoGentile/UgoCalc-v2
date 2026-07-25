@@ -124,7 +124,7 @@ fun VisionResultsScreen(
                             onClick = { viewModel.saveWeightsOnly() },
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("Salva solo pesi (senza CHO)", color = Color.Gray)
+                            Text("Salva solo pesi (senza CHO)", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
@@ -154,7 +154,7 @@ private fun ModelResultCard(
             when (outcome) {
                 is ModelVisionOutcome.Failure -> {
                     Text("Analisi non riuscita", color = UgoRed, fontWeight = FontWeight.Bold)
-                    Text(outcome.reason, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text(outcome.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 is ModelVisionOutcome.Success -> {
                     val confidenzaPeso = outcome.result.confidenzaGlobalePeso
@@ -167,7 +167,7 @@ private fun ModelResultCard(
                             outcome.result.ragionamento,
                             style = MaterialTheme.typography.bodySmall,
                             fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                            color = Color.Gray,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
@@ -192,20 +192,20 @@ private fun ModelResultCard(
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        Text(food.commento, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                        Text(food.commento, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         if (food.ragionamento.isNotEmpty()) {
                             Text(
                                 food.ragionamento,
                                 style = MaterialTheme.typography.bodySmall,
                                 fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                color = Color.Gray.copy(alpha = 0.8f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f),
                             )
                         }
                         food.decomposition?.let { d ->
                             Text(
                                 "Decomposed from '${d.recipeName}' — ${(d.percentageOfRecipe * 100).toInt()}%",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = Color.Gray,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }

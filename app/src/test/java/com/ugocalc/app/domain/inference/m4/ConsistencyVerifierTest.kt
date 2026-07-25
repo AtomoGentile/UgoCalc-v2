@@ -10,6 +10,7 @@ import com.ugocalc.app.domain.inference.model.RawMeasurements
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -124,8 +125,9 @@ class ConsistencyVerifierTest {
         nome = nome,
         strategia = strategia,
         pesoG = pesoG,
+        pesoCrudoG = pesoG,
         intervallo = ConfidenceInterval(minG = pesoG * 0.8, maxG = pesoG * 1.2),
         catenaCalcolo = CalculationChain(formula = "", valori = emptyMap(), fonti = emptyList(), sintesi = ""),
-        confidenza = Confidence.MEDIO,
+        confidenza = ConfidenceScore(65),
     )
 }

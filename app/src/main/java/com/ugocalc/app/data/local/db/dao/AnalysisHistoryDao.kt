@@ -9,6 +9,9 @@ interface AnalysisHistoryDao {
     @Query("SELECT * FROM analysis_history ORDER BY analyzedAtEpochMillis DESC")
     fun observeAll(): Flow<List<AnalysisHistoryEntity>>
 
+    @Query("SELECT * FROM analysis_history WHERE sessionMode = :mode ORDER BY analyzedAtEpochMillis DESC")
+    fun observeByMode(mode: String): Flow<List<AnalysisHistoryEntity>>
+
     /** Lettura una tantum (§ backup/esportazione): [observeAll] è un Flow, non adatto a un singolo export puntuale. */
     @Query("SELECT * FROM analysis_history ORDER BY analyzedAtEpochMillis DESC")
     suspend fun getAllOnce(): List<AnalysisHistoryEntity>

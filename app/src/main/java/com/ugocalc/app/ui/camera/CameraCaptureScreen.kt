@@ -469,7 +469,7 @@ private fun PhotoZoomReview(imageBytes: ByteArray, onRemove: () -> Unit, onClose
                 .transformable(state = transformState),
         )
         IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
-            Icon(Icons.Filled.Close, contentDescription = "Chiudi anteprima", tint = Color.White)
+            Icon(Icons.Filled.Close, contentDescription = "Chiudi anteprima", tint = MaterialTheme.colorScheme.surface)
         }
         Row(
             modifier = Modifier

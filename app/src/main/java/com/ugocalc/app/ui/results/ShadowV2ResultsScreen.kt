@@ -64,7 +64,7 @@ private fun ShadowV2ResultCard(shadowResult: AnalysisSessionStore.V2ShadowResult
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(shadowResult.model.displayName, fontWeight = FontWeight.Bold, modifier = Modifier.fillMaxWidth())
-            Text(shadowResult.model.subtitle, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+            Text(shadowResult.model.subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
             when (val outcome = shadowResult.outcome) {
                 is AnalysisSessionStore.PipelineOutcomeForShadow.Success -> {
@@ -91,7 +91,7 @@ private fun ShadowV2ResultCard(shadowResult: AnalysisSessionStore.V2ShadowResult
                 }
                 is AnalysisSessionStore.PipelineOutcomeForShadow.Failure -> {
                     Text("✗ Errore", style = MaterialTheme.typography.bodySmall, color = UgoRed, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 8.dp))
-                    Text(outcome.reason, style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    Text(outcome.reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }

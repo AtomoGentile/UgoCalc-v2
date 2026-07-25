@@ -98,8 +98,8 @@ class PhysicsEngineTest {
             EstimationStrategy.DISTESA_SUL_PIATTO,
             goodScale,
         )
-        assertTrue(est.intervallo.minG <= est.pesoG)
-        assertTrue(est.pesoG <= est.intervallo.maxG)
+        assertTrue(est.intervallo.minG <= est.pesoCrudoG)
+        assertTrue(est.pesoCrudoG <= est.intervallo.maxG)
         assertTrue(est.intervallo.minG >= 0.0)
     }
 

@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -44,7 +43,6 @@ import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoGrey
 import java.text.SimpleDateFormat
-import java.util.Date
 import java.util.Locale
 
 /**
@@ -61,24 +59,20 @@ import java.util.Locale
 fun BiasEvolutionScreen(
     onBack: () -> Unit,
     onOpenGroundTruthEntry: () -> Unit,
-    onOpenBenchmarkGroundTruthEntry: () -> Unit,
     onOpenBenchmarkDashboard: () -> Unit,
     onOpenV2Details: (Long) -> Unit,
     viewModel: BiasEvolutionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val fullDateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
-    val dayDateFormat = remember { SimpleDateFormat("d MMM yyyy", Locale.ITALIAN) }
 
     var selectedBiasCategory by remember { mutableStateOf<String?>(null) }
 
     if (selectedBiasCategory != null) {
         BiasCorrectionDetailScreen(
             corrections = uiState.corrections,
-            recentV2Records = uiState.recentV2Records,
             category = selectedBiasCategory!!,
             onBack = { selectedBiasCategory = null },
-            onOpenV2Details = onOpenV2Details
         )
         return
     }
@@ -93,120 +87,103 @@ fun BiasEvolutionScreen(
         }
     ) { padding ->
         LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            if (uiState.availableModels.isNotEmpty()) {
-                item(key = "model_selector") {
-                    ModelSelectorChipBias(
-                        models = uiState.availableModels,
-                        selectedModel = uiState.selectedModelId,
-                        onModelSelected = { viewModel.selectModel(it) }
+
+            // ── Sezione 1: impostazioni motore V2 ────────────────────────────
+            item(key = "settings_section") {
+                BiasSection(title = "Motore V2") {
+                    SettingsRow(
+                        title = "Consenso identificazione bias",
+                        subtitle = "Permette al sistema di calcolare e salvare i fattori di correzione.",
+                        checked = uiState.consentGiven,
+                        onCheckedChange = { viewModel.setConsentGiven(it) },
                     )
-                }
-            }
-            item {
-                Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-                    Text(
-                        "UgoCalc può imparare dai tuoi pesi corretti a mano per stimare meglio le porzioni " +
-                            "nel tempo (motore di inferenza V2, ancora in sviluppo): confronta i pesi stimati " +
-                            "con quelli che correggi tu e, solo quando lo scarto è sistematico e non un caso " +
-                            "isolato, calcola un fattore di correzione per quel contesto specifico (modalità " +
-                            "Casa/Ristorante, tipo di alimento, modello AI usato). Tutto resta sul telefono: " +
-                            "nessun dato lascia il dispositivo per questo scopo.",
-                        style = MaterialTheme.typography.bodyMedium,
+                    SettingsRow(
+                        title = "Pipeline V2 in ombra",
+                        subtitle = "Esegue V2 in background ad ogni analisi per raccogliere dati. Attiva 2 chiamate AI aggiuntive a pagamento.",
+                        checked = uiState.v2ShadowModeEnabled,
+                        onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) },
+                    )
+                    SettingsRow(
+                        title = "Forza V2 visibile",
+                        subtitle = "Usa V2 come motore principale anche prima che il benchmark lo promuova automaticamente.",
+                        checked = uiState.v2VisibleModeEnabled,
+                        onCheckedChange = { viewModel.setV2VisibleModeEnabled(it) },
                     )
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .padding(horizontal = 4.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("Consenti l'identificazione del bias", fontWeight = FontWeight.Bold)
-                            Text(
-                                "Necessario perché il sistema calcoli e salvi questi fattori di correzione.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = UgoGrey,
-                            )
-                        }
-                        Switch(checked = uiState.consentGiven, onCheckedChange = { viewModel.setConsentGiven(it) })
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                            Text("Esegui la pipeline V2 in ombra", fontWeight = FontWeight.Bold)
-                            Text(
-                                "Ad ogni analisi fa girare in background anche il nuovo motore V2, solo per " +
-                                    "raccogliere dati di validazione: il risultato che vedi resta sempre quello " +
-                                    "del motore attuale. Attiva 2 chiamate AI aggiuntive per analisi, a " +
-                                    "pagamento con la tua chiave API.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = UgoGrey,
-                            )
-                        }
-                        Switch(checked = uiState.v2ShadowModeEnabled, onCheckedChange = { viewModel.setV2ShadowModeEnabled(it) })
-                    }
-                    Column(modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
-                                Text("Motore visibile: forza V2", fontWeight = FontWeight.Bold)
-                                Text(
-                                    "Forza l'uso della V2 anche se il benchmark non ha ancora raggiunto la soglia di precisione " +
-                                        "o il numero minimo di pasti pesati (§13 punto 1).",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = UgoGrey,
-                                )
-                            }
-                            Switch(checked = uiState.v2VisibleModeEnabled, onCheckedChange = { viewModel.setV2VisibleModeEnabled(it) })
-                        }
                         Text(
-                            "Decisione automatica",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
-                        Text(
-                            "Il sistema passa da solo alla V2 quando il benchmark (\"Benchmark V1 vs V2\" sotto) mostra che supera la " +
-                                "V1 sul CHO, su un numero sufficiente di pasti pesati. Finché non succede, resti " +
-                                "sulla V1 (a meno di non forzarla sopra).",
+                            "Motore attivo:",
                             style = MaterialTheme.typography.bodySmall,
                             color = UgoGrey,
+                            modifier = Modifier.padding(end = 8.dp),
                         )
                         Text(
-                            if (uiState.v2Promoted) "STATO ATTUALE: V2 PROMOSSA" else "STATO ATTUALE: V1 (V2 non ancora pronta)",
-                            style = MaterialTheme.typography.bodyMedium,
+                            if (uiState.v2Promoted) "V2" else "V1",
+                            style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,
-                            modifier = Modifier.padding(top = 6.dp),
+                            color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                     }
-                    Button(onClick = onOpenGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 16.dp)) {
-                        Text("Registra peso vero di un'analisi")
+                }
+            }
+
+            // ── Sezione 2: azioni ────────────────────────────────────────────
+            item(key = "actions_section") {
+                BiasSection(title = "Misurazioni") {
+                    Button(
+                        onClick = onOpenGroundTruthEntry,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Registra peso vero")
                     }
-                    Button(onClick = onOpenBenchmarkGroundTruthEntry, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                        Text("Benchmark: registra peso vero di un pasto")
-                    }
-                    Button(onClick = onOpenBenchmarkDashboard, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    Button(
+                        onClick = onOpenBenchmarkDashboard,
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    ) {
                         Text("Benchmark V1 vs V2")
                     }
                 }
-                HorizontalDivider()
             }
-            // Summary delle correzioni BIAS
+
+            // ── Sezione 3: filtro modello ────────────────────────────────────
+            if (uiState.availableModels.isNotEmpty()) {
+                item(key = "model_selector") {
+                    BiasSection(title = "Dati per modello") {
+                        ModelSelectorChipBias(
+                            models = uiState.availableModels,
+                            selectedModel = uiState.selectedModelId,
+                            onModelSelected = { viewModel.selectModel(it) },
+                        )
+                    }
+                }
+            }
+
+            // ── Sezione 4: riepilogo correzioni BIAS ─────────────────────────
             if (uiState.corrections.isNotEmpty() || uiState.allV2Records.isNotEmpty()) {
                 item(key = "bias_summary") {
-                    BiasSummaryHeader(uiState.corrections, uiState.allV2Records, onSelectCategory = { selectedBiasCategory = it })
+                    BiasSummaryHeader(
+                        corrections = uiState.corrections,
+                        recentV2Records = uiState.allV2Records,
+                        onSelectCategory = { selectedBiasCategory = it },
+                    )
                 }
             } else if (!uiState.loading) {
-                item {
+                item(key = "bias_empty") {
                     Text(
-                        "Nessuna correzione calcolata finora.",
+                        "Nessuna correzione calcolata finora. Registra il peso vero di alcune analisi per iniziare.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = UgoGrey,
-                        modifier = Modifier.padding(vertical = 16.dp),
+                        modifier = Modifier.padding(vertical = 12.dp),
                     )
                 }
             }
 
-            // Dropdown Ultime analisi
+            // ── Sezione 5: ultime analisi V2 ─────────────────────────────────
             if (uiState.allV2Records.isNotEmpty()) {
                 item(key = "recent_v2_dropdown") {
                     UltimeAnalisiDropdown(
@@ -216,7 +193,7 @@ fun BiasEvolutionScreen(
                         onOpenV2Details = onOpenV2Details,
                         onDelete = { viewModel.deleteRecord(it) },
                         onLoadMore = { viewModel.loadMoreRecords() },
-                        dateFormat = fullDateFormat
+                        dateFormat = fullDateFormat,
                     )
                 }
             }
@@ -235,6 +212,42 @@ private fun formatSignedGrams(value: Double): String {
     return "$prefix${formatGrams(value)}"
 }
 
+@Composable
+private fun BiasSection(title: String, content: @Composable () -> Unit) {
+    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+        Text(
+            title.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = UgoGrey,
+            modifier = Modifier.padding(bottom = 6.dp, start = 2.dp),
+        )
+        Card(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingsRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = UgoGrey)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
 private fun strategyLabel(raw: String) = when (raw) {
     "CONTABILE" -> "Contabile"
     "DISTESA_SUL_PIATTO" -> "Distesa sul piatto"
@@ -243,56 +256,6 @@ private fun strategyLabel(raw: String) = when (raw) {
     "COMPOSTO_OCCLUSO" -> "Composto/occluso"
     "TRASCURABILE" -> "Trascurabile"
     else -> raw
-}
-
-@Composable
-private fun V2RecordDetailRow(
-    record: com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity,
-    onOpenDetails: (Long) -> Unit,
-    onDelete: (Long) -> Unit,
-) {
-    val failed = record.failureReason != null
-    val dateFormat = remember { SimpleDateFormat("d MMM yyyy, HH:mm", Locale.ITALIAN) }
-
-    Card(
-        onClick = { if (!failed) onOpenDetails(record.id) },
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                dateFormat.format(Date(record.analyzedAtEpochMillis)),
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Text(
-                "Modello: ${record.aiModelId}",
-                style = MaterialTheme.typography.bodySmall,
-                color = UgoGrey,
-            )
-            Text(
-                "Modalità: ${record.sessionMode}",
-                style = MaterialTheme.typography.bodySmall,
-                color = UgoGrey,
-            )
-            if (failed) {
-                Text(
-                    "❌ Fallita: ${record.failureReason}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            } else {
-                Text(
-                    "✓ Completata — tocca per dettagli",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-        }
-    }
 }
 
 private val ALL_FOOD_CATEGORIES = listOf(
@@ -330,23 +293,23 @@ private fun foodCategoryLabel(raw: String) = when (raw) {
 @Composable
 private fun BiasCorrectionDetailScreen(
     corrections: List<BiasCorrectionWithUsageStats>,
-    recentV2Records: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity> = emptyList(),
     category: String,
     onBack: () -> Unit,
-    onOpenV2Details: (Long) -> Unit = {},
 ) {
     val categoryLabel = when (category) {
-        "Applicabile" -> "Categorie Alimentari - Correzioni Attive"
-        "BiasInstabile" -> "Categorie Alimentari - Correzioni Instabili"
-        "DatiInsufficienti" -> "Misurazioni (Dati Insufficienti)"
+        "Applicabile" -> "Correzioni BIAS attive"
+        "BiasInstabile" -> "Correzioni BIAS instabili"
+        "DatiInsufficienti" -> "Correzioni in maturazione"
         else -> "Correzioni"
     }
 
     val content = when (category) {
         "DatiInsufficienti" -> {
-            // Mostri le misurazioni V2 senza ground truth
-            val insufficientRecords = recentV2Records.filter { it.groundTruthPesiJson == null }
-            Pair(insufficientRecords.isEmpty(), insufficientRecords as Any)
+            // Correzioni con dati insufficienti: pesi già registrati ma < 5 campioni per categoria
+            val filtered = corrections.filter { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti }
+            val grouped = filtered.groupBy { it.correction.foodCategory }
+            val allCategories = ALL_FOOD_CATEGORIES.associateWith { cat -> grouped[cat] ?: emptyList() }
+            Pair(filtered.isEmpty(), allCategories as Any)
         }
         else -> {
             // Raggruppa per categoria alimentare
@@ -362,7 +325,7 @@ private fun BiasCorrectionDetailScreen(
             val allCategories = ALL_FOOD_CATEGORIES.associateWith { cat ->
                 grouped[cat] ?: emptyList()
             }
-            Pair(false, allCategories as Any)
+            Pair(filtered.isEmpty(), allCategories as Any)
         }
     }
 
@@ -380,18 +343,6 @@ private fun BiasCorrectionDetailScreen(
         if (isEmpty) {
             Box(modifier = Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
                 Text("Nessun elemento in questa categoria", style = MaterialTheme.typography.bodyMedium)
-            }
-        } else if (category == "DatiInsufficienti") {
-            // Lista misurazioni
-            val records = data as List<*>
-            LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-                items(records.size) { index ->
-                    val record = records[index] as com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
-                    V2RecordDetailRow(record, onOpenV2Details, { /* delete */ })
-                    if (index < records.size - 1) {
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                    }
-                }
             }
         } else {
             // Lista categorie con correzioni (incluse vuote)
@@ -505,12 +456,18 @@ private fun BiasSummaryHeader(
 ) {
     val active = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile } }
     val unstable = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.BiasInstabile } }
-    val insufficient = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti } }
-    val insufficientRecords = remember(recentV2Records) { recentV2Records.count { it.groundTruthPesiJson == null } }
+    val inMaturation = remember(corrections) { corrections.count { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.DatiInsufficienti } }
+    val pendingWeight = remember(recentV2Records) { recentV2Records.count { it.groundTruthPesiJson == null } }
 
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-    ) {
+    // Top active factors for quick preview
+    val activeFactors = remember(corrections) {
+        corrections
+            .filter { it.calculationResult is com.ugocalc.app.domain.inference.m8.BiasCorrectionResult.Applicabile }
+            .sortedByDescending { (it.correction.sampleCount) }
+            .take(4)
+    }
+
+    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 "Riepilogo correzioni BIAS",
@@ -518,6 +475,8 @@ private fun BiasSummaryHeader(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
+
+            // 3 stati delle correzioni
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 StatusBadgeButton(
                     label = "Attivi",
@@ -526,21 +485,84 @@ private fun BiasSummaryHeader(
                     onClick = { onSelectCategory("Applicabile") }
                 )
                 StatusBadgeButton(
+                    label = "In maturazione",
+                    count = inMaturation,
+                    color = androidx.compose.ui.graphics.Color(0xFFF9A825),
+                    onClick = { onSelectCategory("DatiInsufficienti") }
+                )
+                StatusBadgeButton(
                     label = "Instabili",
                     count = unstable,
                     color = MaterialTheme.colorScheme.error,
                     onClick = { onSelectCategory("BiasInstabile") }
                 )
-                StatusBadgeButton(
-                    label = "Misurazioni",
-                    count = insufficientRecords,
+            }
+
+            // Fattori attivi in preview (visibili senza dover toccare)
+            if (activeFactors.isNotEmpty()) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    "Fattori attivi:",
+                    style = MaterialTheme.typography.labelSmall,
                     color = UgoGrey,
-                    onClick = { onSelectCategory("DatiInsufficienti") }
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+                activeFactors.forEach { row ->
+                    Row(modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp)) {
+                        Text(
+                            foodCategoryLabel(row.correction.foodCategory),
+                            style = MaterialTheme.typography.bodySmall,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            "${formatFactor(row.correction.factor)}×",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = androidx.compose.ui.graphics.Color(0xFF4CAF50),
+                        )
+                    }
+                }
+                if (active > 4) {
+                    Text(
+                        "… altri ${active - 4} — tocca Attivi per la lista completa",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = UgoGrey,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
+            }
+
+            // Flusso spiegato quando non c'è ancora nulla
+            if (active == 0 && inMaturation == 0 && unstable == 0) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                Text(
+                    "Come funziona: pesa gli alimenti e registra il peso reale tramite \"Registra peso vero\". " +
+                        "Dopo ≥5 misurazioni per la stessa categoria alimentare il fattore di correzione diventa Attivo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = UgoGrey,
+                )
+            } else if (inMaturation > 0 && active == 0) {
+                Text(
+                    "Correzioni in crescita: servono ancora misurazioni per raggiungere il minimo di 5 per categoria.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = UgoGrey,
+                    modifier = Modifier.padding(top = 8.dp),
                 )
             }
-            if (corrections.isNotEmpty() || insufficientRecords > 0) {
+
+            // Analisi in attesa di peso reale (informativo, non un badge di correzioni)
+            if (pendingWeight > 0) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                 Text(
-                    "Tocca per dettagli",
+                    "$pendingWeight analisi V2 in attesa di peso reale — tocca \"Registra peso vero\" per pesarle.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = UgoGrey,
+                )
+            }
+
+            if (active > 0 || inMaturation > 0 || unstable > 0) {
+                Text(
+                    "Tocca i badge per i dettagli",
                     style = MaterialTheme.typography.labelSmall,
                     color = UgoGrey,
                     modifier = Modifier.padding(top = 8.dp),
@@ -557,7 +579,7 @@ private fun StatusBadgeButton(
     color: androidx.compose.ui.graphics.Color,
     onClick: () -> Unit,
 ) {
-    androidx.compose.material3.TextButton(onClick = onClick, modifier = Modifier.padding(8.dp)) {
+    TextButton(onClick = onClick, modifier = Modifier.padding(8.dp)) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
@@ -582,28 +604,23 @@ private fun ModelSelectorChipBias(
     selectedModel: String?,
     onModelSelected: (String?) -> Unit,
 ) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
-        Text(
-            "Filtra per modello:",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(bottom = 8.dp),
-        )
-        androidx.compose.foundation.lazy.LazyRow(
+    Column(modifier = Modifier.fillMaxWidth()) {
+        LazyRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             item {
-                androidx.compose.material3.FilterChip(
+                FilterChip(
                     selected = selectedModel == null,
                     onClick = { onModelSelected(null) },
                     label = { Text("Tutti") }
                 )
             }
-            items(models) { model ->
-                androidx.compose.material3.FilterChip(
+            items(models, key = { it.id }) { model ->
+                val onClick = remember(model.id) { { onModelSelected(model.id) } }
+                FilterChip(
                     selected = selectedModel == model.id,
-                    onClick = { onModelSelected(model.id) },
+                    onClick = onClick,
                     label = { Text(if (model.subtitle.isNotEmpty()) "${model.displayName} (${model.subtitle})" else model.displayName) }
                 )
             }
@@ -621,11 +638,11 @@ private fun UltimeAnalisiDropdown(
     onLoadMore: () -> Unit,
     dateFormat: SimpleDateFormat,
 ) {
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember(totalRecords) { mutableStateOf(false) }
 
     Card(modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Column {
-            androidx.compose.material3.TextButton(
+            TextButton(
                 onClick = { expanded = !expanded },
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
             ) {
@@ -644,23 +661,19 @@ private fun UltimeAnalisiDropdown(
 
             if (expanded) {
                 HorizontalDivider()
-                LazyColumn(modifier = Modifier.padding(8.dp)) {
-                    items(records.size) { index ->
-                        V2RecordMinimalRow(records[index], onOpenV2Details, onDelete, dateFormat)
+                Column(modifier = Modifier.padding(8.dp)) {
+                    records.forEach { record ->
+                        V2RecordMinimalRow(record, onOpenV2Details, onDelete, dateFormat)
                     }
                     if (displayedCount < totalRecords) {
-                        item {
-                            HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
-                        }
-                        item {
-                            Button(
-                                onClick = onLoadMore,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(8.dp)
-                            ) {
-                                Text("Carica altri (${totalRecords - displayedCount} rimanenti)")
-                            }
+                        HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                        Button(
+                            onClick = onLoadMore,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(8.dp)
+                        ) {
+                            Text("Carica altri (${totalRecords - displayedCount} rimanenti)")
                         }
                     }
                 }
@@ -677,7 +690,7 @@ private fun V2RecordMinimalRow(
     dateFormat: SimpleDateFormat,
 ) {
     val failed = record.failureReason != null
-    androidx.compose.material3.TextButton(
+    TextButton(
         onClick = { if (!failed) onClick(record.id) },
         modifier = Modifier
             .fillMaxWidth()

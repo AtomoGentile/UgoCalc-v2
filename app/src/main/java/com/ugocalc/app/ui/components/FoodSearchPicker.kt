@@ -15,8 +15,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.outlined.PushPin
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -27,6 +25,9 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.Button
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.window.Dialog
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -204,17 +205,29 @@ fun FoodSearchPicker(
     }
 
     if (showCreateDialog) {
-        AlertDialog(
-            onDismissRequest = { showCreateDialog = false },
-            title = { Text("Crea nuovo alimento") },
-            text = {
-                Column {
+        Dialog(onDismissRequest = { showCreateDialog = false }) {
+            GlassmorphicCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp),
+                backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.97f),
+                borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(20.dp),
+            ) {
+                Column(modifier = Modifier.padding(24.dp)) {
+                    Text(
+                        "Crea nuovo alimento",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(bottom = 16.dp),
+                    )
                     OutlinedTextField(
                         value = newFoodName,
                         onValueChange = { newFoodName = it },
                         label = { Text("Nome") },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
                     )
                     OutlinedTextField(
                         value = newFoodCho,
@@ -222,7 +235,8 @@ fun FoodSearchPicker(
                         label = { Text("CHO per 100g") },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
                     )
                     OutlinedTextField(
                         value = newFoodGrassi,
@@ -230,22 +244,31 @@ fun FoodSearchPicker(
                         label = { Text("Grassi per 100g") },
                         singleLine = true,
                         keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+                        shape = RoundedCornerShape(12.dp),
                     )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 20.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.End,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TextButton(onClick = { showCreateDialog = false }) { Text("Annulla") }
+                        Button(
+                            onClick = {
+                                val cho = newFoodCho.toDoubleOrNull() ?: 0.0
+                                val grassi = newFoodGrassi.toDoubleOrNull() ?: 0.0
+                                viewModel.createManualFood(newFoodName, cho, grassi, onSelect)
+                                showCreateDialog = false
+                            },
+                            modifier = Modifier.padding(start = 8.dp),
+                            shape = RoundedCornerShape(12.dp),
+                        ) { Text("Crea") }
+                    }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    val cho = newFoodCho.toDoubleOrNull() ?: 0.0
-                    val grassi = newFoodGrassi.toDoubleOrNull() ?: 0.0
-                    viewModel.createManualFood(newFoodName, cho, grassi, onSelect)
-                    showCreateDialog = false
-                }) { Text("Crea e seleziona") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateDialog = false }) { Text("Annulla") }
             }
-        )
+        }
     }
 }
 
@@ -259,11 +282,14 @@ private fun FoodResultRow(
     onClick: () -> Unit,
     onTogglePin: () -> Unit,
 ) {
-    Card(
+    GlassmorphicCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
             .clickable(onClick = onClick),
+        backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.85f),
+        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(12.dp)) {
             if (selectionMode) {
@@ -279,6 +305,7 @@ private fun FoodResultRow(
                 Text(
                     "CHO ${"%.1f".format(result.entry.choPer100g)} g · Grassi ${"%.1f".format(result.entry.grassiPer100g)} g per 100g — ${result.tableDisplayName}",
                     style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (showPin) {
@@ -286,8 +313,6 @@ private fun FoodResultRow(
                     Icon(
                         if (result.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                         contentDescription = if (result.pinned) "Non fissare più" else "Fissa in cima",
-                        // § richiesta utente "espandi l'utilizzo del terziario, con qualche
-                        // selettore": stesso ruolo della stellina preferiti, colore acceso solo da fissata.
                         tint = if (result.pinned) MaterialTheme.colorScheme.tertiary else Color.Unspecified,
                     )
                 }

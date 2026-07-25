@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material3.Card
@@ -25,10 +26,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.RangeSlider
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
+import com.ugocalc.app.domain.inference.model.SessionMode
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -38,13 +42,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EmptyStateMessage
+import com.ugocalc.app.ui.components.GlassmorphicCard
 import com.ugocalc.app.ui.components.HistoryColumnChart
 import com.ugocalc.app.ui.components.HistoryLineChart
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.theme.SpaceL
+import com.ugocalc.app.ui.theme.SpaceM
+import com.ugocalc.app.ui.theme.SpaceS
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -67,6 +77,7 @@ fun HistoryScreen(
     val chartEntries by viewModel.chartEntries.collectAsState()
     val filters by viewModel.filters.collectAsState()
     val filteredHistory by viewModel.filteredHistory.collectAsState()
+    val selectedMode by viewModel.selectedMode.collectAsState()
     var showFilters by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -90,7 +101,18 @@ fun HistoryScreen(
             )
         },
     ) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            val modes = SessionMode.entries
+            TabRow(selectedTabIndex = modes.indexOf(selectedMode)) {
+                modes.forEach { mode ->
+                    Tab(
+                        selected = selectedMode == mode,
+                        onClick = { viewModel.setSelectedMode(mode) },
+                        text = { Text(if (mode == SessionMode.CASA) "Casa" else "Ristorante") },
+                    )
+                }
+            }
+            LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = SpaceM)) {
             if (showFilters) {
                 item {
                     HistoryFilterPanel(
@@ -105,49 +127,62 @@ fun HistoryScreen(
             }
             if (chartEnabled) {
                 item {
-                    Column(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth()) {
+                    Column(modifier = Modifier.padding(top = SpaceL, bottom = SpaceM)) {
+                        Text("Intervallo", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = SpaceS)) {
                             HistoryChartInterval.entries.forEach { interval ->
                                 FilterChip(
                                     selected = chartInterval == interval,
                                     onClick = { viewModel.setChartInterval(interval) },
                                     label = { Text(interval.label) },
-                                    modifier = Modifier.padding(end = 8.dp),
+                                    modifier = Modifier.padding(end = SpaceS),
                                 )
                             }
                         }
-                        Row(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                        Text("Tipo grafico", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = SpaceM))
+                        Row(modifier = Modifier.fillMaxWidth().padding(top = SpaceS)) {
                             HistoryChartType.entries.forEach { type ->
                                 FilterChip(
                                     selected = chartType == type,
                                     onClick = { viewModel.setChartType(type) },
                                     label = { Text(type.label) },
-                                    modifier = Modifier.padding(end = 8.dp),
+                                    modifier = Modifier.padding(end = SpaceS),
                                 )
                             }
                         }
                         when (chartType) {
-                            HistoryChartType.COLUMNS -> HistoryColumnChart(entries = chartEntries, modifier = Modifier.padding(top = 12.dp))
-                            HistoryChartType.LINE -> HistoryLineChart(entries = chartEntries, modifier = Modifier.padding(top = 12.dp))
+                            HistoryChartType.COLUMNS -> HistoryColumnChart(entries = chartEntries, modifier = Modifier.padding(top = SpaceM))
+                            HistoryChartType.LINE -> HistoryLineChart(entries = chartEntries, modifier = Modifier.padding(top = SpaceM))
                         }
                     }
                 }
             }
             if (filters.isActive && filteredHistory.isEmpty()) {
                 item {
-                    Text(
-                        "Nessuna analisi corrisponde ai filtri impostati",
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.padding(vertical = 16.dp),
+                    EmptyStateMessage(
+                        icon = Icons.Default.History,
+                        message = "Nessuna analisi corrisponde ai filtri impostati",
+                        modifier = Modifier.padding(vertical = 32.dp).fillMaxWidth(),
+                    )
+                }
+            } else if (filteredHistory.isEmpty()) {
+                item {
+                    EmptyStateMessage(
+                        icon = Icons.Default.History,
+                        message = "Nessuna analisi registrata",
+                        modifier = Modifier.padding(vertical = 32.dp).fillMaxWidth(),
                     )
                 }
             }
             items(filteredHistory, key = { it.id }) { entry ->
-                Card(
+                GlassmorphicCard(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 6.dp)
                         .clickable { onOpenEntry(entry.id) },
+                    backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f),
+                    borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp),
                 ) {
                     Row(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
                         Column(modifier = Modifier.weight(1f)) {
@@ -169,6 +204,7 @@ fun HistoryScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -182,8 +218,8 @@ private fun HistoryFilterPanel(
     onHourRangeChange: (ClosedFloatingPointRange<Float>) -> Unit,
     onReset: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(top = 12.dp, bottom = 8.dp)) {
-        Text("Filtri", style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(bottom = 8.dp))
+    Column(modifier = Modifier.padding(top = SpaceM, bottom = SpaceS)) {
+        Text("FILTRI", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(bottom = SpaceM), color = MaterialTheme.colorScheme.primary)
 
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             DateFilterButton(
@@ -203,7 +239,7 @@ private fun HistoryFilterPanel(
         Text(
             "CHO: ${filters.choRange.start.toInt()}–${filters.choRange.endInclusive.toInt()} g",
             style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 12.dp),
+            modifier = Modifier.padding(top = SpaceM),
         )
         RangeSlider(
             value = filters.choRange,

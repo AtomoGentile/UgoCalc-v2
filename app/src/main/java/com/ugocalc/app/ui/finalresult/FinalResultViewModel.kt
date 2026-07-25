@@ -234,6 +234,7 @@ class FinalResultViewModel @Inject constructor(
                 totals = totals,
                 modelDisplayNames = _uiState.value.modelNames,
                 sessionId = session.sessionId,
+                sessionMode = session.sessionMode,
             )
             if (_uiState.value.favoriteRequested) {
                 val nextOrder = favoritesRepository.observeFavorites().first().size

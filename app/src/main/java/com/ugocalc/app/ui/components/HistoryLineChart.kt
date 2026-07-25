@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.ui.theme.UgoGrey
@@ -43,16 +44,37 @@ fun HistoryLineChart(
                 modifier = Modifier.padding(vertical = 24.dp),
             )
         } else {
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
+                val baselineY = size.height * 0.85f
+                val chartHeight = baselineY
+                val axisColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.3f)
                 val stepX = if (entries.size > 1) size.width / (entries.size - 1) else 0f
 
+
+                // Baseline
+                drawLine(color = axisColor, start = Offset(0f, baselineY), end = Offset(size.width, baselineY), strokeWidth = 1f)
+
                 fun points(values: List<Double>) = values.mapIndexed { index, value ->
-                    Offset(index * stepX, size.height - (value / maxValue * size.height).toFloat())
+                    Offset(index * stepX, baselineY - (value / maxValue * chartHeight).toFloat())
                 }
 
                 val choPoints = points(entries.map { it.totalChoG })
                 val grassiPoints = points(entries.map { it.totalGrassiG })
 
+                // Area fill under lines (semi-transparent)
+                listOf(choColor to choPoints, grassiColor to grassiPoints).forEach { (color, points) ->
+                    if (points.size > 1) {
+                        val path = androidx.compose.ui.graphics.Path().apply {
+                            moveTo(points[0].x, baselineY)
+                            points.forEach { lineTo(it.x, it.y) }
+                            lineTo(points.last().x, baselineY)
+                            close()
+                        }
+                        drawPath(path, color = color.copy(alpha = 0.15f))
+                    }
+                }
+
+                // Lines and points
                 listOf(choColor to choPoints, grassiColor to grassiPoints).forEach { (color, points) ->
                     for (i in 0 until points.size - 1) {
                         drawLine(color = color, start = points[i], end = points[i + 1], strokeWidth = 4f)
@@ -60,7 +82,7 @@ fun HistoryLineChart(
                     points.forEach { point -> drawCircle(color = color, radius = 5f, center = point) }
                 }
             }
-            Row(modifier = Modifier.padding(top = 8.dp)) {
+            Row(modifier = Modifier.padding(top = 12.dp)) {
                 LegendDot(choColor, "CHO")
                 LegendDot(grassiColor, "Grassi", modifier = Modifier.padding(start = 16.dp))
             }

@@ -24,16 +24,26 @@ sealed class SyncResult {
     data class FatalError(val message: String) : SyncResult()
 }
 
+interface CloudSyncClient {
+    suspend fun fetchInferenceRecords(): List<String>
+    suspend fun sendEvent(
+        endpoint: String,
+        eventId: String,
+        userId: String,
+        payloadJson: String,
+    ): SyncResult
+}
+
 @Singleton
-class CloudSyncClient @Inject constructor(
+class RealCloudSyncClient @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val json: Json,
     @Named("aws_base_url") private val baseUrl: String,
-) {
+) : CloudSyncClient {
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /** Scarica i record INFERENCE dell'utente dal backend (l'identità viene dal token Cognito nell'AuthInterceptor). Restituisce i payload JSON grezzi oppure lista vuota in caso di errore. */
-    suspend fun fetchInferenceRecords(): List<String> = withContext(Dispatchers.IO) {
+    override suspend fun fetchInferenceRecords(): List<String> = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("$baseUrl/inference")
             .header("Accept", "application/json")
@@ -59,7 +69,7 @@ class CloudSyncClient @Inject constructor(
         }
     }
 
-    suspend fun sendEvent(
+    override suspend fun sendEvent(
         endpoint: String,
         eventId: String,
         userId: String,

@@ -65,11 +65,13 @@ class BiasEvolutionViewModel @Inject constructor(
         _selectedModelId,
         _recordsDisplayLimit
     ) { settings, corrections, allV2, selectedModel, displayLimit ->
-        val enabledModelIds = settings.shadowModelIds.takeIf { it.isNotEmpty() }
-            ?: settings.preferredModelIds
+        // Mostra tutti i modelli per cui esistono record, indipendentemente da quali sono
+        // attualmente abilitati: un modello disabilitato in seguito non deve far sparire le
+        // correzioni già calcolate per quel modello dalla vista di trasparenza.
         val availableModelIds = allV2.map { it.aiModelId }.distinct().sorted()
-            .filter { it in enabledModelIds }
-        val effectiveSelectedModel = selectedModel ?: availableModelIds.firstOrNull()
+        // Default = null (Tutti): non pre-selezionare il primo modello per evitare di nascondere
+        // correzioni di modelli diversi dall'attivo, causa del bug "0 analisi".
+        val effectiveSelectedModel = selectedModel
 
         val filteredCorrections = if (effectiveSelectedModel != null) {
             corrections.filter { it.correction.aiModelId == effectiveSelectedModel }

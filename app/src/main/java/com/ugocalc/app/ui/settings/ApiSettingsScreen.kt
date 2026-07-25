@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -139,7 +140,7 @@ fun ApiSettingsScreen(
 
             val showAllPicker by viewModel.showAllModelsPicker.collectAsState()
             val state by viewModel.state.collectAsState()
-            val availableModels = viewModel.availableModels
+            val availableModels by viewModel.availableModels.collectAsState()
 
             if (availableModels.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
@@ -154,7 +155,7 @@ fun ApiSettingsScreen(
             if (showAllPicker) {
                 AllModelsPickerDialog(
                     models = availableModels,
-                    currentSelection = state.userSettings.preferredModelIds,
+                    currentSelection = state.userSettings.enabledAnalysisModelIds,
                     onConfirm = { viewModel.saveAllEnabledModels(it) },
                     onDismiss = { viewModel.dismissAllModelsPicker() },
                 )
@@ -429,6 +430,10 @@ private fun AllModelsPickerDialog(
     onDismiss: () -> Unit,
 ) {
     var selected by remember { mutableStateOf(currentSelection) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredModels = remember(searchQuery, models) {
+        models.filter { modelMatchesQuery(it, searchQuery) }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -438,22 +443,31 @@ private fun AllModelsPickerDialog(
                 Text(
                     "Seleziona i modelli che vuoi usare in \"Analizza\".",
                     style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(bottom = 12.dp),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Cerca modello…") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                 )
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(2),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.height(400.dp),
+                    modifier = Modifier.height(360.dp),
                 ) {
-                    items(models, key = { it.id }) { model ->
+                    items(filteredModels, key = { it.uid }) { model ->
                         val isSelected = model.id in selected
+                        val onClick = remember(model.uid, isSelected) {
+                            { selected = if (isSelected) selected - model.id else selected + model.id }
+                        }
                         ApiProviderModelCard(
                             model = model,
                             isSelected = isSelected,
-                            onClick = {
-                                selected = if (isSelected) selected - model.id else selected + model.id
-                            },
+                            onClick = onClick,
                         )
                     }
                 }
@@ -480,15 +494,11 @@ private fun ApiProviderModelCard(
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
     val shape = remember { RoundedCornerShape(12.dp) }
-    val cardModifier = remember(isSelected) {
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(1.1f)
-            .border(borderWidth, borderColor, shape)
-    }
-    val elevation = remember(isSelected) {
-        CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
-    }
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(1.1f)
+        .border(borderWidth, borderColor, shape)
+    val elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
 
     Card(
         onClick = onClick,

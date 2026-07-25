@@ -52,7 +52,7 @@ fun BenchmarkDashboardScreen(onBack: () -> Unit, viewModel: BenchmarkDashboardVi
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    if (uiState.v2Promoted) "Motore in produzione: V2 (ha superato V1 sul CHO entro 10 g)" else "Motore in produzione: V1 (V2 non ancora migliore, o dati insufficienti)",
+                    if (uiState.v2Promoted) "Motore in produzione: V2 (ha superato V1 sul CHO entro 10%)" else "Motore in produzione: V1 (V2 non ancora migliore, o dati insufficienti)",
                     style = MaterialTheme.typography.bodyMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,
@@ -93,7 +93,7 @@ private fun EngineStatsCard(titolo: String, stats: EngineStats) {
                 modifier = Modifier.padding(top = 6.dp),
             )
             Text(
-                "CHO entro 10 g: ${formatPercent(stats.choWithin10gPercent)} - entro 20 g: ${formatPercent(stats.choWithin20gPercent)} (${stats.choMealCount} pasti confrontabili)",
+                "CHO entro 10%: ${formatPercent(stats.choWithin10gPercent)} — entro 20%: ${formatPercent(stats.choWithin20gPercent)} (${stats.choMealCount} pasti confrontabili)",
                 style = MaterialTheme.typography.bodySmall,
             )
         }

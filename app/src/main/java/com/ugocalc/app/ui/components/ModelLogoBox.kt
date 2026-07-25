@@ -3,9 +3,6 @@ package com.ugocalc.app.ui.components
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,7 +32,7 @@ fun ModelLogoBox(
     modifier: Modifier = Modifier,
 ) {
     if (logoRes != null) {
-        val painter = remember(logoRes) { painterResource(id = logoRes) }
+        val painter = painterResource(id = logoRes)
         Image(
             painter = painter,
             contentDescription = displayName,

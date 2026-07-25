@@ -21,6 +21,7 @@ import com.ugocalc.app.ui.bias.BenchmarkDashboardScreen
 import com.ugocalc.app.ui.bias.BenchmarkGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.BiasEvolutionScreen
 import com.ugocalc.app.ui.bias.GroundTruthEntryScreen
+import com.ugocalc.app.ui.bias.UnifiedGroundTruthEntryScreen
 import com.ugocalc.app.ui.bias.V2ResultScreen
 import com.ugocalc.app.ui.camera.CameraCaptureScreen
 import com.ugocalc.app.ui.finalresult.FinalResultScreen
@@ -100,7 +101,6 @@ fun UgoCalcNavHost(
                 onNavigateToHistory = { navigateTopLevel(Routes.HISTORY) },
                 onNavigateToBiasEvolution = { navigateTopLevel(Routes.BIAS_EVOLUTION) },
                 onNavigateToSettings = { navigateTopLevel(Routes.SETTINGS) },
-                onNavigateToRecipes = { navigateTopLevel(Routes.SETTINGS_RECIPES) },
                 onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                 onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
             )
@@ -175,8 +175,8 @@ fun UgoCalcNavHost(
                         popUpTo(Routes.HOME) { inclusive = true }
                     }
                 },
-                onRegisterGroundTruth = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
-                onRegisterBenchmarkGroundTruth = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
+                onRegisterGroundTruth = { navController.navigate(Routes.UNIFIED_GROUND_TRUTH_ENTRY) },
+                onRegisterBenchmarkGroundTruth = { navController.navigate(Routes.UNIFIED_GROUND_TRUTH_ENTRY) },
             )
         }
 
@@ -200,14 +200,14 @@ fun UgoCalcNavHost(
         composable(Routes.BIAS_EVOLUTION) {
             BiasEvolutionScreen(
                 onBack = safeBack,
-                onOpenGroundTruthEntry = { navController.navigate(Routes.GROUND_TRUTH_ENTRY) },
-                onOpenBenchmarkGroundTruthEntry = { navController.navigate(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) },
+                onOpenGroundTruthEntry = { navController.navigate(Routes.UNIFIED_GROUND_TRUTH_ENTRY) },
                 onOpenBenchmarkDashboard = { navController.navigate(Routes.BENCHMARK_DASHBOARD) },
                 onOpenV2Details = { recordId -> navController.navigate(Routes.v2ResultRoute(recordId)) },
             )
         }
         composable(Routes.GROUND_TRUTH_ENTRY) { GroundTruthEntryScreen(onBack = safeBack) }
         composable(Routes.BENCHMARK_GROUND_TRUTH_ENTRY) { BenchmarkGroundTruthEntryScreen(onBack = safeBack) }
+        composable(Routes.UNIFIED_GROUND_TRUTH_ENTRY) { UnifiedGroundTruthEntryScreen(onBack = safeBack) }
         composable(Routes.BENCHMARK_DASHBOARD) { BenchmarkDashboardScreen(onBack = safeBack) }
 
         composable(Routes.SETTINGS_CHANGELOG) { ChangelogScreen(onBack = safeBack) }

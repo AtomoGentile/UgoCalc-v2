@@ -36,6 +36,7 @@ private class FakeAnalysisHistoryDao : AnalysisHistoryDao {
     val rows = mutableListOf<AnalysisHistoryEntity>()
     private var nextId = 1L
     override fun observeAll(): Flow<List<AnalysisHistoryEntity>> = MutableStateFlow(rows)
+    override fun observeByMode(mode: String): Flow<List<AnalysisHistoryEntity>> = MutableStateFlow(rows.filter { it.sessionMode == mode })
     override suspend fun getById(id: Long): AnalysisHistoryEntity? = rows.firstOrNull { it.id == id }
     override suspend fun getAllOnce(): List<AnalysisHistoryEntity> = rows.toList()
     override suspend fun insert(entity: AnalysisHistoryEntity): Long {
@@ -94,12 +95,12 @@ private class FakeNormalizedFoodEntryDao : NormalizedFoodEntryDao {
 
 private class BackupFakeBiasCorrectionDao : BiasCorrectionDao {
     val saved = mutableMapOf<List<String>, BiasCorrectionEntity>()
-    override suspend fun get(sessionMode: String, strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
-        saved[listOf(sessionMode, strategy, aiModelId, foodCategory)]
+    override suspend fun get(strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
+        saved[listOf(strategy, aiModelId, foodCategory)]
     override suspend fun getAll(): List<BiasCorrectionEntity> = saved.values.toList()
     override fun getAllFlow(): Flow<List<BiasCorrectionEntity>> = flowOf(saved.values.toList())
     override suspend fun upsert(entity: BiasCorrectionEntity) {
-        saved[listOf(entity.sessionMode, entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
+        saved[listOf(entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
     }
     override suspend fun deleteAll() { saved.clear() }
 }
@@ -117,12 +118,30 @@ private class BackupFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
     override suspend fun getAll(): List<V2AnalysisRecordEntity> = rows.values.toList()
     override suspend fun getById(id: Long): V2AnalysisRecordEntity? = rows[id]
     override suspend fun getBySessionId(sessionId: String): V2AnalysisRecordEntity? = rows.values.firstOrNull { it.sessionId == sessionId }
-    override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> = emptyList()
-    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(emptyList())
-    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = emptyList()
-    override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> = emptyList()
-    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? = null
-    override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> = emptyList()
+    override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
+    override fun getWithGroundTruthAllFlow(): Flow<List<V2AnalysisRecordEntity>> = flowOf(rows.values.filter { it.groundTruthPesiJson != null })
+    override suspend fun getWithGroundTruthAll(): List<V2AnalysisRecordEntity> = rows.values.filter { it.groundTruthPesiJson != null }
+    override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson == null && it.failureReason == null }
+    override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null && it.failureReason == null }
+    override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> =
+        rows.values.filter { it.groundTruthPesiJson != null }
+            .map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }
+            .distinct()
+    override suspend fun getAiModelIdsWithGroundTruth(): List<String> =
+        rows.values.filter { it.groundTruthPesiJson != null }
+            .map { it.aiModelId }
+            .distinct()
+    override suspend fun getWithGroundTruthByModel(aiModelId: String): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson != null && it.aiModelId == aiModelId }
+    override suspend fun insertIfAbsent(record: V2AnalysisRecordEntity): Long {
+        val existing = rows.values.firstOrNull { it.clientId == record.clientId }
+        return if (existing != null) -1 else insert(record)
+    }
+    override suspend fun getByClientId(clientId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.clientId == clientId }
     override suspend fun deleteAll() { rows.clear() }
     override suspend fun deleteById(id: Long) { rows.remove(id) }
 }
@@ -202,7 +221,7 @@ class BackupRepositoryTest {
         val historyId = historyDao.insert(AnalysisHistoryEntity(foodTitle = "Pasta al pomodoro", analyzedAtEpochMillis = 1000L, totalChoG = 80.0, totalGrassiG = 10.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
         val tableId = tableDao.insert(OfficialTableEntity(displayName = "CREA", fileType = OfficialFileType.PDF, storedFilePath = "/tmp/x.pdf", uploadedAtEpochMillis = 1L, priorityOrder = 0, rawExtractedText = "testo", normalizationStatus = NormalizationStatus.DONE))
         entryDao.insertAll(listOf(NormalizedFoodEntryEntity(tableId = tableId, nome = "riso", choPer100g = 28.0, grassiPer100g = 0.3, rowOrder = 0)))
-        biasDao.upsert(BiasCorrectionEntity("CASA", "DISTESA_SUL_PIATTO", "claude-opus-4.8", "PASTA", 1.2, 5, 1000L))
+        biasDao.upsert(BiasCorrectionEntity("DISTESA_SUL_PIATTO", "claude-opus-4.8", "PASTA", 1.2, 5, 1000L))
         favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = historyId, label = "Pasta preferita", sortOrder = 0))
         favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = null, label = "Combo standard", sortOrder = 1, comboGrams = 100.0, comboChoPer100g = 20.0, comboGrassiPer100g = 1.0))
 

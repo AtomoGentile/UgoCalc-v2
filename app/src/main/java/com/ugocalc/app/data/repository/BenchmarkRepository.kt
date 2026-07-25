@@ -190,24 +190,18 @@ class BenchmarkRepository @Inject constructor(
             for ((nome, veroG) in meal.groundTruthPesi) {
                 stimePerNome[nome]?.let { stimaG -> weightErrors += abs(stimaG - veroG) }
             }
-            val coeffPerNome = if (v1) {
-                meal.v1NutrizionePerAlimento.mapValues { it.value.choPer100g }
-            } else {
-                meal.v2Nutrizione?.righe.orEmpty().filterNot { it.escluso }
-                    .mapNotNull { riga -> if (riga.pesoG <= 0.0 || riga.choG == null) null else riga.nome to riga.choG / riga.pesoG * 100.0 }
-                    .toMap()
-            }
+            // Coefficienti V1 come baseline condivisa per entrambi i motori: così la variabile
+            // nel confronto è solo il peso stimato, non i coefficienti CHO (che per V2 possono
+            // mancare se nutritionReportJson non è stato salvato, causando choMealCount = 0).
+            val coeffPerNome = meal.v1NutrizionePerAlimento.mapValues { it.value.choPer100g }
             if (coeffPerNome.isEmpty()) continue
             val choVero = meal.groundTruthPesi.entries.sumOf { (nome, veroG) -> (coeffPerNome[nome] ?: 0.0) * veroG / 100.0 }
-            val choStimato = if (v1) {
-                meal.v1PesiPerAlimento.entries.sumOf { (nome, stimaG) -> (coeffPerNome[nome] ?: 0.0) * stimaG / 100.0 }
-            } else {
-                meal.v2Nutrizione?.righe.orEmpty().filterNot { it.escluso }.sumOf { it.choG ?: 0.0 }
-            }
+            val choStimato = stimePerNome.entries.sumOf { (nome, stimaG) -> (coeffPerNome[nome] ?: 0.0) * stimaG / 100.0 }
             mealsWithCho++
-            val errore = abs(choStimato - choVero)
-            if (errore <= 10.0) within10++
-            if (errore <= 20.0) within20++
+            // Errore relativo rispetto al CHO vero: 10% e 20% del valore reale.
+            val erroreRelativo = if (choVero > 0.0) abs(choStimato - choVero) / choVero else 0.0
+            if (erroreRelativo <= 0.10) within10++
+            if (erroreRelativo <= 0.20) within20++
         }
         return EngineStats(
             weightMaeG = weightErrors.takeIf { it.isNotEmpty() }?.average(),

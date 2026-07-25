@@ -14,4 +14,6 @@ data class AnalysisHistoryEntity(
     val detailsJson: String,
     /** Id di sessione condiviso con i record V2 e il benchmark (§ richiesta utente). */
     val sessionId: String? = null,
+    /** Modalità in cui è avvenuta l'analisi; DEFAULT 'CASA' per i record precedenti alla migration 20→21. */
+    val sessionMode: String = "CASA",
 )

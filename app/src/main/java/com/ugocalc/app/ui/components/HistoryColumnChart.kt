@@ -17,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.ui.theme.UgoGrey
@@ -45,26 +46,34 @@ fun HistoryColumnChart(
                 modifier = Modifier.padding(vertical = 24.dp),
             )
         } else {
-            Canvas(modifier = Modifier.fillMaxWidth().height(160.dp)) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(200.dp)) {
                 val barSlot = size.width / entries.size
                 val barWidth = barSlot * 0.6f
+                val baselineY = size.height * 0.85f
+                val chartHeight = baselineY
+                val axisColor = androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.3f)
+
+                // Baseline
+                drawLine(color = axisColor, start = Offset(0f, baselineY), end = Offset(size.width, baselineY), strokeWidth = 1f)
+
+                // Bars
                 entries.forEachIndexed { index, entry ->
-                    val choHeight = (entry.totalChoG / maxTotal * size.height).toFloat()
-                    val grassiHeight = (entry.totalGrassiG / maxTotal * size.height).toFloat()
+                    val choHeight = (entry.totalChoG / maxTotal * chartHeight).toFloat()
+                    val grassiHeight = (entry.totalGrassiG / maxTotal * chartHeight).toFloat()
                     val x = index * barSlot + (barSlot - barWidth) / 2f
                     drawRect(
                         color = choColor,
-                        topLeft = Offset(x, size.height - choHeight),
+                        topLeft = Offset(x, baselineY - choHeight),
                         size = Size(barWidth, choHeight),
                     )
                     drawRect(
                         color = grassiColor,
-                        topLeft = Offset(x, size.height - choHeight - grassiHeight),
+                        topLeft = Offset(x, baselineY - choHeight - grassiHeight),
                         size = Size(barWidth, grassiHeight),
                     )
                 }
             }
-            Row(modifier = Modifier.padding(top = 8.dp)) {
+            Row(modifier = Modifier.padding(top = 12.dp)) {
                 LegendDot(choColor, "CHO")
                 LegendDot(grassiColor, "Grassi", modifier = Modifier.padding(start = 16.dp))
             }

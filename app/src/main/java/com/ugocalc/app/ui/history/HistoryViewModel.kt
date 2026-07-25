@@ -6,13 +6,16 @@ import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.domain.inference.model.SessionMode
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
@@ -54,14 +57,24 @@ data class HistoryFilters(
 }
 
 @HiltViewModel
+@OptIn(ExperimentalCoroutinesApi::class)
 class HistoryViewModel @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val favoritesRepository: FavoritesRepository,
     private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
-    /** Cronologia ordinata dalla più recente alla più antica (§2.3, già garantito dalla query DAO). */
-    val history: StateFlow<List<AnalysisHistoryEntity>> = historyRepository.observeHistory()
+    private val _selectedMode = MutableStateFlow(SessionMode.CASA)
+    val selectedMode: StateFlow<SessionMode> = _selectedMode
+
+    fun setSelectedMode(mode: SessionMode) {
+        _selectedMode.value = mode
+        resetFilters()
+    }
+
+    /** Cronologia del modo selezionato, dalla più recente alla più antica. */
+    val history: StateFlow<List<AnalysisHistoryEntity>> = _selectedMode
+        .flatMapLatest { mode -> historyRepository.observeHistoryByMode(mode) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Id delle voci di cronologia già tra i preferiti, per mostrare la stellina piena o vuota. */

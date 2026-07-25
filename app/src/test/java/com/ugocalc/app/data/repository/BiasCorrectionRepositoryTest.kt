@@ -11,7 +11,7 @@ import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FoodCategory
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.inference.model.WeightEstimate
-import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -51,7 +51,7 @@ private class BiasFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
         rows.values.firstOrNull { it.sessionId == sessionId }
 
     override suspend fun getPendingBySessionId(sessionId: String): V2AnalysisRecordEntity? =
-        rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null }
+        rows.values.firstOrNull { it.sessionId == sessionId && it.groundTruthPesiJson == null && it.failureReason == null }
 
     override suspend fun deleteAll() {
         rows.clear()
@@ -65,26 +65,42 @@ private class BiasFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
 
     override suspend fun getAllWithoutGroundTruth(): List<V2AnalysisRecordEntity> =
-        rows.values.filter { it.groundTruthPesiJson == null }
+        rows.values.filter { it.groundTruthPesiJson == null && it.failureReason == null }
 
     override suspend fun getSessionModeAiModelPairsWithGroundTruth(): List<SessionModeAiModelPair> =
         rows.values.filter { it.groundTruthPesiJson != null }
             .map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }
             .distinct()
+
+    override suspend fun getAiModelIdsWithGroundTruth(): List<String> =
+        rows.values.filter { it.groundTruthPesiJson != null }
+            .map { it.aiModelId }
+            .distinct()
+
+    override suspend fun getWithGroundTruthByModel(aiModelId: String): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson != null && it.aiModelId == aiModelId }
+
+    override suspend fun insertIfAbsent(record: V2AnalysisRecordEntity): Long {
+        val existing = rows.values.firstOrNull { it.clientId == record.clientId }
+        return if (existing != null) -1 else insert(record)
+    }
+
+    override suspend fun getByClientId(clientId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.clientId == clientId }
 }
 
 private class BiasFakeBiasCorrectionDao : BiasCorrectionDao {
     val saved = mutableMapOf<List<String>, BiasCorrectionEntity>()
 
-    override suspend fun get(sessionMode: String, strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
-        saved[listOf(sessionMode, strategy, aiModelId, foodCategory)]
+    override suspend fun get(strategy: String, aiModelId: String, foodCategory: String): BiasCorrectionEntity? =
+        saved[listOf(strategy, aiModelId, foodCategory)]
 
     override suspend fun getAll(): List<BiasCorrectionEntity> = saved.values.toList()
 
     override fun getAllFlow(): Flow<List<BiasCorrectionEntity>> = flowOf(saved.values.toList())
 
     override suspend fun upsert(entity: BiasCorrectionEntity) {
-        saved[listOf(entity.sessionMode, entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
+        saved[listOf(entity.strategy, entity.aiModelId, entity.foodCategory)] = entity
     }
 
     override suspend fun deleteAll() { saved.clear() }
@@ -99,9 +115,10 @@ class BiasCorrectionRepositoryTest {
         nome = nome,
         strategia = strategia,
         pesoG = pesoG,
+        pesoCrudoG = pesoG,
         intervallo = ConfidenceInterval(pesoG * 0.8, pesoG * 1.2),
         catenaCalcolo = CalculationChain(formula = "test", valori = emptyMap(), fonti = emptyList(), sintesi = "$pesoG g"),
-        confidenza = Confidence.ALTO,
+        confidenza = ConfidenceScore(90),
     )
 
     private fun recordWithGroundTruth(analysisDao: BiasFakeV2AnalysisRecordDao, estimates: List<WeightEstimate>, groundTruth: Map<String, Double>) = runBlocking {
@@ -131,9 +148,9 @@ class BiasCorrectionRepositoryTest {
         val veri = listOf(120.0, 110.0, 130.0, 115.0, 125.0)
         veri.forEach { vero -> recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to vero)) }
 
-        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
 
-        val fattore = repository.currentFactor(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        val fattore = repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
         assertEquals(1.20, fattore!!, 1e-9)
     }
 
@@ -145,9 +162,9 @@ class BiasCorrectionRepositoryTest {
 
         recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to 120.0))
 
-        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
 
-        assertNull(repository.currentFactor(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
+        assertNull(repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
     }
 
     @Test
@@ -164,7 +181,7 @@ class BiasCorrectionRepositoryTest {
                 mapOf("pollo" to 120.0),
             )
         }
-        // Modalità ristorante: non deve contare per il segmento CASA richiesto sotto.
+        // Modalità ristorante: deve comunque contare per il segmento, perché la modalità non separa più i dati (§8).
         runBlocking {
             analysisDao.insert(
                 V2AnalysisRecordEntity(
@@ -182,10 +199,11 @@ class BiasCorrectionRepositoryTest {
             )
         }
 
-        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        // Una sola osservazione (quella ristorante sopra): non bastano 5 per ricalcolare, quindi resta null.
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
 
-        assertNull(repository.currentFactor(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
-        assertNull(repository.currentFactor(SessionMode.CASA, EstimationStrategy.BLOCCO_MISURABILE, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
+        assertNull(repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
+        assertNull(repository.currentFactor(EstimationStrategy.BLOCCO_MISURABILE, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
     }
 
     @Test
@@ -197,10 +215,10 @@ class BiasCorrectionRepositoryTest {
         val veri = listOf(120.0, 110.0, 130.0, 115.0, 125.0)
         veri.forEach { vero -> recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to vero)) }
 
-        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = false)
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = false)
 
         assertTrue(biasDao.saved.isEmpty())
-        assertNull(repository.currentFactor(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = false))
+        assertNull(repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = false))
     }
 
     @Test
@@ -212,7 +230,7 @@ class BiasCorrectionRepositoryTest {
         listOf(120.0, 120.0, 120.0, 120.0, 120.0).forEach { vero ->
             recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0)), mapOf("riso in bianco" to vero))
         }
-        repository.recalculate(SessionMode.CASA, EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
 
         val row = repository.getAllCorrectionsWithUsageStats().single()
         val stats = row.usageStats!!

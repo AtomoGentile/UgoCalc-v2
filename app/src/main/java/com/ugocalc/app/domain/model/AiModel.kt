@@ -1,5 +1,6 @@
 package com.ugocalc.app.domain.model
 
+import androidx.compose.runtime.Immutable
 import com.ugocalc.app.R
 
 enum class AiProviderType {
@@ -17,14 +18,17 @@ enum class AiProviderType {
     BEDROCK_IAM_GPT,
 }
 
-/** Un modello selezionabile nella schermata "scelta modello" (§2.4 punto 1) e nelle Impostazioni > API. */
+@Immutable
 data class AiModel(
     val id: String,
     val provider: AiProviderType,
     val displayName: String,
     val subtitle: String = "",
     val logoRes: Int? = null,
-)
+) {
+    /** Chiave univoca che distingue lo stesso modello su provider diversi (es. Bedrock Mantle vs IAM). */
+    val uid: String get() = "${provider.name}::$id"
+}
 
 object AiModelCatalog {
     val STATIC = listOf(
@@ -65,23 +69,7 @@ object AiModelCatalog {
         ),
     )
 
-    val ALL: List<AiModel> get() {
-        val mantleById = BEDROCK_MANTLE_OPTIONS.associateBy { it.id }
-        val iamById = BEDROCK_IAM_OPTIONS.associateBy { it.id }
-        val allBedrockIds = (mantleById.keys + iamById.keys).distinct()
-        val bedrock = allBedrockIds.map { id ->
-            val inMantle = mantleById[id] != null
-            val inIam = iamById[id] != null
-            val base = iamById[id] ?: mantleById[id]!!
-            val subtitle = when {
-                inMantle && inIam -> "Bedrock Mantle · IAM"
-                inIam -> "Bedrock IAM"
-                else -> "Bedrock Mantle"
-            }
-            base.copy(subtitle = subtitle)
-        }
-        return STATIC + bedrock
-    }
+    val ALL: List<AiModel> get() = STATIC + BEDROCK_MANTLE_OPTIONS + BEDROCK_IAM_OPTIONS
 
     private var bedrockModels: List<AiModel> = emptyList()
     private var iamModels: List<AiModel> = emptyList()

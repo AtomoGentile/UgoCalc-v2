@@ -37,7 +37,11 @@ object AwsSigV4Signer {
         // Example: modelId "foo:bar" → OkHttp encodes ':' → "%3A" in encodedPath
         //          → canonical URI encodes '%' of "%3A" → "%253A"  (AWS expected behavior).
         val canonicalUri = uriEncodePath(url.encodedPath.ifEmpty { "/" })
-        val canonicalQuerystring = url.encodedQuery.orEmpty()
+        val canonicalQuerystring = url.encodedQuery
+            ?.split("&")
+            ?.sorted()
+            ?.joinToString("&")
+            .orEmpty()
 
         val payloadHash = sha256Hex(body)
 

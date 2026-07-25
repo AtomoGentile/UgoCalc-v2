@@ -12,6 +12,7 @@ import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
+import com.ugocalc.app.sync.CloudSyncManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -58,6 +59,24 @@ private class FakeV2Dao : V2AnalysisRecordDao {
         rows.values.filter { it.groundTruthPesiJson != null }.map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }.distinct()
     override suspend fun deleteAll() { rows.clear() }
     override suspend fun deleteById(id: Long) { rows.remove(id) }
+
+    override suspend fun getAiModelIdsWithGroundTruth(): List<String> =
+        rows.values.filter { it.groundTruthPesiJson != null }.map { it.aiModelId }.distinct()
+
+    override suspend fun getWithGroundTruthByModel(aiModelId: String): List<V2AnalysisRecordEntity> =
+        rows.values.filter { it.groundTruthPesiJson != null && it.aiModelId == aiModelId }
+
+    override suspend fun insertIfAbsent(record: V2AnalysisRecordEntity): Long {
+        val existing = rows.values.firstOrNull { it.clientId == record.clientId }
+        return if (existing != null) -1 else insert(record)
+    }
+
+    override suspend fun getByClientId(clientId: String): V2AnalysisRecordEntity? =
+        rows.values.firstOrNull { it.clientId == clientId }
+}
+
+private class BenchmarkFakeCloudSyncManager : CloudSyncManager {
+    override suspend fun enqueue(eventType: String, payloadJson: String) {}
 }
 
 class BenchmarkRepositoryTest {
@@ -66,7 +85,7 @@ class BenchmarkRepositoryTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     private fun repository(benchmarkDao: FakeBenchmarkMealDao = FakeBenchmarkMealDao(), v2Dao: FakeV2Dao = FakeV2Dao()) =
-        Triple(BenchmarkRepository(benchmarkDao, v2Dao, json), benchmarkDao, v2Dao)
+        Triple(BenchmarkRepository(benchmarkDao, v2Dao, json, BenchmarkFakeCloudSyncManager()), benchmarkDao, v2Dao)
 
     @Test
     fun `recordV1Estimate creates a new row with the raw weights per food`() = runBlocking {

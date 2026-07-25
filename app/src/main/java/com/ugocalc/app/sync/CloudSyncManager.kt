@@ -7,14 +7,22 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
+import com.ugocalc.app.data.repository.AuthRepository
 import com.ugocalc.app.data.local.db.dao.CloudSyncQueueDao
 import com.ugocalc.app.data.local.db.entity.CloudSyncQueueEntity
-import com.ugocalc.app.data.repository.AuthRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+
+interface CloudSyncManager {
+    suspend fun enqueue(eventType: String, payloadJson: String)
+
+    companion object {
+        const val DEFAULT_USER_ID = "default-user-single-mode"
+    }
+}
 
 /**
  * Punto di accesso per accodare eventi da sincronizzare con il backend AWS (offline-first).
@@ -27,19 +35,18 @@ import javax.inject.Singleton
  * secondo utente in futuro non richiederà modifiche allo schema né alla coda locale.
  */
 @Singleton
-class CloudSyncManager @Inject constructor(
+class RealCloudSyncManager @Inject constructor(
     @ApplicationContext private val context: Context,
     private val cloudSyncQueueDao: CloudSyncQueueDao,
     private val workManager: WorkManager,
     private val authRepository: AuthRepository,
-) {
+) : CloudSyncManager {
     companion object {
-        const val DEFAULT_USER_ID = "default-user-single-mode"
         private const val WORK_NAME = "cloud_sync"
     }
 
-    suspend fun enqueue(eventType: String, payloadJson: String) {
-        val userId = authRepository.getCurrentUser()?.userId ?: DEFAULT_USER_ID
+    override suspend fun enqueue(eventType: String, payloadJson: String) {
+        val userId = authRepository.getCurrentUser()?.userId ?: CloudSyncManager.DEFAULT_USER_ID
         val event = CloudSyncQueueEntity(
             eventId = UUID.randomUUID().toString(),
             eventType = eventType,
@@ -48,10 +55,9 @@ class CloudSyncManager @Inject constructor(
             createdAtEpochMillis = System.currentTimeMillis(),
         )
         cloudSyncQueueDao.enqueue(event)
-        scheduleSync()
-    }
 
-    fun scheduleSync() {
+        // Trigger immediato del worker (§8: "push immediato se online, altrimenti accoda").
+        // WorkManager gestisce autonomamente la coda e i retry in base alla connettività.
         val constraints = Constraints.Builder()
             .setRequiredNetworkType(NetworkType.CONNECTED)
             .build()
@@ -61,6 +67,6 @@ class CloudSyncManager @Inject constructor(
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .build()
 
-        workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.KEEP, request)
+        workManager.enqueueUniqueWork(WORK_NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
     }
 }

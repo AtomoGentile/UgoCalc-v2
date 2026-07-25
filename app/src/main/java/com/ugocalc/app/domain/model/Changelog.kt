@@ -28,6 +28,7 @@ data class ChangelogEntry(
     val version: String,
     val highlights: List<String>,
     val moduleVersions: ModuleVersions? = null,
+    val categories: List<String> = emptyList(),
 )
 
 /**
@@ -38,6 +39,23 @@ data class ChangelogEntry(
  */
 object Changelog {
     val ENTRIES = listOf(
+        ChangelogEntry(
+            version = "3.0.2",
+            categories = listOf("Miglioramenti UI", "Performance", "Bug fix"),
+            highlights = listOf(
+                "Performance: eliminato lo stuttering nelle schermate di selezione modelli (Modelli preferiti, Modelli shadow, selezione analisi, dialog picker API). Le card non ricomponevano inutilmente ad ogni tap.",
+                "Bug fix: i colori del bordo delle card modello non si aggiornano più correttamente al cambio di selezione in tutti i contesti.",
+                "Stabilità: annotati @Immutable i tipi UserSettings, SettingsScreenState, ModelSelectionUiState e AiModel — il compilatore Compose può ora saltare la ricomposizione delle card invariate.",
+            ),
+            moduleVersions = ModuleVersions(
+                inferenceEngine = "2.4.0",
+                perceptionPrompt = "1.3.0",
+                physicalData = "1.2.0",
+                biasCalculator = "1.3.1",
+                ambiguityResolver = "1.0.0",
+                matchStep = "1.1.0",
+            ),
+        ),
         ChangelogEntry(
             version = "3.0.1",
             highlights = listOf(

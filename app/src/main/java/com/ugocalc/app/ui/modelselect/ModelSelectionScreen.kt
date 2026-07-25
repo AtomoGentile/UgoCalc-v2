@@ -28,12 +28,12 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -50,6 +50,8 @@ fun ModelSelectionScreen(
     viewModel: ModelSelectionViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Scegli i modelli") }, colors = ugoTopAppBarColors()) },
@@ -76,11 +78,12 @@ fun ModelSelectionScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(uiState.availableModels, key = { it.id }) { model ->
+                items(uiState.availableModels, key = { it.uid }) { model ->
+                    val onClick = remember { { viewModel.toggleModel(model.uid) } }
                     ModelCard(
                         model = model,
-                        isSelected = model.id in uiState.selectedModelIds,
-                        onClick = { viewModel.toggleModel(model.id) },
+                        isSelected = model.uid in uiState.selectedModelUids,
+                        onClick = onClick,
                     )
                 }
             }
@@ -93,7 +96,7 @@ fun ModelSelectionScreen(
             ) {
                 Button(onClick = onBack) { Text("Indietro") }
                 Button(
-                    enabled = uiState.selectedModelIds.isNotEmpty(),
+                    enabled = uiState.selectedModelUids.isNotEmpty(),
                     onClick = { onNext(viewModel.confirmSelectionAndProceed()) },
                 ) { Text("Avanti") }
             }
@@ -105,16 +108,12 @@ fun ModelSelectionScreen(
 private fun ModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
-    val shape = remember { RoundedCornerShape(12.dp) }
-    val cardModifier = remember(isSelected) {
-        Modifier
-            .fillMaxWidth()
-            .aspectRatio(0.9f)
-            .border(borderWidth, borderColor, shape)
-    }
-    val elevation = remember(isSelected) {
-        CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
-    }
+    val shape = RoundedCornerShape(12.dp)
+    val cardModifier = Modifier
+        .fillMaxWidth()
+        .aspectRatio(0.9f)
+        .border(borderWidth, borderColor, shape)
+    val elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp)
 
     Card(
         onClick = onClick,

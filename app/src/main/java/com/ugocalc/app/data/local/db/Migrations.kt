@@ -224,6 +224,13 @@ val MIGRATION_19_20 = object : Migration(19, 20) {
     }
 }
 
+/** Separazione cronologia Casa/Ristorante: aggiunge `sessionMode` con default 'CASA' per i record esistenti. */
+val MIGRATION_20_21 = object : Migration(20, 21) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE analysis_history ADD COLUMN sessionMode TEXT NOT NULL DEFAULT 'CASA'")
+    }
+}
+
 /** CloudSync (Prompt 5): coda offline-first degli eventi da trasmettere al backend AWS. */
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(db: SupportSQLiteDatabase) {

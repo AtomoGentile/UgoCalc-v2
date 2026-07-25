@@ -18,17 +18,23 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +58,11 @@ fun ShadowModelSettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val availableModels by viewModel.availableModels.collectAsState()
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val filteredModels = remember(searchQuery, availableModels) {
+        availableModels.filter { modelMatchesQuery(it, searchQuery) }
+    }
 
     Scaffold(topBar = {
         TopAppBar(
@@ -64,19 +75,28 @@ fun ShadowModelSettingsScreen(
             Text(
                 "Seleziona i modelli da testare in shadow mode accanto ai risultati V1. La V1 rimane visibile, i risultati V2 appariranno dopo l'analisi.",
                 style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(bottom = 16.dp),
+                modifier = Modifier.padding(bottom = 12.dp),
+            )
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Cerca modello…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
             )
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(viewModel.availableModels) { model ->
+                items(filteredModels, key = { it.uid }) { model ->
                     val isSelected = model.id in state.userSettings.shadowModelIds
+                    val onClick = remember(model.id) { { viewModel.toggleShadowModel(model.id) } }
                     ShadowModelCard(
                         model = model,
                         isSelected = isSelected,
-                        onClick = { viewModel.toggleShadowModel(model.id) },
+                        onClick = onClick,
                     )
                 }
             }
@@ -122,13 +142,13 @@ private fun ShadowModelCard(model: AiModel, isSelected: Boolean, onClick: () -> 
                 Text(
                     text = model.displayName,
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = Color(0xFF1C1B1F),
                 )
                 if (model.subtitle.isNotEmpty()) {
                     Text(
                         text = model.subtitle,
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = Color(0xFF49454F),
                     )
                 }
                 Spacer(Modifier.height(4.dp))
