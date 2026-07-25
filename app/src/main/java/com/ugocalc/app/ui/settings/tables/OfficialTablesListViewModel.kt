@@ -67,7 +67,12 @@ class OfficialTablesListViewModel @Inject constructor(
             return
         }
         viewModelScope.launch {
-            tableRepository.importAndNormalize(uri, displayName, fileType, model)
+            try {
+                tableRepository.importAndNormalize(uri, displayName, fileType, model)
+                _errorMessage.value = null
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore durante l'import: ${e.message}"
+            }
         }
     }
 

@@ -9,6 +9,7 @@ import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
 import com.ugocalc.app.data.local.db.entity.SearchFrequencyEntity
+import com.ugocalc.app.data.export.XlsxExporter
 import com.ugocalc.app.data.parsing.DocumentExtractionException
 import com.ugocalc.app.data.parsing.DocumentTextExtractor
 import com.ugocalc.app.data.remote.ai.AiOrchestrator
@@ -45,6 +46,7 @@ class TableRepository @Inject constructor(
     private val searchFrequencyDao: SearchFrequencyDao,
     private val extractor: DocumentTextExtractor,
     private val aiOrchestrator: AiOrchestrator,
+    private val xlsxExporter: XlsxExporter,
     private val json: Json,
 ) {
 
@@ -177,6 +179,7 @@ class TableRepository @Inject constructor(
                 NormalizedFoodEntryEntity(tableId = tableId, nome = e.nome, choPer100g = e.choPer100g, grassiPer100g = e.grassiPer100g, rowOrder = index)
             }
         )
+        exportTableAsXlsx(tableId)
         return tableId
     }
 
@@ -198,6 +201,9 @@ class TableRepository @Inject constructor(
         tableDao.update(currentTable)
         try {
             val extractedText = extractor.extract(fileUri, table.fileType)
+            if (extractedText.isBlank()) {
+                throw DocumentExtractionException("Il file non contiene testo leggibile. Se è un PDF scansionato, occorre convertirlo con OCR prima.")
+            }
             val chunks = DocumentTextExtractor.chunkText(extractedText)
 
             val startChunkIndex = DocumentTextExtractor.resolveStartChunkIndex(table.normalizedChunkCount, chunks.size)
@@ -213,6 +219,10 @@ class TableRepository @Inject constructor(
                     _normalizationProgress.update { it + (table.id to "${index + 1} di ${chunks.size}") }
                 }
                 val result = aiOrchestrator.runTableNormalization(model, chunks[index])
+
+                if (result.alimenti.isEmpty() && result.righeScartate.isEmpty()) {
+                    throw Exception("Il modello ha ritornato un risultato vuoto per il chunk ${index + 1}. Verifica che il file contenga dati tabulari validi.")
+                }
 
                 val nextRowOrder = (entryDao.maxRowOrder(table.id) ?: -1) + 1
                 entryDao.insertAll(
@@ -240,10 +250,13 @@ class TableRepository @Inject constructor(
             }
 
             tableDao.update(currentTable.copy(normalizationStatus = NormalizationStatus.DONE, normalizationErrorMessage = null))
+            exportTableAsXlsx(table.id)
         } catch (e: DocumentExtractionException) {
             failNormalization(table.id, currentTable, e.message)
         } catch (e: AiCallException) {
             failNormalization(table.id, currentTable, e.message)
+        } catch (e: Exception) {
+            failNormalization(table.id, currentTable, "Errore inatteso: ${e.javaClass.simpleName}: ${e.message}")
         } finally {
             _normalizationProgress.update { it - table.id }
         }
@@ -378,6 +391,15 @@ class TableRepository @Inject constructor(
             destination.outputStream().use { output -> input.copyTo(output) }
         } ?: throw DocumentExtractionException("Impossibile leggere il file selezionato")
         return destination
+    }
+
+    /** Esporta una tabella normalizzata come file XLSX scaricabile. */
+    suspend fun exportTableAsXlsx(tableId: Long): File {
+        val entries = entryDao.getForTable(tableId)
+        val normalized = entries.map { mapEntryToDomain(it) }
+        val exportDir = File(context.filesDir, "exports").apply { mkdirs() }
+        val exportFile = File(exportDir, "tabella_$tableId.xlsx")
+        return xlsxExporter.exportToFile(normalized, exportFile)
     }
 }
 
