@@ -178,9 +178,6 @@ class ModelSelectionViewModel @Inject constructor(
     fun confirmSelectionAndProceed(): List<String> {
         val selected = _uiState.value.availableModels.filter { it.uid in _uiState.value.selectedModelUids }
         sessionStore.setSelectedModels(selected)
-        viewModelScope.launch {
-            settingsRepository.setEnabledAnalysisModelIds(selected.map { it.id }.toSet())
-        }
         return selected.map { it.id }
     }
 }
