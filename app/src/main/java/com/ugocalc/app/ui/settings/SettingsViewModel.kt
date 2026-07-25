@@ -29,6 +29,7 @@ import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Named
 
+@androidx.compose.runtime.Immutable
 data class SettingsScreenState(
     val userSettings: UserSettings = UserSettings(),
     val officialTableCount: Int = 0,
@@ -50,43 +51,79 @@ class SettingsViewModel @Inject constructor(
     @Named("no_auth") private val httpClient: OkHttpClient,
 ) : ViewModel() {
 
+    private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
+    val availableModels: StateFlow<List<AiModel>> = _availableModels.asStateFlow()
+
+    fun refreshAvailableModels() { _availableModels.value = computeAvailableModels() }
+
+    init {
+        val mantleIds = settingsRepository.getBedrockAvailableModels()
+        if (mantleIds.isNotEmpty()) AiModelCatalog.setBedrockModels(mantleIds)
+
+        val iamIds = settingsRepository.getBedrockIamAvailableModels()
+        if (iamIds.isNotEmpty()) AiModelCatalog.setBedrockIamModels(iamIds)
+
+        refreshAvailableModels()
+
+        // Fetch silenzioso se le credenziali ci sono ma i modelli non sono ancora stati scaricati
+        viewModelScope.launch {
+            val mantleKey = settingsRepository.getBedrockMantleApiKey()
+            val region = settingsRepository.getBedrockRegion()
+            if (mantleKey != null && mantleIds.isEmpty()) {
+                fetchAndSaveMantleModels(mantleKey, region)
+                refreshAvailableModels()
+            }
+            val accessKey = settingsRepository.getBedrockIamAccessKey()
+            val secretKey = settingsRepository.getBedrockIamSecretKey()
+            val iamRegion = settingsRepository.getBedrockIamRegion()
+            if (accessKey != null && secretKey != null && iamIds.isEmpty()) {
+                fetchAndSaveIamModels(accessKey, secretKey, iamRegion)
+                refreshAvailableModels()
+            }
+        }
+    }
+
     val state: StateFlow<SettingsScreenState> = combine(
         settingsRepository.settings,
         tableRepository.observeTableCount(),
     ) { settings, tableCount -> SettingsScreenState(settings, tableCount) }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SettingsScreenState())
 
-    fun setTheme(theme: AppTheme) = viewModelScope.launch { settingsRepository.setTheme(theme) }
-    fun setTextScale(scale: Float) = viewModelScope.launch { settingsRepository.setTextScale(scale) }
-    fun setNotificationsEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) }
-    fun setFavoritesEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setFavoritesEnabled(enabled) }
-    fun setPrimaryColor(argb: Int?) = viewModelScope.launch { settingsRepository.setPrimaryColor(argb) }
-    fun setSecondaryColor(argb: Int?) = viewModelScope.launch { settingsRepository.setSecondaryColor(argb) }
-    fun setTertiaryColor(argb: Int?) = viewModelScope.launch { settingsRepository.setTertiaryColor(argb) }
-    fun setBackgroundColor(argb: Int?) = viewModelScope.launch { settingsRepository.setBackgroundColor(argb) }
-    fun setErrorColor(argb: Int?) = viewModelScope.launch { settingsRepository.setErrorColor(argb) }
-    fun setPrimaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setPrimaryColorRistorante(argb) }
-    fun setSecondaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setSecondaryColorRistorante(argb) }
-    fun setTertiaryColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setTertiaryColorRistorante(argb) }
-    fun setBackgroundColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setBackgroundColorRistorante(argb) }
-    fun setErrorColorRistorante(argb: Int?) = viewModelScope.launch { settingsRepository.setErrorColorRistorante(argb) }
-    fun setHistoryChartEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setHistoryChartEnabled(enabled) }
-    fun setFontFamily(name: String?) = viewModelScope.launch { settingsRepository.setFontFamily(name) }
-    fun setFontColor(argb: Int?) = viewModelScope.launch { settingsRepository.setFontColor(argb) }
+    fun setTheme(theme: AppTheme) { viewModelScope.launch { settingsRepository.setTheme(theme) } }
+    fun setTextScale(scale: Float) { viewModelScope.launch { settingsRepository.setTextScale(scale) } }
+    fun setNotificationsEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setNotificationsEnabled(enabled) } }
+    fun setFavoritesEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setFavoritesEnabled(enabled) } }
+    fun setPrimaryColor(argb: Int?) { viewModelScope.launch { settingsRepository.setPrimaryColor(argb) } }
+    fun setSecondaryColor(argb: Int?) { viewModelScope.launch { settingsRepository.setSecondaryColor(argb) } }
+    fun setTertiaryColor(argb: Int?) { viewModelScope.launch { settingsRepository.setTertiaryColor(argb) } }
+    fun setBackgroundColor(argb: Int?) { viewModelScope.launch { settingsRepository.setBackgroundColor(argb) } }
+    fun setErrorColor(argb: Int?) { viewModelScope.launch { settingsRepository.setErrorColor(argb) } }
+    fun setPrimaryColorRistorante(argb: Int?) { viewModelScope.launch { settingsRepository.setPrimaryColorRistorante(argb) } }
+    fun setSecondaryColorRistorante(argb: Int?) { viewModelScope.launch { settingsRepository.setSecondaryColorRistorante(argb) } }
+    fun setTertiaryColorRistorante(argb: Int?) { viewModelScope.launch { settingsRepository.setTertiaryColorRistorante(argb) } }
+    fun setBackgroundColorRistorante(argb: Int?) { viewModelScope.launch { settingsRepository.setBackgroundColorRistorante(argb) } }
+    fun setErrorColorRistorante(argb: Int?) { viewModelScope.launch { settingsRepository.setErrorColorRistorante(argb) } }
+    fun setHistoryChartEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setHistoryChartEnabled(enabled) } }
+    fun setFontFamily(name: String?) { viewModelScope.launch { settingsRepository.setFontFamily(name) } }
+    fun setFontColor(argb: Int?) { viewModelScope.launch { settingsRepository.setFontColor(argb) } }
     /** Aggiunge/rimuove un modello dai preferiti (§2.2, più di una scelta possibile). */
-    fun togglePreferredModel(id: String) = viewModelScope.launch {
-        val current = state.value.userSettings.preferredModelIds
-        val updated = if (id in current) current - id else current + id
-        settingsRepository.setPreferredModelIds(updated)
+    fun togglePreferredModel(id: String) {
+        viewModelScope.launch {
+            val current = state.value.userSettings.preferredModelIds
+            val updated = if (id in current) current - id else current + id
+            settingsRepository.setPreferredModelIds(updated)
+        }
     }
     /** Aggiunge/rimuove un modello dalla shadow mode (testing V2). */
-    fun toggleShadowModel(id: String) = viewModelScope.launch {
-        val current = state.value.userSettings.shadowModelIds
-        val updated = if (id in current) current - id else current + id
-        settingsRepository.setShadowModelIds(updated)
+    fun toggleShadowModel(id: String) {
+        viewModelScope.launch {
+            val current = state.value.userSettings.shadowModelIds
+            val updated = if (id in current) current - id else current + id
+            settingsRepository.setShadowModelIds(updated)
+        }
     }
-    fun setConfidenceIndicatorEnabled(enabled: Boolean) = viewModelScope.launch { settingsRepository.setConfidenceIndicatorEnabled(enabled) }
-    fun setConfidenceAlertThresholdPercent(percent: Int) = viewModelScope.launch { settingsRepository.setConfidenceAlertThresholdPercent(percent) }
+    fun setConfidenceIndicatorEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setConfidenceIndicatorEnabled(enabled) } }
+    fun setConfidenceAlertThresholdPercent(percent: Int) { viewModelScope.launch { settingsRepository.setConfidenceAlertThresholdPercent(percent) } }
 
     fun getApiKey(provider: AiProviderType): String? = settingsRepository.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) {
@@ -131,6 +168,7 @@ class SettingsViewModel @Inject constructor(
                     httpClient.newCall(request).execute().use { response ->
                         if (response.isSuccessful || response.code == 400) {
                             fetchAndSaveMantleModels(mantleApiKey, region)
+                            refreshAvailableModels()
                             BedrockTestResult.Success("Connessione Bedrock Mantle riuscita")
                         } else {
                             BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
@@ -144,23 +182,26 @@ class SettingsViewModel @Inject constructor(
     }
 
     private suspend fun fetchAndSaveMantleModels(mantleApiKey: String, region: String) {
-        try {
+        val ids = try {
             withContext(Dispatchers.IO) {
                 val request = Request.Builder()
-                    .url("https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT&byInferenceType=ON_DEMAND")
+                    .url("https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT")
                     .header("Authorization", "Bearer $mantleApiKey")
                     .get()
                     .build()
                 httpClient.newCall(request).execute().use { response ->
                     if (response.isSuccessful) {
-                        val body = response.body?.string() ?: return@use
-                        val ids = parseFoundationModelIds(body)
-                        settingsRepository.setBedrockAvailableModels(ids)
-                        AiModelCatalog.setBedrockModels(ids)
-                    }
+                        val body = response.body?.string() ?: ""
+                        parseFoundationModelIds(body).ifEmpty { null }
+                    } else null
                 }
             }
-        } catch (_: Exception) { /* non bloccante */ }
+        } catch (_: Exception) { null }
+
+        if (ids != null) {
+            settingsRepository.setBedrockAvailableModels(ids)
+            AiModelCatalog.setBedrockModels(ids)
+        }
     }
 
     // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
@@ -204,14 +245,8 @@ class SettingsViewModel @Inject constructor(
                     )
                     httpClient.newCall(signedRequest).execute().use { response ->
                         if (response.isSuccessful || response.code == 400) {
-                            val fetchError = fetchAndSaveIamModels(accessKey, secretKey, region)
-                            if (fetchError != null) {
-                                val fallback = settingsRepository.getBedrockAvailableModels()
-                                if (fallback.isNotEmpty()) {
-                                    settingsRepository.setBedrockIamAvailableModels(fallback)
-                                    AiModelCatalog.setBedrockIamModels(fallback)
-                                }
-                            }
+                            fetchAndSaveIamModels(accessKey, secretKey, region)
+                            refreshAvailableModels()
                             BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
                         } else {
                             BedrockTestResult.Error("HTTP ${response.code}: ${response.body?.string()?.take(200)}")
@@ -227,7 +262,7 @@ class SettingsViewModel @Inject constructor(
     private suspend fun fetchAndSaveIamModels(accessKey: String, secretKey: String, region: String): String? {
         return try {
             withContext(Dispatchers.IO) {
-                val url = "https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT&byInferenceType=ON_DEMAND"
+                val url = "https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT"
                 val baseRequest = Request.Builder().url(url).get().build()
                 val signedRequest = com.ugocalc.app.data.remote.ai.client.AwsSigV4Signer.sign(
                     baseRequest, accessKey, secretKey, region, ByteArray(0)
@@ -254,7 +289,9 @@ class SettingsViewModel @Inject constructor(
         return try {
             val arr = JSONObject(json).getJSONArray("modelSummaries")
             (0 until arr.length()).map { arr.getJSONObject(it).getString("modelId") }
-        } catch (_: Exception) { emptyList() }
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     // ── Bedrock Mantle model picker (legacy, kept for compatibility) ───────────
@@ -282,25 +319,27 @@ class SettingsViewModel @Inject constructor(
     fun dismissAllModelsPicker() { _showAllModelsPicker.value = false }
 
     fun saveAllEnabledModels(ids: Set<String>) {
-        viewModelScope.launch { settingsRepository.setPreferredModelIds(ids) }
+        viewModelScope.launch { settingsRepository.setEnabledAnalysisModelIds(ids) }
         _showAllModelsPicker.value = false
     }
 
-    fun clearHistory() = viewModelScope.launch { historyRepository.clearHistory() }
+    fun clearHistory() { viewModelScope.launch { historyRepository.clearHistory() } }
 
-    fun resetAllSettings() = viewModelScope.launch { settingsRepository.resetAll() }
+    fun resetAllSettings() { viewModelScope.launch { settingsRepository.resetAll() } }
 
-    val availableModels: List<AiModel> get() {
+    private fun computeAvailableModels(): List<AiModel> {
         val isOffline = !connectivityObserver.isOnlineNow()
+        val hasMantle = settingsRepository.hasBedrockCredentials()
+        val hasIam = settingsRepository.hasBedrockIamCredentials()
         return AiModelCatalog.ALL.filter { model ->
-            if (isOffline) false
-            else when (model.provider) {
-                AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT ->
-                    settingsRepository.hasBedrockCredentials()
+            if (isOffline) return@filter false
+            when (model.provider) {
+                AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT,
                 AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT ->
-                    settingsRepository.hasBedrockIamCredentials()
+                    hasMantle || hasIam
                 else -> settingsRepository.getApiKey(model.provider) != null
             }
         }
     }
+
 }
