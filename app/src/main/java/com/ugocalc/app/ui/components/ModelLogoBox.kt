@@ -52,7 +52,7 @@ fun ModelLogoBox(
                 .ifBlank { "?" }
         }
         val bgColor = remember(providerName) { providerColor(providerName) }
-        val shape = remember { RoundedCornerShape(8.dp) }
+        val shape = remember(8.dp) { RoundedCornerShape(8.dp) }
         Box(
             modifier = modifier
                 .clip(shape)

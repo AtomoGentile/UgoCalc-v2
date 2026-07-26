@@ -108,14 +108,15 @@ fun ShadowModelSettingsScreen(
 private fun ShadowModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
+    val shape = RoundedCornerShape(12.dp)
 
     Card(
         onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(0.9f)
-            .border(borderWidth, borderColor, RoundedCornerShape(12.dp)),
-        shape = RoundedCornerShape(12.dp),
+            .border(borderWidth, borderColor, shape),
+        shape = shape,
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 4.dp else 1.dp),
     ) {
@@ -126,8 +127,9 @@ private fun ShadowModelCard(model: AiModel, isSelected: Boolean, onClick: () -> 
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 if (model.logoRes != null) {
+                    val painter = painterResource(id = model.logoRes)
                     Image(
-                        painter = painterResource(id = model.logoRes),
+                        painter = painter,
                         contentDescription = model.displayName,
                         modifier = Modifier
                             .weight(1f)

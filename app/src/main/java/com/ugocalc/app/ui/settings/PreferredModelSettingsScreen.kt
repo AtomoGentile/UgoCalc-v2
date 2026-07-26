@@ -105,7 +105,7 @@ fun PreferredModelSettingsScreen(
 private fun PreferredModelCard(model: AiModel, isSelected: Boolean, onClick: () -> Unit) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
-    val shape = remember { RoundedCornerShape(12.dp) }
+    val shape = RoundedCornerShape(12.dp)
     val cardModifier = Modifier
         .fillMaxWidth()
         .aspectRatio(0.9f)

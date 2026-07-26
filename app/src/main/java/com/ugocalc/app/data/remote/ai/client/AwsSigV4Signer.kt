@@ -16,7 +16,7 @@ import javax.crypto.spec.SecretKeySpec
 object AwsSigV4Signer {
 
     private const val ALGORITHM = "AWS4-HMAC-SHA256"
-    private const val SERVICE = "bedrock"
+    private const val SERVICE = "bedrock-runtime"
 
     fun sign(
         request: Request,

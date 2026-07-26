@@ -493,7 +493,7 @@ private fun ApiProviderModelCard(
 ) {
     val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     val borderWidth = if (isSelected) 2.dp else 1.dp
-    val shape = remember { RoundedCornerShape(12.dp) }
+    val shape = RoundedCornerShape(12.dp)
     val cardModifier = Modifier
         .fillMaxWidth()
         .aspectRatio(1.1f)

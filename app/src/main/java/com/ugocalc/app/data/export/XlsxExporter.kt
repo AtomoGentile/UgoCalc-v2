@@ -5,6 +5,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.apache.poi.xssf.usermodel.XSSFWorkbook
 import java.io.File
+import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
@@ -12,7 +13,7 @@ import javax.inject.Singleton
  * Usato dopo la normalizzazione AI per esportare/salvare i risultati.
  */
 @Singleton
-class XlsxExporter {
+class XlsxExporter @Inject constructor() {
 
     suspend fun exportToFile(entries: List<NormalizedFoodEntry>, outputFile: File): File = withContext(Dispatchers.IO) {
         XSSFWorkbook().use { workbook ->
@@ -32,10 +33,10 @@ class XlsxExporter {
                 row.createCell(2).setCellValue(entry.grassiPer100g)
             }
 
-            // Auto-width colonne
-            sheet.autoSizeColumn(0)
-            sheet.autoSizeColumn(1)
-            sheet.autoSizeColumn(2)
+            // Larghezze fisse (autoSizeColumn non funziona su Android - dipende da java.awt)
+            sheet.setColumnWidth(0, 7000)  // Nome: ~50 caratteri
+            sheet.setColumnWidth(1, 4000)  // CHO: numerico
+            sheet.setColumnWidth(2, 4000)  // Grassi: numerico
 
             outputFile.outputStream().use { workbook.write(it) }
         }
