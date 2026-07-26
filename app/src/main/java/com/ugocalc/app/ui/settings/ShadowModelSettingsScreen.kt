@@ -90,7 +90,12 @@ fun ShadowModelSettingsScreen(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(filteredModels, key = { it.uid }) { model ->
+                val analysisModels = if (state.userSettings.enabledAnalysisModelIds.isNotEmpty()) {
+                    filteredModels.filter { it.id in state.userSettings.enabledAnalysisModelIds }
+                } else {
+                    filteredModels
+                }
+                items(analysisModels, key = { it.uid }) { model ->
                     val isSelected = model.id in state.userSettings.shadowModelIds
                     val onClick = remember(model.id) { { viewModel.toggleShadowModel(model.id) } }
                     ShadowModelCard(

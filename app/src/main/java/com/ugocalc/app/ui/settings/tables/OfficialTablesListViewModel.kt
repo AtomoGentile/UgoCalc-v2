@@ -41,28 +41,44 @@ class OfficialTablesListViewModel @Inject constructor(
 
     private val _errorMessage = MutableStateFlow<String?>(null)
 
-    /** Provider con una API key configurata (§2.2): scelta manuale in questa schermata, non più
-     * automatica sul primo disponibile — con più provider configurati (es. GitHub Models + Gemini)
-     * l'utente potrebbe voler evitare quello con la quota giornaliera più bassa. */
-    private val availableModels = AiModelCatalog.ALL.filter { model ->
-        when (model.provider) {
-            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
-            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
-            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
-            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
-            else -> settingsRepository.getApiKey(model.provider) != null
-        }
-    }
-    private val _selectedModel = MutableStateFlow(availableModels.firstOrNull())
+    /** Modelli selezionati per la normalizzazione (§2.2). Se nessuno è selezionato, mostra tutti quelli con chiave configurata. */
+    private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
+    private val _selectedModel = MutableStateFlow<AiModel?>(null)
 
     val uiState: StateFlow<TablesListUiState> = combine(
         tableRepository.observeTables(),
         _errorMessage,
         tableRepository.normalizationProgress,
+        _availableModels,
         _selectedModel,
-    ) { tables, error, progress, selectedModel ->
+    ) { tables, error, progress, availableModels, selectedModel ->
         TablesListUiState(tables, error, progress, availableModels, selectedModel)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TablesListUiState())
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.settings.collect { settings ->
+                val enabledIds = settings.enabledNormalizationModelIds
+                val models = if (enabledIds.isNotEmpty()) {
+                    AiModelCatalog.ALL.filter { it.id in enabledIds && hasCredentialsForModel(it) }
+                } else {
+                    AiModelCatalog.ALL.filter { hasCredentialsForModel(it) }
+                }
+                _availableModels.value = models
+                if (_selectedModel.value == null && models.isNotEmpty()) {
+                    _selectedModel.value = models.first()
+                }
+            }
+        }
+    }
+
+    private fun hasCredentialsForModel(model: AiModel): Boolean = when (model.provider) {
+        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
+        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
+        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
+        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
+        else -> settingsRepository.getApiKey(model.provider) != null
+    }
 
     fun selectModel(model: AiModel) {
         _selectedModel.value = model

@@ -75,9 +75,10 @@ class SettingsViewModel @Inject constructor(
             }
             val accessKey = settingsRepository.getBedrockIamAccessKey()
             val secretKey = settingsRepository.getBedrockIamSecretKey()
+            val iamAccountId = settingsRepository.getBedrockIamAccountId()
             val iamRegion = settingsRepository.getBedrockIamRegion()
-            if (accessKey != null && secretKey != null && iamIds.isEmpty()) {
-                fetchAndSaveIamModels(accessKey, secretKey, iamRegion)
+            if (accessKey != null && secretKey != null && iamAccountId != null && iamIds.isEmpty()) {
+                fetchAndSaveIamModels(accessKey, secretKey, iamAccountId, iamRegion)
                 refreshAvailableModels()
             }
         }
@@ -120,6 +121,14 @@ class SettingsViewModel @Inject constructor(
             val current = state.value.userSettings.shadowModelIds
             val updated = if (id in current) current - id else current + id
             settingsRepository.setShadowModelIds(updated)
+        }
+    }
+
+    fun toggleNormalizationModel(id: String) {
+        viewModelScope.launch {
+            val current = state.value.userSettings.enabledNormalizationModelIds
+            val updated = if (id in current) current - id else current + id
+            settingsRepository.setEnabledNormalizationModelIds(updated)
         }
     }
     fun setConfidenceIndicatorEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setConfidenceIndicatorEnabled(enabled) } }
@@ -211,19 +220,20 @@ class SettingsViewModel @Inject constructor(
 
     fun getBedrockIamAccessKey(): String = settingsRepository.getBedrockIamAccessKey().orEmpty()
     fun getBedrockIamSecretKey(): String = settingsRepository.getBedrockIamSecretKey().orEmpty()
+    fun getBedrockIamAccountId(): String = settingsRepository.getBedrockIamAccountId().orEmpty()
     fun getBedrockIamRegion(): String = settingsRepository.getBedrockIamRegion()
 
-    fun setBedrockIamCredentials(accessKey: String, secretKey: String, region: String) {
-        if (accessKey.isBlank() || secretKey.isBlank()) {
+    fun setBedrockIamCredentials(accessKey: String, secretKey: String, accountId: String, region: String) {
+        if (accessKey.isBlank() || secretKey.isBlank() || accountId.isBlank()) {
             settingsRepository.clearBedrockIamCredentials()
         } else {
-            settingsRepository.setBedrockIamCredentials(accessKey, secretKey, region)
+            settingsRepository.setBedrockIamCredentials(accessKey, secretKey, accountId, region)
         }
     }
 
-    fun testBedrockIamConnection(accessKey: String, secretKey: String, region: String) {
-        if (accessKey.isBlank() || secretKey.isBlank()) {
-            _bedrockIamTestResult.value = BedrockTestResult.Error("Inserisci Access Key e Secret Key")
+    fun testBedrockIamConnection(accessKey: String, secretKey: String, accountId: String, region: String) {
+        if (accessKey.isBlank() || secretKey.isBlank() || accountId.isBlank()) {
+            _bedrockIamTestResult.value = BedrockTestResult.Error("Inserisci Access Key, Secret Key e Account ID")
             return
         }
         _bedrockIamTestResult.value = BedrockTestResult.Loading
@@ -245,7 +255,7 @@ class SettingsViewModel @Inject constructor(
                     )
                     httpClient.newCall(signedRequest).execute().use { response ->
                         if (response.isSuccessful || response.code == 400) {
-                            fetchAndSaveIamModels(accessKey, secretKey, region)
+                            fetchAndSaveIamModels(accessKey, secretKey, accountId, region)
                             refreshAvailableModels()
                             BedrockTestResult.Success("Connessione Bedrock IAM riuscita")
                         } else {
@@ -259,7 +269,7 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private suspend fun fetchAndSaveIamModels(accessKey: String, secretKey: String, region: String): String? {
+    private suspend fun fetchAndSaveIamModels(accessKey: String, secretKey: String, accountId: String, region: String): String? {
         return try {
             withContext(Dispatchers.IO) {
                 val url = "https://bedrock.$region.amazonaws.com/foundation-models?byOutputModality=TEXT"
@@ -272,8 +282,11 @@ class SettingsViewModel @Inject constructor(
                         val body = response.body?.string() ?: return@withContext "Risposta vuota"
                         val ids = parseFoundationModelIds(body)
                         if (ids.isEmpty()) return@withContext "Nessun modello trovato"
-                        settingsRepository.setBedrockIamAvailableModels(ids)
-                        AiModelCatalog.setBedrockIamModels(ids)
+                        val inferenceProfileArns = ids.map { modelId ->
+                            "arn:aws:bedrock:$region:$accountId:inference-profile/global.$modelId"
+                        }
+                        settingsRepository.setBedrockIamAvailableModels(inferenceProfileArns)
+                        AiModelCatalog.setBedrockIamModels(inferenceProfileArns)
                         null
                     } else {
                         "Lista modelli IAM: HTTP ${response.code}"
@@ -288,8 +301,13 @@ class SettingsViewModel @Inject constructor(
     private fun parseFoundationModelIds(json: String): List<String> {
         return try {
             val arr = JSONObject(json).getJSONArray("modelSummaries")
-            (0 until arr.length()).map { arr.getJSONObject(it).getString("modelId") }
-        } catch (_: Exception) {
+            val models = (0 until arr.length()).map { arr.getJSONObject(it).getString("modelId") }
+            android.util.Log.d("Bedrock", "Catalogo modelli caricato: ${models.size} modelli")
+            models.take(10).forEach { android.util.Log.d("Bedrock", "  - $it") }
+            if (models.size > 10) android.util.Log.d("Bedrock", "  ... e ${models.size - 10} altri")
+            models
+        } catch (e: Exception) {
+            android.util.Log.e("Bedrock", "Errore nel parsing del catalogo: ${e.message}", e)
             emptyList()
         }
     }

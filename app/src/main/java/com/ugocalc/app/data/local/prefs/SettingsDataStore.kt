@@ -77,6 +77,8 @@ data class UserSettings(
     val shadowModelIds: Set<String> = emptySet(),
     /** Modelli abilitati nella schermata di selezione per "Analizza". Se vuoto, tutti i modelli disponibili sono selezionabili. */
     val enabledAnalysisModelIds: Set<String> = emptySet(),
+    /** Modelli abilitati nella schermata di selezione per "Normalizzazione". Se vuoto, tutti i modelli disponibili sono selezionabili. */
+    val enabledNormalizationModelIds: Set<String> = emptySet(),
     /**
      * Modalità Casa/Ristorante attiva a livello di app (§ richiesta utente, icona in topAppBar
      * Homepage): pilota sia l'icona mostrata sia quale set di colori personalizzati viene applicato
@@ -124,6 +126,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val V2_SHADOW_MODE_ENABLED = booleanPreferencesKey("v2_shadow_mode_enabled")
         val SHADOW_MODEL_IDS = stringSetPreferencesKey("shadow_model_ids")
         val ENABLED_ANALYSIS_MODEL_IDS = stringSetPreferencesKey("enabled_analysis_model_ids")
+        val ENABLED_NORMALIZATION_MODEL_IDS = stringSetPreferencesKey("enabled_normalization_model_ids")
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
         val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
         val GLOBAL_BIAS_ENABLED = booleanPreferencesKey("global_bias_enabled")
@@ -157,6 +160,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             v2ShadowModeEnabled = prefs[Keys.V2_SHADOW_MODE_ENABLED] ?: false,
             shadowModelIds = prefs[Keys.SHADOW_MODEL_IDS] ?: emptySet(),
             enabledAnalysisModelIds = prefs[Keys.ENABLED_ANALYSIS_MODEL_IDS] ?: emptySet(),
+            enabledNormalizationModelIds = prefs[Keys.ENABLED_NORMALIZATION_MODEL_IDS] ?: emptySet(),
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
             v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
             globalBiasEnabled = prefs[Keys.GLOBAL_BIAS_ENABLED] ?: false,
@@ -229,6 +233,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.SHADOW_MODEL_IDS] = ids }
     suspend fun setEnabledAnalysisModelIds(ids: Set<String>) =
         context.dataStore.edit { it[Keys.ENABLED_ANALYSIS_MODEL_IDS] = ids }
+    suspend fun setEnabledNormalizationModelIds(ids: Set<String>) =
+        context.dataStore.edit { it[Keys.ENABLED_NORMALIZATION_MODEL_IDS] = ids }
     suspend fun setActiveSessionMode(mode: SessionMode) =
         context.dataStore.edit { it[Keys.ACTIVE_SESSION_MODE] = mode.name }
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) =
