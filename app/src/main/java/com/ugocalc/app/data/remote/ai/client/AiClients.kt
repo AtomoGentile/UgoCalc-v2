@@ -449,7 +449,9 @@ class BedrockIamClaudeClient @Inject constructor(
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, region) = parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
-        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(modelId, "UTF-8")}/invoke"
+        // Converte model ID in inference profile ARN se non è già un ARN
+        val profileId = if (modelId.startsWith("arn:")) modelId else "arn:aws:bedrock:$region::inference-profile/$modelId"
+        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(profileId, "UTF-8")}/invoke"
         val baseRequest = Request.Builder()
             .url(url)
             .header("Content-Type", "application/json")
@@ -539,7 +541,9 @@ class BedrockIamGptClient @Inject constructor(
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, region) = BedrockIamClaudeClient.parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
-        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(modelId, "UTF-8")}/invoke"
+        // Converte model ID in inference profile ARN se non è già un ARN
+        val profileId = if (modelId.startsWith("arn:")) modelId else "arn:aws:bedrock:$region::inference-profile/$modelId"
+        val url = "https://bedrock-runtime.$region.amazonaws.com/model/${java.net.URLEncoder.encode(profileId, "UTF-8")}/invoke"
         val baseRequest = Request.Builder()
             .url(url)
             .header("Content-Type", "application/json")

@@ -44,7 +44,15 @@ class OfficialTablesListViewModel @Inject constructor(
     /** Provider con una API key configurata (§2.2): scelta manuale in questa schermata, non più
      * automatica sul primo disponibile — con più provider configurati (es. GitHub Models + Gemini)
      * l'utente potrebbe voler evitare quello con la quota giornaliera più bassa. */
-    private val availableModels = AiModelCatalog.ALL.filter { settingsRepository.getApiKey(it.provider) != null }
+    private val availableModels = AiModelCatalog.ALL.filter { model ->
+        when (model.provider) {
+            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
+            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
+            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
+            com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
+            else -> settingsRepository.getApiKey(model.provider) != null
+        }
+    }
     private val _selectedModel = MutableStateFlow(availableModels.firstOrNull())
 
     val uiState: StateFlow<TablesListUiState> = combine(
