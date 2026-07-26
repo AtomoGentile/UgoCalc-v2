@@ -37,7 +37,7 @@ fun ModelLogoBox(
             painter = painter,
             contentDescription = displayName,
             modifier = modifier,
-            contentScale = ContentScale.Fit,
+            contentScale = ContentScale.Inside,
         )
     } else {
         val providerName = remember(subtitle, displayName) {
@@ -71,11 +71,16 @@ fun ModelLogoBox(
 }
 
 private fun providerColor(provider: String): Color = when {
+    provider.contains("Anthropic", ignoreCase = true) || provider.contains("Claude", ignoreCase = true) -> Color(0xFF1F2937)
+    provider.contains("OpenAI", ignoreCase = true) || provider.contains("GPT", ignoreCase = true) -> Color(0xFF10A37F)
     provider.contains("Meta", ignoreCase = true) -> Color(0xFF0064E0)
     provider.contains("Amazon", ignoreCase = true) -> Color(0xFFFF9900)
     provider.contains("Mistral", ignoreCase = true) -> Color(0xFFFF6F00)
     provider.contains("Cohere", ignoreCase = true) -> Color(0xFF39A7FF)
     provider.contains("Stability", ignoreCase = true) -> Color(0xFF6B2FFF)
     provider.contains("AI21", ignoreCase = true) -> Color(0xFF1A73E8)
+    provider.contains("DeepSeek", ignoreCase = true) -> Color(0xFF2E3440)
+    provider.contains("Qwen", ignoreCase = true) -> Color(0xFF73ABFF)
+    provider.contains("Bedrock", ignoreCase = true) -> Color(0xFFFF9900)
     else -> Color(0xFF5C6BC0)
 }

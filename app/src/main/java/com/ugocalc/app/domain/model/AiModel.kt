@@ -86,22 +86,30 @@ object AiModelCatalog {
     }
 
     fun bedrockModelFrom(modelId: String, iam: Boolean = false): AiModel {
-        val isGpt = modelId.startsWith("openai.")
-        val isClaude = modelId.startsWith("anthropic.")
-        val isMeta = modelId.startsWith("meta.")
-        val isAmazon = modelId.startsWith("amazon.")
-        val isMistral = modelId.startsWith("mistral.")
-        val isCohere = modelId.startsWith("cohere.")
-        val isAi21 = modelId.startsWith("ai21.")
-        val isDeepSeek = modelId.startsWith("deepseek.")
-        val isQwen = modelId.startsWith("qwen.")
-        val isKimi = modelId.startsWith("moonshot.") || modelId.startsWith("kimi.") || modelId.contains("kimi", ignoreCase = true)
-        val isZhipu = modelId.startsWith("zhipu.") || modelId.contains("glm", ignoreCase = true)
-        val isMinimax = modelId.startsWith("minimax.")
-        val isNvidia = modelId.startsWith("nvidia.")
-        val isWriter = modelId.startsWith("writer.")
-        val isTwelveLabs = modelId.startsWith("twelvelabs.")
-        val isGemma = modelId.startsWith("google.") && modelId.contains("gemma")
+        // Estrai model ID da ARN inference profile se necessario
+        val actualModelId = if (modelId.startsWith("arn:aws:bedrock:")) {
+            modelId.substringAfterLast("/")
+        } else {
+            modelId
+        }
+
+        val isGpt = actualModelId.startsWith("openai.") || actualModelId.contains("gpt", ignoreCase = true)
+        val isClaude = actualModelId.startsWith("anthropic.") || actualModelId.contains("claude", ignoreCase = true)
+        val isMeta = actualModelId.startsWith("meta.")
+        val isAmazon = actualModelId.startsWith("amazon.")
+        val isMistral = actualModelId.startsWith("mistral.")
+        val isCohere = actualModelId.startsWith("cohere.")
+        val isAi21 = actualModelId.startsWith("ai21.")
+        val isDeepSeek = actualModelId.startsWith("deepseek.")
+        val isQwen = actualModelId.startsWith("qwen.")
+        val isKimi = actualModelId.startsWith("moonshot.") || actualModelId.startsWith("kimi.") || actualModelId.contains("kimi", ignoreCase = true)
+        val isZhipu = actualModelId.startsWith("zhipu.") || actualModelId.contains("glm", ignoreCase = true)
+        val isMinimax = actualModelId.startsWith("minimax.")
+        val isNvidia = actualModelId.startsWith("nvidia.")
+        val isWriter = actualModelId.startsWith("writer.")
+        val isTwelveLabs = actualModelId.startsWith("twelvelabs.")
+        val isGemma = actualModelId.startsWith("google.") && actualModelId.contains("gemma")
+        val isXai = actualModelId.contains("grok", ignoreCase = true) || actualModelId.contains("voxtral", ignoreCase = true)
 
         val provider = when {
             iam && isGpt -> AiProviderType.BEDROCK_IAM_GPT
@@ -127,10 +135,12 @@ object AiModelCatalog {
             isWriter -> R.drawable.writer
             isTwelveLabs -> R.drawable.twelvelabs
             isGemma -> R.drawable.gemma
+            isXai -> R.drawable.gpt
             else -> null
         }
 
-        val displayName = modelId
+        val displayName = actualModelId
+            .removePrefix("global.")
             .removePrefix("anthropic.")
             .removePrefix("openai.")
             .removePrefix("meta.")
