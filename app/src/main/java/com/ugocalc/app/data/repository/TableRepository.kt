@@ -200,9 +200,10 @@ class TableRepository @Inject constructor(
         var currentTable = table.copy(normalizationStatus = NormalizationStatus.PROCESSING, normalizationErrorMessage = null)
         tableDao.update(currentTable)
         try {
-            val extractedText = extractor.extract(fileUri, table.fileType)
+            val useOcr = table.fileType in listOf(OfficialFileType.JPG, OfficialFileType.PNG)
+            val extractedText = if (useOcr) extractor.extractWithOcr(fileUri, table.fileType) else extractor.extract(fileUri, table.fileType)
             if (extractedText.isBlank()) {
-                throw DocumentExtractionException("Il file non contiene testo leggibile. Se è un PDF scansionato, occorre convertirlo con OCR prima.")
+                throw DocumentExtractionException("Il file non contiene testo leggibile. Se è un PDF scansionato, riprova con OCR.")
             }
             val chunks = DocumentTextExtractor.chunkText(extractedText)
 

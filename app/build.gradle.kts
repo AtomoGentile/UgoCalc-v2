@@ -150,6 +150,12 @@ dependencies {
     // scatto foto di delegare alla fotocamera di sistema invece di una preview custom.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
+    // ML Kit Text Recognition for OCR (PDF scansionati e immagini)
+    implementation("com.google.mlkit:text-recognition:16.0.0")
+
+    // Coroutines integration with Google Play Services Tasks
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
+
     // WorkManager (background notification when app in background)
     implementation("androidx.work:work-runtime-ktx:2.9.1")
     implementation("androidx.hilt:hilt-work:1.2.0")

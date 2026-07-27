@@ -1,7 +1,13 @@
 package com.ugocalc.app.data.parsing
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.text.TextRecognition
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import kotlinx.coroutines.tasks.await
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import com.ugocalc.app.domain.model.DiscardedRow
@@ -43,6 +49,7 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
                     OfficialFileType.DOC -> extractDoc(input)
                     OfficialFileType.DOCX -> extractDocx(input)
                     OfficialFileType.XLSX -> extractXlsx(input)
+                    OfficialFileType.JPG, OfficialFileType.PNG -> extractImageWithOcr(input)
                     // Casi speciali (§Pezzo E / § richiesta utente), mai passati da qui: non
                     // hanno un file fisico da cui estrarre testo via DocumentTextExtractor.
                     OfficialFileType.ONLINE_RESEARCH,
@@ -60,7 +67,11 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
 
     private fun extractPdf(input: java.io.InputStream): String {
         PDDocument.load(input).use { document ->
-            return PDFTextStripper().getText(document)
+            val text = PDFTextStripper().getText(document)
+            if (text.isBlank()) {
+                throw DocumentExtractionException("Il PDF non contiene testo estraibile. È un PDF scansionato? Occorre convertirlo con OCR. Riprova con l'app — verrà processato automaticamente.")
+            }
+            return text
         }
     }
 
@@ -169,6 +180,46 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
         CellType.NUMERIC -> cell.numericCellValue
         CellType.STRING -> cell.stringCellValue.trim().replace(",", ".").toDoubleOrNull()
         else -> null
+    }
+
+    suspend fun extractWithOcr(uri: Uri, fileType: OfficialFileType): String = withContext(Dispatchers.IO) {
+        try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                when (fileType) {
+                    OfficialFileType.JPG, OfficialFileType.PNG -> extractImageWithOcr(input)
+                    else -> throw DocumentExtractionException("OCR non supportato per questo tipo di file")
+                }
+            } ?: throw DocumentExtractionException("Impossibile aprire il file selezionato")
+        } catch (e: DocumentExtractionException) {
+            throw e
+        } catch (e: IOException) {
+            throw DocumentExtractionException("Errore di lettura del file", e)
+        } catch (e: Exception) {
+            throw DocumentExtractionException("Errore durante l'OCR: ${e.message}", e)
+        }
+    }
+
+    private suspend fun extractImageWithOcr(input: java.io.InputStream): String = withContext(Dispatchers.Default) {
+        try {
+            val bitmap = BitmapFactory.decodeStream(input) ?: throw DocumentExtractionException("Impossibile decodificare l'immagine")
+            recognizeTextFromBitmap(bitmap)
+        } catch (e: Exception) {
+            throw DocumentExtractionException("Errore durante l'OCR dell'immagine: ${e.message}", e)
+        }
+    }
+
+    private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String = withContext(Dispatchers.Default) {
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        val image = InputImage.fromBitmap(bitmap)
+        try {
+            val visionText = recognizer.process(image).await()
+            if (visionText.text.isBlank()) {
+                throw DocumentExtractionException("OCR non ha estratto alcun testo dall'immagine")
+            }
+            visionText.text
+        } finally {
+            recognizer.close()
+        }
     }
 
     companion object {

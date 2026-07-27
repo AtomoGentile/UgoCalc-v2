@@ -31,5 +31,6 @@ data class NormalizationResult(
  * viene da un file importato dall'utente, ma dalla tabella sintetica "Alimenti trovati online"
  * (§Pezzo E) dove finiscono gli alimenti trovati con la ricerca online e aggiunti al database.
  * MANUAL_ENTRY è un altro caso speciale: voci inserite manualmente dall'utente (§ richiesta utente).
+ * JPG/PNG: immagini da processare con OCR.
  */
-enum class OfficialFileType { PDF, DOC, DOCX, XLSX, ONLINE_RESEARCH, MANUAL_ENTRY }
+enum class OfficialFileType { PDF, DOC, DOCX, XLSX, JPG, PNG, ONLINE_RESEARCH, MANUAL_ENTRY }

@@ -55,6 +55,8 @@ private val ACCEPTED_MIME_TYPES = arrayOf(
     "application/msword",
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "image/jpeg",
+    "image/png",
 )
 
 private const val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -237,6 +239,8 @@ private fun mimeTypeToFileType(mimeType: String?): OfficialFileType? = when (mim
     "application/msword" -> OfficialFileType.DOC
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> OfficialFileType.DOCX
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" -> OfficialFileType.XLSX
+    "image/jpeg" -> OfficialFileType.JPG
+    "image/png" -> OfficialFileType.PNG
     else -> null
 }
 
