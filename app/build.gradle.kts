@@ -150,8 +150,12 @@ dependencies {
     // scatto foto di delegare alla fotocamera di sistema invece di una preview custom.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
-    // ML Kit Text Recognition for OCR (PDF scansionati e immagini)
+    // ML Kit Text Recognition for OCR (PDF scansionati e immagini) + multi-lingue
     implementation("com.google.mlkit:text-recognition:16.0.0")
+    implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
+    implementation("com.google.mlkit:text-recognition-devanagari:16.0.0")
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.0")
+    implementation("com.google.mlkit:text-recognition-korean:16.0.0")
 
     // Coroutines integration with Google Play Services Tasks
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

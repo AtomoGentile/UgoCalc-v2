@@ -6,8 +6,14 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.latin.TextRecognizerOptions
+import com.google.mlkit.vision.text.chinese.SimplifiedChinese
+import com.google.mlkit.vision.text.chinese.TraditionalChinese
+import com.google.mlkit.vision.text.devanagari.Devanagari
+import com.google.mlkit.vision.text.japanese.Japanese
+import com.google.mlkit.vision.text.korean.Korean
+import com.google.mlkit.vision.text.latin.Latin
 import kotlinx.coroutines.tasks.await
+import java.util.Locale
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import com.ugocalc.app.domain.model.DiscardedRow
@@ -209,16 +215,17 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
     }
 
     private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String = withContext(Dispatchers.Default) {
-        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         val image = InputImage.fromBitmap(bitmap)
         try {
+            // Prova prima con modelli multi-lingue (Latin copre italiano/inglese/francese/tedesco ecc)
+            val recognizer = TextRecognition.getClient(Latin())
             val visionText = recognizer.process(image).await()
             if (visionText.text.isBlank()) {
                 throw DocumentExtractionException("OCR non ha estratto alcun testo dall'immagine")
             }
             visionText.text
         } finally {
-            recognizer.close()
+            image.close()
         }
     }
 
