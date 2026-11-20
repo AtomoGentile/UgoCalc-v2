@@ -2,8 +2,10 @@ package com.ugocalc.app.domain.inference.m1
 
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.inference.m0.CameraMetadata
+import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
+import com.ugocalc.app.util.OpticalGeometryCalculator
 
 /**
  * Prompt di M1 – Percezione unificata (piano V2 §4, §5, §7, §8). Unica chiamata multimodale che
@@ -27,6 +29,7 @@ object PerceptionPrompt {
         cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
         pastoImageCount: Int = 0,
+        photoQualities: List<PhotoQuality?> = emptyList(),
     ): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
         PERCEZIONE UNIFICATA della scena: ancoraggio di scala, inventario degli alimenti e misure
@@ -49,7 +52,7 @@ object PerceptionPrompt {
         eventuali occlusioni prima di dichiarare un alimento non misurabile. Considerale insieme
         come un'unica scena da analizzare: non trattarle come pasti distinti né duplicare gli
         alimenti già contati.
-        ${angleReadingsBlock(angleDescriptions, cameraMetadatas)}
+        ${angleReadingsBlock(angleDescriptions, cameraMetadatas, photoQualities)}
         ${calibrationsBlock(calibrations, pastoImageCount)}
 
         IMMAGINI DI RIFERIMENTO: Oltre alle foto del pasto, ti sono state fornite delle immagini di
@@ -205,29 +208,34 @@ object PerceptionPrompt {
     val CURRENT_SCHEMA_VERSION: Int get() = SceneGraph.SCHEMA_VERSION
 
     /**
-     * Angolazione REALMENTE misurata dai sensori per ciascuna foto (§13 punto 7), se disponibile:
-     * non solo il protocollo generico dichiarato sopra, ma il valore letto durante quello scatto
-     * specifico. Include anche i metadati hardware della camera (focale 35mm eq, sensore) per
-     * aiutare l'IA a interpretare le proporzioni e le distanze.
+     * Angolazione e telemetria ottica REALMENTE misurate dai sensori e da Camera2 per ciascuna
+     * foto (§13 punto 7, CameraX Pro Studio 4.1.0): include distanza stimata, FoV fisico W×H cm,
+     * zoom, stato AF/OIS, inclinazione/roll, focale 35mm eq., sensore fisico, ISO/otturatore,
+     * movimento giroscopico e metriche di nitidezza/luminosità.
      */
     private fun angleReadingsBlock(
         angleDescriptions: List<String?>,
         cameraMetadatas: List<CameraMetadata?>,
+        photoQualities: List<PhotoQuality?> = emptyList(),
     ): String {
-        if (angleDescriptions.none { it != null } && cameraMetadatas.none { it != null }) return ""
-        val righe = angleDescriptions.indices.map { index ->
-            val angle = angleDescriptions.getOrNull(index) ?: "angolazione non misurata"
-            val meta = cameraMetadatas.getOrNull(index)
-            val hardware = if (meta != null) {
-                val focal = meta.focalLength35mmEq?.let { "${it.toInt()}mm eq." } ?: "focale non nota"
-                val sensor = if (meta.sensorWidthMm != null && meta.sensorHeightMm != null)
-                    " (sensore ${"%.1f".format(meta.sensorWidthMm)}x${"%.1f".format(meta.sensorHeightMm)}mm)"
-                else ""
-                " [Hardware: $focal$sensor]"
-            } else ""
-            "Foto ${index + 1}: $angle$hardware"
+        val count = maxOf(angleDescriptions.size, cameraMetadatas.size, photoQualities.size)
+        if (count == 0) return ""
+        val righe = (0 until count).mapNotNull { index ->
+            val quality = photoQualities.getOrNull(index)
+            val angle = angleDescriptions.getOrNull(index) ?: quality?.angleDescription
+            val meta = cameraMetadatas.getOrNull(index) ?: quality?.cameraMetadata
+            OpticalGeometryCalculator.formatTelemetryPromptLine(
+                index = index,
+                angleDescription = angle,
+                metadata = meta,
+                motionRadPerSec = quality?.motionRadPerSec,
+                sharpness = quality?.sharpness,
+                brightness = quality?.brightness,
+            )
         }
-        return "\nAngolazione e metadati hardware misurati per ciascuna foto:\n" +
+        if (righe.isEmpty()) return ""
+        return "\nTelemetria ottica, angolazione e sensori misurati per ciascuna foto " +
+            "(usa distanza e FoV fisico come verifica ottica di scala/prospettiva insieme alle ancore visive):\n" +
             righe.joinToString("\n")
     }
 

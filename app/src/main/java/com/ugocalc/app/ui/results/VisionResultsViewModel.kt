@@ -32,6 +32,7 @@ data class VisionResultsUiState(
     val v2Stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate> = emptyList(),
     val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
     val shadowV2Results: Map<String, AnalysisSessionStore.V2ShadowResult> = emptyMap(),
+    val photoTelemetrySummary: String? = null,
     val confidenceIndicatorEnabled: Boolean = false,
     val confidenceAlertThresholdPercent: Int = ConfidenceScore.DEFAULT_ALERT_THRESHOLD_PERCENT,
 ) {
@@ -59,7 +60,8 @@ class VisionResultsViewModel @Inject constructor(
                     old.usingV2Engine == new.usingV2Engine &&
                     old.v2Stime == new.v2Stime &&
                     old.v2AmbiguitaRisolte == new.v2AmbiguitaRisolte &&
-                    old.shadowV2Results == new.shadowV2Results
+                    old.shadowV2Results == new.shadowV2Results &&
+                    old.photoTelemetrySummary == new.photoTelemetrySummary
             }
             .onEach { s ->
                 _uiState.update {
@@ -70,6 +72,7 @@ class VisionResultsViewModel @Inject constructor(
                         v2Stime = s.v2Stime,
                         v2AmbiguitaRisolte = s.v2AmbiguitaRisolte,
                         shadowV2Results = s.shadowV2Results,
+                        photoTelemetrySummary = s.photoTelemetrySummary,
                     )
                 }
             }

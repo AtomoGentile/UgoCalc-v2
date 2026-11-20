@@ -27,6 +27,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -203,6 +205,7 @@ fun UgoCalcNavHost(
                     onNavigateToTables = { navController.navigate(Routes.SETTINGS_TABLES_LIST) },
                     onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                     onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
+                    onRepeatHistoryMeal = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
                 )
             }
 
@@ -496,6 +499,7 @@ private fun UgoBottomNavigationBar(
     currentRoute: String?,
     onSelectRoute: (String) -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     val isDark = isDarkSurfaceTheme()
     val containerColor = if (isDark) {
         MaterialTheme.colorScheme.surfaceContainerLow
@@ -516,7 +520,12 @@ private fun UgoBottomNavigationBar(
                 val selected = currentRoute == destination.route
                 NavigationBarItem(
                     selected = selected,
-                    onClick = { onSelectRoute(destination.route) },
+                    onClick = {
+                        if (!selected) {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        }
+                        onSelectRoute(destination.route)
+                    },
                     icon = {
                         Icon(
                             imageVector = destination.icon,

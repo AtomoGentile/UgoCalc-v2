@@ -99,6 +99,23 @@ object PromptTemplates {
         }
     """.trimIndent()
 
+    /**
+     * Costruisce il prompt Vision V1 arricchendolo con la telemetria ottica/sensori misurata
+     * durante gli scatti (CameraX Pro Studio / EXIF) quando disponibile; se [photoTelemetryBlock]
+     * è nullo o vuoto restituisce esattamente [VISION_PROMPT].
+     */
+    fun visionPrompt(photoTelemetryBlock: String? = null): String {
+        val telemetry = photoTelemetryBlock?.trim()
+        if (telemetry.isNullOrEmpty()) return VISION_PROMPT
+        return """
+            $VISION_PROMPT
+
+            [TELEMETRIA OTTICA & SENSORI DISPOSITIVO]
+            Dati reali misurati da fotocamera e sensori durante gli scatti (usali per verificare scala, prospettiva, dimensione del piatto e affidabilità dell'immagine):
+            $telemetry
+        """.trimIndent()
+    }
+
     val NORMALIZATION_PROMPT_HEADER = """
         Sei un assistente esperto in normalizzazione di dati nutrizionali.
 

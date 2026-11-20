@@ -52,8 +52,10 @@ data class FavoriteDisplay(
 )
 
 data class HomeUiState(
+    val greeting: String = greetingForHour(),
     val analyzeButtonState: AnalyzeButtonState = AnalyzeButtonState.DISABLED_NO_TABLE,
     val todayMealsCount: Int = 0,
+    val weekMealsCount: Int = 0,
     val todayChoG: Double = 0.0,
     val todayGrassiG: Double = 0.0,
     val recentMeals: List<AnalysisHistoryEntity> = emptyList(),
@@ -68,6 +70,14 @@ data class HomeUiState(
     /** Scelta esplicita Casa/Ristorante per la prossima analisi (piano V2 §8): mai dedotta, sempre scelta qui prima di "Analizza". */
     val sessionMode: SessionMode = SessionMode.CASA,
 )
+
+internal fun greetingForHour(
+    hourOfDay: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
+): String = when (hourOfDay) {
+    in 5..12 -> "Buongiorno"
+    in 13..17 -> "Buon pomeriggio"
+    else -> "Buonasera"
+}
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -119,10 +129,13 @@ class HomeViewModel @Inject constructor(
         historyRepository.observeHistory()
             .onEach { history ->
                 val todayStart = startOfTodayMillis()
+                val weekStart = System.currentTimeMillis() - SEVEN_DAYS_MILLIS
                 val todayMeals = history.filter { it.analyzedAtEpochMillis >= todayStart }
+                val weekCount = history.count { it.analyzedAtEpochMillis >= weekStart }
                 _uiState.update {
                     it.copy(
                         todayMealsCount = todayMeals.size,
+                        weekMealsCount = weekCount,
                         todayChoG = todayMeals.sumOf { meal -> meal.totalChoG },
                         todayGrassiG = todayMeals.sumOf { meal -> meal.totalGrassiG },
                         recentMeals = history.take(3),
@@ -211,6 +224,7 @@ class HomeViewModel @Inject constructor(
 
     /** Forza il riallineamento di chiavi API, modelli preferiti e conteggi al ritorno su Home. */
     fun refresh() {
+        _uiState.update { it.copy(greeting = greetingForHour()) }
         refreshTrigger.update { it + 1 }
     }
 
@@ -305,5 +319,38 @@ class HomeViewModel @Inject constructor(
             val entry = NormalizedFoodEntry(nome = favorite.label, choPer100g = favorite.choG, grassiPer100g = favorite.grassiG)
             sessionStore.setPendingManualRows(listOf(AnalysisSessionStore.PendingManualRow(entry, 100.0)))
         }
+    }
+
+    /**
+     * Precarica gli alimenti di un pasto salvato in cronologia come bozza modificabile nel passo Quantità,
+     * senza alterare lo schema Room.
+     */
+    suspend fun repeatHistoryMeal(historyId: Long): Boolean {
+        val history = historyRepository.getById(historyId) ?: return false
+        val lines: List<CalculatedFoodLine> = runCatching {
+            json.decodeFromString<List<CalculatedFoodLine>>(history.detailsJson)
+        }.getOrDefault(emptyList())
+
+        val activeLines = lines.filter { !it.isExcluded && it.recognizedFood.pesoStimatoG > 0.0 }
+            .ifEmpty { lines.filter { it.recognizedFood.pesoStimatoG > 0.0 } }
+        val rows = activeLines.map { line ->
+            val grams = line.recognizedFood.pesoStimatoG
+            val tableEntry = line.tableEntry ?: NormalizedFoodEntry(
+                nome = line.recognizedFood.nome,
+                choPer100g = if (!line.isExcluded && grams > 0) line.choContributionG / grams * 100.0 else 0.0,
+                grassiPer100g = if (!line.isExcluded && grams > 0) line.grassiContributionG / grams * 100.0 else 0.0,
+            )
+            AnalysisSessionStore.PendingManualRow(tableEntry, grams)
+        }
+        if (rows.isEmpty()) return false
+
+        sessionStore.reset()
+        sessionStore.setSessionMode(_uiState.value.sessionMode)
+        sessionStore.setPendingManualRows(rows)
+        return true
+    }
+
+    companion object {
+        private const val SEVEN_DAYS_MILLIS = 7L * 24L * 60L * 60L * 1000L
     }
 }

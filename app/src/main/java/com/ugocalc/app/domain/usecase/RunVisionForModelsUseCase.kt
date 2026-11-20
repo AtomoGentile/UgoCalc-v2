@@ -23,11 +23,18 @@ class RunVisionForModelsUseCase @Inject constructor(
         images: List<ByteArray>,
         imageMimeType: String,
         sessionId: String? = null,
+        photoTelemetryBlock: String? = null,
     ): List<ModelVisionOutcome> = coroutineScope {
         models.map { model ->
             async {
                 try {
-                    val result = aiOrchestrator.runVisionAnalysis(model, images, imageMimeType, sessionId)
+                    val result = aiOrchestrator.runVisionAnalysis(
+                        model = model,
+                        images = images,
+                        imageMimeType = imageMimeType,
+                        sessionId = sessionId,
+                        photoTelemetryBlock = photoTelemetryBlock,
+                    )
                     ModelVisionOutcome.Success(model, result)
                 } catch (e: CancellationException) {
                     throw e

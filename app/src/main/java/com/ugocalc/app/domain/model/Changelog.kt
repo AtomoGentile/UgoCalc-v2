@@ -40,6 +40,16 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.1.0",
+            categories = listOf("CameraX Pro", "Telemetria AI", "UX Polish"),
+            highlights = listOf(
+                "CameraX Pro Studio & Reticolo Livella 60fps: nuova fotocamera integrata con livella giroscopica fluida a 60fps, controllo stabilità e feedback ottico in tempo reale.",
+                "Telemetria ottica live nei prompt AI V1/V2: distanza stimata, campo visivo fisico (FoV), focale, ISO e stabilità vengono acquisiti e trasmessi all'IA e mostrati nella scheda espandibile dei risultati.",
+                "Home & Riepilogo Giornaliero: saluto dinamico in base all'ora del giorno, badge pasti degli ultimi 7 giorni, nuovo grafico ad anello MacroProgressRing e azione rapida \"Ripeti\" in 1 tap sui pasti recenti.",
+                "Risultati, Stepper & Condivisione: numeri animati sui totali, regolazione rapida del peso (-10g / +10g) per singolo alimento con feedback aptico e condivisione testuale del pasto in 1 tap da Risultato e Cronologia.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.0.0",
             categories = listOf("Nuova UI/UX", "Database CREA", "Affidabilità", "CI/CD"),
             highlights = listOf(

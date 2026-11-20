@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.CenterFocusStrong
 import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.EditNote
@@ -40,6 +41,7 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Replay
 import androidx.compose.material.icons.rounded.Restaurant
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.StarOutline
@@ -68,8 +70,10 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -84,6 +88,7 @@ import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.MacroMetricTile
 import com.ugocalc.app.ui.components.MacroPill
+import com.ugocalc.app.ui.components.MacroProgressRing
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
@@ -110,10 +115,13 @@ fun HomeScreen(
     onFavoriteReadyForResult: () -> Unit,
     /** Preferito legato a cronologia o senza peso fissato: apre il passo Quantità. */
     onFavoriteNeedsQuantity: () -> Unit,
+    /** Ripete un pasto recente precaricandolo come bozza nel passo Quantità. */
+    onRepeatHistoryMeal: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var showAiSetupDialog by remember { mutableStateOf(false) }
     var showOfflineAiDialog by remember { mutableStateOf(false) }
@@ -126,6 +134,7 @@ fun HomeScreen(
     }
 
     val onLaunchPhotoAi: () -> Unit = {
+        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
         when {
             uiState.tableCount == 0 -> onNavigateToTables()
             !uiState.hasAnyAiKey -> showAiSetupDialog = true
@@ -162,6 +171,15 @@ fun HomeScreen(
         }
     }
 
+    val onRepeatMealClick: (Long) -> Unit = { historyId ->
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        scope.launch {
+            if (viewModel.repeatHistoryMeal(historyId)) {
+                onRepeatHistoryMeal()
+            }
+        }
+    }
+
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -189,6 +207,12 @@ fun HomeScreen(
                     contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
+                    item(key = "greeting") {
+                        HomeGreetingRow(
+                            greeting = uiState.greeting,
+                            weekMealsCount = uiState.weekMealsCount,
+                        )
+                    }
                     item(key = "hero") {
                         PhotoAiHeroCard(
                             uiState = uiState,
@@ -242,6 +266,7 @@ fun HomeScreen(
                             recentMeals = uiState.recentMeals,
                             onSeeAllClick = onNavigateToHistory,
                             onMealClick = onOpenHistoryEntry,
+                            onRepeatClick = onRepeatMealClick,
                         )
                     }
                 }
@@ -254,6 +279,13 @@ fun HomeScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                item(key = "greeting") {
+                    HomeGreetingRow(
+                        greeting = uiState.greeting,
+                        weekMealsCount = uiState.weekMealsCount,
+                    )
+                }
+
                 item(key = "today_summary") {
                     TodayNutritionCard(
                         mealsCount = uiState.todayMealsCount,
@@ -303,6 +335,7 @@ fun HomeScreen(
                         recentMeals = uiState.recentMeals,
                         onSeeAllClick = onNavigateToHistory,
                         onMealClick = onOpenHistoryEntry,
+                        onRepeatClick = onRepeatMealClick,
                     )
                 }
             }
@@ -558,6 +591,43 @@ private fun ModePillOption(
 }
 
 @Composable
+private fun HomeGreetingRow(
+    greeting: String,
+    weekMealsCount: Int,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = greeting,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onBackground,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(end = 8.dp),
+        )
+        Surface(
+            shape = RoundedCornerShape(50),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+        ) {
+            Text(
+                text = if (weekMealsCount == 1) "1 pasto · 7 gg" else "$weekMealsCount pasti · 7 gg",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                maxLines = 1,
+                softWrap = false,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun TodayNutritionCard(
     mealsCount: Int,
     choG: Double,
@@ -617,44 +687,65 @@ private fun TodayNutritionCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            MacroMetricTile(
-                label = "CHO",
-                value = formatMacroValue(choG),
-                unit = "g",
-                accentColor = UgoSemanticColors.cho,
-                modifier = Modifier.weight(1f),
+            MacroProgressRing(
+                choG = choG,
+                grassiG = grassiG,
+                estimatedKcal = estimatedKcal,
+                size = 94.dp,
+                strokeWidth = 10.dp,
             )
-            MacroMetricTile(
-                label = "Grassi",
-                value = formatMacroValue(grassiG),
-                unit = "g",
-                accentColor = UgoSemanticColors.fat,
-                modifier = Modifier.weight(1f),
-            )
-        }
 
-        Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    MacroMetricTile(
+                        label = "CHO",
+                        value = formatMacroValue(choG),
+                        unit = "g",
+                        accentColor = UgoSemanticColors.cho,
+                        modifier = Modifier.weight(1f),
+                    )
+                    MacroMetricTile(
+                        label = "Grassi",
+                        value = formatMacroValue(grassiG),
+                        unit = "g",
+                        accentColor = UgoSemanticColors.fat,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            MacroMetricTile(
-                label = "kcal stim.",
-                value = estimatedKcal.toString(),
-                unit = "kcal",
-                accentColor = MaterialTheme.colorScheme.tertiary,
-                modifier = Modifier.weight(1f),
-            )
-            MacroMetricTile(
-                label = "Pasti",
-                value = mealsCount.toString(),
-                unit = if (mealsCount == 1) "pasto" else "pasti",
-                accentColor = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.weight(1f),
-            )
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.7f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text(
+                            text = "Pasti oggi",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = "$mealsCount ${if (mealsCount == 1) "pasto" else "pasti"}",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -796,7 +887,33 @@ private fun PhotoAiHeroCard(
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = contentColor.copy(alpha = 0.14f),
+                        border = BorderStroke(0.5.dp, contentColor.copy(alpha = 0.24f)),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.CenterFocusStrong,
+                                contentDescription = null,
+                                tint = contentColor,
+                                modifier = Modifier.size(13.dp),
+                            )
+                            Text(
+                                text = "CameraX Pro · Telemetria 3D",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = contentColor,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                     Text(
                         text = "Analizza Piatto con Foto AI",
                         style = MaterialTheme.typography.headlineSmall,
@@ -1051,6 +1168,7 @@ private fun RecentMealsSection(
     recentMeals: List<AnalysisHistoryEntity>,
     onSeeAllClick: () -> Unit,
     onMealClick: (Long) -> Unit,
+    onRepeatClick: (Long) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         UgoSectionHeader(
@@ -1104,6 +1222,7 @@ private fun RecentMealsSection(
                     RecentMealRowCard(
                         meal = meal,
                         onClick = { onMealClick(meal.id) },
+                        onRepeatClick = { onRepeatClick(meal.id) },
                     )
                 }
             }
@@ -1116,6 +1235,7 @@ private fun RecentMealsSection(
 private fun RecentMealRowCard(
     meal: AnalysisHistoryEntity,
     onClick: () -> Unit,
+    onRepeatClick: () -> Unit,
 ) {
     val isRistorante = meal.sessionMode == SessionMode.RISTORANTE.name
     val timeLabel = remember(meal.analyzedAtEpochMillis) {
@@ -1178,6 +1298,34 @@ private fun RecentMealRowCard(
                         value = "${formatMacroValue(meal.totalGrassiG)}g",
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
+                    )
+                }
+            }
+
+            Surface(
+                onClick = onRepeatClick,
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Replay,
+                        contentDescription = "Ripeti pasto",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(14.dp),
+                    )
+                    Text(
+                        text = "Ripeti",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        maxLines = 1,
+                        softWrap = false,
                     )
                 }
             }

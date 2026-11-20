@@ -2,6 +2,17 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.1.0] - 2026-11-20
+
+### Added
+- **CameraX Pro Studio & 60fps Spirit-Level Reticle**: Integrated in-app CameraX capture studio with a 60fps spirit-level horizon reticle, optical stability feedback, and live camera telemetry (`CameraX Pro · Telemetria 3D`).
+- **Live Optical Distance & FoV Telemetry in AI V1/V2**: Enriched EXIF/Camera2 metadata with focus distance, physical FoV dimensions, focal length, ISO, and stability status injected into AI V1 and V2 perception prompts, plus a collapsible `"CameraX · Telemetria attiva"` card on the Vision Results screen.
+- **1-Tap Meal Repeat & Share**: Added 1-tap **"Ripeti"** on Recent Meals (preloading items into the editable quantity draft) and 1-tap plain-text meal summary sharing on both Final Result and History Detail screens.
+
+### Changed
+- **Home, Results & Manual Entry UX Polish**: Added dynamic Italian time-of-day greeting, 7-day meal counter badge, `MacroProgressRing` on Today's summary card, `AnimatedMetricValue` rolling numbers, inline `-10g` / `+10g` weight steppers on Final Result, and tactile haptic feedback across key interactions.
+- **CI Artifact Versioning**: Updated `.github/workflows/android-ci.yml` debug APK artifact name to `UgoCalc-4.1.0-debug-apk`.
+
 ## [4.0.0] - 2026-11-19
 
 ### Added

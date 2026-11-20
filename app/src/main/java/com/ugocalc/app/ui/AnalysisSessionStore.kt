@@ -52,6 +52,8 @@ class AnalysisSessionStore @Inject constructor() {
         val pendingManualEntry: NormalizedFoodEntry? = null,
         /** Righe già quantificate, in attesa che ManualFoodEntryScreen le carichi direttamente nel passo Quantità (§ richiesta utente: preferiti che riaprono la modifica quantità). */
         val pendingManualRows: List<PendingManualRow>? = null,
+        /** Riepilogo sintetico della telemetria ottica/sensori degli scatti di questa sessione (CameraX Pro Studio / EXIF). */
+        val photoTelemetrySummary: String? = null,
     )
 
     data class V2VisibleResult(
@@ -91,6 +93,9 @@ class AnalysisSessionStore @Inject constructor() {
     /** [images] sono più scatti dello stesso piatto (§2.4 punto 2 esteso): tutti inviati insieme all'AI per un'analisi più accurata. */
     fun setCapturedImages(images: List<ByteArray>, mimeType: String) =
         _session.update { it.copy(capturedImages = images, imageMimeType = mimeType) }
+
+    fun setPhotoTelemetrySummary(summary: String?) =
+        _session.update { it.copy(photoTelemetrySummary = summary) }
 
     fun setVisionOutcomes(outcomes: List<ModelVisionOutcome>) =
         _session.update { it.copy(visionOutcomes = outcomes, referenceModelId = it.referenceModelId ?: outcomes.firstOrNull { o -> o is ModelVisionOutcome.Success }?.model?.uid) }
@@ -177,6 +182,17 @@ class AnalysisSessionStore @Inject constructor() {
 
     /** Riprova l'analisi (§2.4 punto 4) mantenendo gli stessi modelli selezionati, per ri-scattare le foto. */
     fun resetForRetry() = _session.update {
-        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList(), v2VisibleResults = emptyMap(), shadowV2Results = emptyMap())
+        it.copy(
+            capturedImages = emptyList(),
+            visionOutcomes = emptyList(),
+            referenceModelId = null,
+            totals = null,
+            usingV2Engine = false,
+            v2Stime = emptyList(),
+            v2AmbiguitaRisolte = emptyList(),
+            v2VisibleResults = emptyMap(),
+            shadowV2Results = emptyMap(),
+            photoTelemetrySummary = null,
+        )
     }
 }

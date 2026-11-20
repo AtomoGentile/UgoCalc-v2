@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Restaurant
 import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -38,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +55,8 @@ import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.UgoSectionHeader
+import com.ugocalc.app.ui.components.formatMealShareSummary
+import com.ugocalc.app.ui.components.shareText
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.text.SimpleDateFormat
@@ -70,6 +74,7 @@ fun HistoryDetailScreen(
     viewModel: HistoryDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
     val macroSum = uiState.totalChoG + uiState.totalGrassiG
@@ -77,6 +82,8 @@ fun HistoryDetailScreen(
     val grassiPercent = if (macroSum > 0) 100.0 - choPercent else 0.0
     val kcalEstimate = (uiState.totalChoG * 4.0 + uiState.totalGrassiG * 9.0).toInt()
     val isRistorante = uiState.sessionMode == SessionMode.RISTORANTE.name
+    val canShare = uiState.lines.isNotEmpty() || uiState.foodTitle.isNotBlank() ||
+        uiState.totalChoG > 0.0 || uiState.totalGrassiG > 0.0
 
     Scaffold(
         topBar = {
@@ -91,6 +98,32 @@ fun HistoryDetailScreen(
                 navigationIcon = { BackIconButton(onBack) },
                 colors = ugoTopAppBarColors(),
                 actions = {
+                    if (canShare) {
+                        IconButton(
+                            onClick = {
+                                val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
+                                val dateText = uiState.analyzedAtEpochMillis?.let { detailDateFormat.format(Date(it)) }
+                                val modeText = uiState.sessionMode.takeIf { it.isNotBlank() }?.let {
+                                    if (isRistorante) "Ristorante" else "Casa"
+                                }
+                                val summary = formatMealShareSummary(
+                                    title = mealTitle,
+                                    totalChoG = uiState.totalChoG,
+                                    totalGrassiG = uiState.totalGrassiG,
+                                    lines = uiState.lines,
+                                    estimatedKcal = kcalEstimate,
+                                    sessionModeLabel = modeText,
+                                    dateLabel = dateText,
+                                )
+                                shareText(context, mealTitle, summary)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Share,
+                                contentDescription = "Condividi riepilogo pasto",
+                            )
+                        }
+                    }
                     IconButton(onClick = { showDeleteConfirm = true }) {
                         Icon(
                             Icons.Default.Delete,

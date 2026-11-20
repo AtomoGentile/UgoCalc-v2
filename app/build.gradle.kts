@@ -17,8 +17,8 @@ android {
         applicationId = "com.ugocalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "4.0.0"
+        versionCode = 6
+        versionName = "4.1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -117,10 +117,16 @@ dependencies {
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
 
-    // Lo scatto foto delega alla fotocamera di sistema (Intent standard, vedi CameraCaptureScreen):
-    // niente più CameraX, il produttore del telefono gestisce già meglio zoom/lenti/focus/qualità.
-    // ExifInterface: rete di sicurezza per normalizzare l'orientamento del JPEG restituito, nel caso
-    // l'app fotocamera di sistema si affidi solo al tag EXIF invece di ruotare fisicamente i pixel.
+    // CameraX Pro Studio (pure Kotlin/Java, nessuna .so nativa — 16KB page-size safe):
+    // preview in-app con livella 60fps, telemetria ottica Camera2 (distanza, FoV, AF/OIS, ISO/otturatore)
+    // e fallback opzionale alla fotocamera di sistema.
+    val cameraxVersion = "1.4.2"
+    implementation("androidx.camera:camera-core:$cameraxVersion")
+    implementation("androidx.camera:camera-camera2:$cameraxVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
+    implementation("androidx.camera:camera-view:$cameraxVersion")
+
+    // ExifInterface: rete di sicurezza per normalizzare l'orientamento del JPEG restituito e leggere i tag EXIF.
     implementation("androidx.exifinterface:exifinterface:1.4.2")
 
     // File parsing: Office formats (doc/docx/xlsx)

@@ -42,3 +42,7 @@
 -dontwarn edu.umd.cs.findbugs.annotations.Nullable
 -dontwarn edu.umd.cs.findbugs.annotations.SuppressFBWarnings
 -dontwarn kotlinx.parcelize.Parcelize
+
+# CameraX (Camera2 backend & CameraXConfig providers)
+-keep class androidx.camera.camera2.Camera2Config$DefaultProvider { *; }
+-keep class * implements androidx.camera.core.CameraXConfig$Provider { *; }

@@ -2,6 +2,7 @@ package com.ugocalc.app.ui.finalresult
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Scale
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.StarBorder
 import androidx.compose.material.icons.filled.TravelExplore
@@ -58,7 +60,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -68,15 +72,18 @@ import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.OnlineFoodResearchResult
 import com.ugocalc.app.domain.model.OnlineResearchReliability
+import com.ugocalc.app.ui.components.AnimatedMacroMetricTile
+import com.ugocalc.app.ui.components.AnimatedMetricValue
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.FoodSearchPicker
-import com.ugocalc.app.ui.components.MacroMetricTile
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.MacronutrientPieChart
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
+import com.ugocalc.app.ui.components.formatMealShareSummary
+import com.ugocalc.app.ui.components.shareText
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import com.ugocalc.app.util.parsePositiveLocaleDoubleOrNull
@@ -95,6 +102,8 @@ fun FinalResultScreen(
     viewModel: FinalResultViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     var correctingLineIndex by remember { mutableStateOf<Int?>(null) }
     var editingLineIndex by remember { mutableStateOf<Int?>(null) }
     var editingNameText by remember { mutableStateOf("") }
@@ -114,6 +123,26 @@ fun FinalResultScreen(
                 navigationIcon = { BackIconButton(onBack) },
                 colors = ugoTopAppBarColors(),
                 actions = {
+                    val shareTotals = uiState.totals
+                    if (shareTotals != null) {
+                        IconButton(
+                            onClick = {
+                                val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
+                                val summary = formatMealShareSummary(
+                                    title = mealTitle,
+                                    totalChoG = shareTotals.totalChoG,
+                                    totalGrassiG = shareTotals.totalGrassiG,
+                                    lines = shareTotals.lines,
+                                )
+                                shareText(context, mealTitle, summary)
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Share,
+                                contentDescription = "Condividi riepilogo pasto",
+                            )
+                        }
+                    }
                     IconButton(onClick = { viewModel.toggleFavoriteRequested() }) {
                         Icon(
                             imageVector = if (uiState.favoriteRequested) Icons.Filled.Star else Icons.Filled.StarBorder,
@@ -216,6 +245,10 @@ fun FinalResultScreen(
                     FoodLineCard(
                         line = line,
                         onlineResearchState = uiState.onlineResearch[index],
+                        onAdjustWeight = { deltaGrams ->
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            viewModel.adjustWeightBy(index, deltaGrams)
+                        },
                         onEdit = {
                             editingNameText = line.recognizedFood.nome
                             editingGramsText = formatEditableGrams(line.recognizedFood.pesoStimatoG)
@@ -469,16 +502,18 @@ private fun HeroNutritionCard(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            MacroMetricTile(
+            AnimatedMacroMetricTile(
                 label = "CHO totali",
-                value = "%.1f".format(totals.totalChoG),
+                targetValue = totals.totalChoG.toFloat(),
+                decimals = 1,
                 unit = "g",
                 accentColor = UgoSemanticColors.cho,
                 modifier = Modifier.weight(1f),
             )
-            MacroMetricTile(
+            AnimatedMacroMetricTile(
                 label = "Grassi totali",
-                value = "%.1f".format(totals.totalGrassiG),
+                targetValue = totals.totalGrassiG.toFloat(),
+                decimals = 1,
                 unit = "g",
                 accentColor = UgoSemanticColors.fat,
                 modifier = Modifier.weight(1f),
@@ -492,12 +527,31 @@ private fun HeroNutritionCard(
             verticalArrangement = Arrangement.spacedBy(6.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            MacroPill(
-                label = "Energia stimata",
-                value = "~$estimatedKcal kcal",
-                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            )
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Text(
+                        text = "Energia stimata",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    )
+                    AnimatedMetricValue(
+                        targetValue = estimatedKcal.toFloat(),
+                        decimals = 0,
+                        prefix = "~",
+                        suffix = " kcal",
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
+            }
         }
         Text(
             text = "Stima calcolata solo da CHO e Grassi (proteine non incluse).",
@@ -522,6 +576,7 @@ private fun HeroNutritionCard(
 private fun FoodLineCard(
     line: CalculatedFoodLine,
     onlineResearchState: OnlineResearchUiState?,
+    onAdjustWeight: (Float) -> Unit,
     onEdit: () -> Unit,
     onRemove: () -> Unit,
     onMatchManually: () -> Unit,
@@ -550,16 +605,33 @@ private fun FoodLineCard(
                     color = MaterialTheme.colorScheme.onSurface,
                 )
                 Spacer(Modifier.height(4.dp))
-                MacroPill(
-                    label = "Porzione",
-                    value = if (line.recognizedFood.isTrascurabile) {
-                        "trascurabile"
-                    } else {
-                        "${formatEditableGrams(line.recognizedFood.pesoStimatoG)} g"
-                    },
-                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    MacroPill(
+                        label = "Porzione",
+                        value = if (line.recognizedFood.isTrascurabile) {
+                            "trascurabile"
+                        } else {
+                            "${formatEditableGrams(line.recognizedFood.pesoStimatoG)} g"
+                        },
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                    if (!line.recognizedFood.isTrascurabile) {
+                        WeightStepPill(
+                            label = "-10g",
+                            enabled = line.recognizedFood.pesoStimatoG > 5.0,
+                            onClick = { onAdjustWeight(-10f) },
+                        )
+                        WeightStepPill(
+                            label = "+10g",
+                            enabled = true,
+                            onClick = { onAdjustWeight(10f) },
+                        )
+                    }
+                }
             }
             IconButton(onClick = onEdit) {
                 Icon(
@@ -847,6 +919,40 @@ private fun OnlineResearchResultCard(
                 Text("Ignora")
             }
         }
+    }
+}
+
+@Composable
+private fun WeightStepPill(
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        shape = RoundedCornerShape(50),
+        color = if (enabled) {
+            MaterialTheme.colorScheme.surfaceContainerHigh
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (enabled) 0.7f else 0.3f),
+        ),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = if (enabled) {
+                MaterialTheme.colorScheme.onSurface
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f)
+            },
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
     }
 }
 

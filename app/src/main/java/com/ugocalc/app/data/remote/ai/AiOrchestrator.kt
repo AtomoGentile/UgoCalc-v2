@@ -40,13 +40,15 @@ class AiOrchestrator @Inject constructor(
         model: AiModel,
         images: List<ByteArray>,
         imageMimeType: String,
-        sessionId: String? = null
+        sessionId: String? = null,
+        photoTelemetryBlock: String? = null,
     ): VisionAnalysisResult {
+        val prompt = PromptTemplates.visionPrompt(photoTelemetryBlock)
         val imageParts = executor.encodeImages(images, imageMimeType)
-        val responseDto = executor.completeJson<VisionAnalysisDto>(model, PromptTemplates.VISION_PROMPT, imageParts)
+        val responseDto = executor.completeJson<VisionAnalysisDto>(model, prompt, imageParts)
 
         scope.launch {
-            recordCost(model, PromptTemplates.VISION_PROMPT, executor.json.encodeToString(responseDto), images.size, "vision", "Vision API (V1) - ${images.size} foto", sessionId)
+            recordCost(model, prompt, executor.json.encodeToString(responseDto), images.size, "vision", "Vision API (V1) - ${images.size} foto", sessionId)
         }
 
         return responseDto.toDomain()

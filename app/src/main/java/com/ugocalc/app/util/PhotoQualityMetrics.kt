@@ -30,10 +30,11 @@ fun computePhotoQuality(
     angleDescription: String? = null,
 ): PhotoQuality {
     val luminance = decodeGrayscaleLuminance(imageBytes, METRICS_MAX_DIMENSION_PX)
+    val brightness = if (luminance.pixels.isEmpty()) 0.0 else luminance.pixels.average()
     return PhotoQuality(
         id = id,
         sharpness = laplacianVariance(luminance),
-        brightness = luminance.pixels.average(),
+        brightness = brightness,
         hash = perceptualHash64(luminance),
         motionRadPerSec = motionRadPerSec,
         cameraMetadata = cameraMetadata,
@@ -47,13 +48,30 @@ fun computePhotoQuality(
  * falsi scarti). Tutti i campi `null` se il tag EXIF è assente, come spesso accade su foto elaborate.
  */
 fun extractCameraMetadata(imageBytes: ByteArray): CameraMetadata {
-    val exif = ExifInterface(ByteArrayInputStream(imageBytes))
+    val exif = runCatching { ExifInterface(ByteArrayInputStream(imageBytes)) }.getOrNull()
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    if (imageBytes.isNotEmpty()) {
+        runCatching { BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, bounds) }
+    }
+    val orientation = exif?.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        ?: ExifInterface.ORIENTATION_NORMAL
+    val swapDims = orientation == ExifInterface.ORIENTATION_ROTATE_90 ||
+        orientation == ExifInterface.ORIENTATION_ROTATE_270 ||
+        orientation == ExifInterface.ORIENTATION_TRANSPOSE ||
+        orientation == ExifInterface.ORIENTATION_TRANSVERSE
+    val rawW = bounds.outWidth.takeIf { it > 0 }
+    val rawH = bounds.outHeight.takeIf { it > 0 }
+    val orientedW = if (swapDims) rawH else rawW
+    val orientedH = if (swapDims) rawW else rawH
+
     return CameraMetadata(
-        isoValue = exif.getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, -1).takeIf { it > 0 },
-        exposureTimeSeconds = exif.getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, EXIF_ABSENT).takeIf { it > 0 },
-        focalLengthMm = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, EXIF_ABSENT).takeIf { it > 0 },
-        focalLength35mmEq = exif.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, EXIF_ABSENT).takeIf { it > 0 },
-        aperture = exif.getAttributeDouble(ExifInterface.TAG_F_NUMBER, EXIF_ABSENT).takeIf { it > 0 },
+        isoValue = exif?.getAttributeInt(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, -1)?.takeIf { it > 0 },
+        exposureTimeSeconds = exif?.getAttributeDouble(ExifInterface.TAG_EXPOSURE_TIME, EXIF_ABSENT)?.takeIf { it > 0 },
+        focalLengthMm = exif?.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH, EXIF_ABSENT)?.takeIf { it > 0 },
+        focalLength35mmEq = exif?.getAttributeDouble(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM, EXIF_ABSENT)?.takeIf { it > 0 },
+        aperture = exif?.getAttributeDouble(ExifInterface.TAG_F_NUMBER, EXIF_ABSENT)?.takeIf { it > 0 },
+        imageWidthPx = orientedW,
+        imageHeightPx = orientedH,
     )
 }
 
@@ -61,15 +79,24 @@ private class GrayscaleImage(val pixels: IntArray, val width: Int, val height: I
 
 /** Decodifica [imageBytes] sottocampionata (lato max [maxDimensionPx]) in luminanza (0..255) per pixel. */
 private fun decodeGrayscaleLuminance(imageBytes: ByteArray, maxDimensionPx: Int): GrayscaleImage {
+    if (imageBytes.isEmpty()) return GrayscaleImage(IntArray(0), 0, 0)
     val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
+    if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) {
+        return GrayscaleImage(IntArray(0), 0, 0)
+    }
 
     var sampleSize = 1
     while (boundsOptions.outWidth / sampleSize > maxDimensionPx || boundsOptions.outHeight / sampleSize > maxDimensionPx) {
         sampleSize *= 2
     }
 
-    val bitmap: Bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
+    val bitmap: Bitmap = BitmapFactory.decodeByteArray(
+        imageBytes,
+        0,
+        imageBytes.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize },
+    ) ?: return GrayscaleImage(IntArray(0), 0, 0)
     val width = bitmap.width
     val height = bitmap.height
     val argb = IntArray(width * height)
@@ -104,6 +131,7 @@ private fun laplacianVariance(image: GrayscaleImage): Double {
 
 /** aHash classico su griglia 8×8 (64 bit): bit = 1 se il blocco è più chiaro della media dell'immagine sottocampionata. */
 private fun perceptualHash64(image: GrayscaleImage): Long {
+    if (image.width <= 0 || image.height <= 0 || image.pixels.isEmpty()) return 0L
     val gridSize = 8
     val blockWidth = (image.width / gridSize).coerceAtLeast(1)
     val blockHeight = (image.height / gridSize).coerceAtLeast(1)

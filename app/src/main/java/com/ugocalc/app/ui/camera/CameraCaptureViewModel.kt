@@ -15,6 +15,7 @@ import com.ugocalc.app.di.ShadowAnalysisScope
 import com.ugocalc.app.domain.inference.PipelineOutcome
 import com.ugocalc.app.domain.inference.SessionPhoto
 import com.ugocalc.app.domain.inference.V2AnalysisPipelineFactory
+import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.PhotoRejectionReason
 import com.ugocalc.app.domain.inference.m0.QualityGate
@@ -26,10 +27,13 @@ import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.RunVisionForModelsUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
+import com.ugocalc.app.util.Camera2LiveMetadata
 import com.ugocalc.app.util.CameraMetadataHelper
 import com.ugocalc.app.util.GyroscopeMotionTracker
+import com.ugocalc.app.util.OpticalGeometryCalculator
 import com.ugocalc.app.util.computePhotoQuality
 import com.ugocalc.app.util.extractCameraMetadata
+import java.util.Locale
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -70,27 +74,70 @@ private fun PhotoRejectionReason.toReadableItalian(): String = when (this) {
     PhotoRejectionReason.RUMOROSA_ISO -> "Rumore elevato (ISO alto)"
 }
 
-/** Testo pronto per il prompt di M1 con l'angolazione REALMENTE misurata per questa foto, `null` se non disponibile (§13 punto 7). */
-private fun buildAngleDescription(photo: CapturedPhoto): String? {
-    val angle = photo.measuredAngle ?: return null
-    val rotationLine = if (angle.target.turnDeg > 0f) ", rotazione misurata ${"%.0f".format(angle.turnDeg)}°" else ""
-    return "inclinazione misurata ${"%.0f".format(angle.pitchDeg)}°$rotationLine (target: ${angle.target.label})"
+/**
+ * Testo pronto per il prompt di M1 con angolazione REALMENTE misurata, roll, movimento giroscopico
+ * e metriche immagine per questa foto, `null` se non disponibile (§13 punto 7, CameraX Pro Studio).
+ */
+private fun buildAngleDescription(
+    photo: CapturedPhoto,
+    motionRadPerSec: Double? = null,
+    sharpness: Double? = null,
+    brightness: Double? = null,
+): String? {
+    val parts = mutableListOf<String>()
+    val angle = photo.measuredAngle
+    if (angle != null) {
+        val rollLine = photo.liveTelemetry?.rollDeg
+            ?.takeIf { it.isFinite() }
+            ?.let { String.format(Locale.US, ", roll %+.0f°", it) }
+            .orEmpty()
+        val rotationLine = if (angle.target.turnDeg > 0f) {
+            String.format(Locale.US, ", rotazione misurata %.0f°", angle.turnDeg)
+        } else ""
+        parts += String.format(
+            Locale.US,
+            "inclinazione misurata %.0f°%s%s (target: %s)",
+            angle.pitchDeg,
+            rollLine,
+            rotationLine,
+            angle.target.label,
+        )
+    }
+    if (motionRadPerSec != null && motionRadPerSec.isFinite()) {
+        val stabilityTag = when {
+            motionRadPerSec <= 0.35 -> "stabile"
+            motionRadPerSec <= QualityGate.DEFAULT_MOTION_MAX_RAD_PER_SEC -> "leggero movimento"
+            else -> "mosso"
+        }
+        parts += String.format(Locale.US, "giroscopio %.2f rad/s (%s)", motionRadPerSec, stabilityTag)
+    }
+    if (sharpness != null && sharpness.isFinite() && brightness != null && brightness.isFinite()) {
+        parts += String.format(Locale.US, "nitidezza %.0f, luminosità %.0f/255", sharpness, brightness)
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" | ")
 }
 
 /**
- * [capturedAtEpochMillis] approssima l'istante dello scatto (§16): la fotocamera di sistema non
- * offre alcun callback nell'istante esatto, si usa il timestamp del file scritto su disco.
+ * [capturedAtEpochMillis] registra l'istante esatto dello scatto in CameraX Pro Studio (o il
+ * timestamp approssimato del file per la fotocamera di sistema, §16).
  * [measuredAngle] è l'angolazione REALMENTE letta dai sensori durante questo scatto (non solo il
- * target suggerito), `null` se il permesso overlay non era concesso o se non è arrivato nessun
- * campione sensore prima dello scatto.
+ * target suggerito), `null` se non disponibile.
  * [isFromGallery] distingue le foto importate dalla galleria (per cui il buffer live del
  * giroscopio non ha alcun significato).
+ * [liveTelemetry] trasporta i metadati Camera2 live (diottrie, AF, OIS, zoom, sensore fisico,
+ * pitch/roll) per la fusione ottica con EXIF.
  */
 data class CapturedPhoto(
     val bytes: ByteArray,
     val capturedAtEpochMillis: Long,
     val measuredAngle: MeasuredAngle? = null,
     val isFromGallery: Boolean = false,
+    val liveTelemetry: Camera2LiveMetadata? = null,
+    val captureSource: String = if (isFromGallery) {
+        OpticalGeometryCalculator.CAPTURE_SOURCE_GALLERY
+    } else {
+        OpticalGeometryCalculator.CAPTURE_SOURCE_SYSTEM_CAMERA
+    },
 ) {
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
@@ -102,6 +149,8 @@ data class CapturedPhoto(
         if (capturedAtEpochMillis != other.capturedAtEpochMillis) return false
         if (measuredAngle != other.measuredAngle) return false
         if (isFromGallery != other.isFromGallery) return false
+        if (liveTelemetry != other.liveTelemetry) return false
+        if (captureSource != other.captureSource) return false
 
         return true
     }
@@ -111,6 +160,8 @@ data class CapturedPhoto(
         result = 31 * result + capturedAtEpochMillis.hashCode()
         result = 31 * result + (measuredAngle?.hashCode() ?: 0)
         result = 31 * result + isFromGallery.hashCode()
+        result = 31 * result + (liveTelemetry?.hashCode() ?: 0)
+        result = 31 * result + captureSource.hashCode()
         return result
     }
 }
@@ -187,7 +238,13 @@ class CameraCaptureViewModel @Inject constructor(
         sessionStore.session.value.selectedModels.ifEmpty { fallbackModels }
 
     /** Scatto avvenuto: si aggiunge alla galleria di foto di questa sessione (fino a [MAX_PHOTOS]). */
-    fun onPhotoCaptured(imageBytes: ByteArray, capturedAtEpochMillis: Long, measuredAngle: MeasuredAngle? = null) {
+    fun onPhotoCaptured(
+        imageBytes: ByteArray,
+        capturedAtEpochMillis: Long,
+        measuredAngle: MeasuredAngle? = null,
+        liveTelemetry: Camera2LiveMetadata? = null,
+        captureSource: String = OpticalGeometryCalculator.CAPTURE_SOURCE_SYSTEM_CAMERA,
+    ) {
         _uiState.update { state ->
             if (state.capturedImages.size >= MAX_PHOTOS) return@update state
             state.copy(
@@ -196,6 +253,8 @@ class CameraCaptureViewModel @Inject constructor(
                     capturedAtEpochMillis = capturedAtEpochMillis,
                     measuredAngle = measuredAngle,
                     isFromGallery = false,
+                    liveTelemetry = liveTelemetry,
+                    captureSource = captureSource,
                 ),
                 galleryError = null,
             )
@@ -377,13 +436,24 @@ class CameraCaptureViewModel @Inject constructor(
     private suspend fun buildQualityPhotos(capturedPhotos: List<CapturedPhoto>): List<PhotoQuality> =
         withContext(Dispatchers.Default) {
             capturedPhotos.mapIndexed { index, photo ->
-                val motion = if (photo.isFromGallery) null else gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                val motion = if (photo.isFromGallery) {
+                    null
+                } else {
+                    gyroscopeTracker.peakMotionNear(photo.capturedAtEpochMillis)
+                        ?: photo.measuredAngle?.motionRadPerSec
+                }
                 val cameraMetadata = runCatching {
-                    CameraMetadataHelper.enrichWithPhysicalSize(extractCameraMetadata(photo.bytes), context)
+                    val exifMeta = runCatching { extractCameraMetadata(photo.bytes) }.getOrDefault(CameraMetadata())
+                    CameraMetadataHelper.mergeWithLiveTelemetry(
+                        exifMetadata = exifMeta,
+                        context = context,
+                        live = photo.liveTelemetry,
+                        captureSource = photo.captureSource,
+                    )
                 }.getOrNull()
-                val angleDesc = buildAngleDescription(photo)
-                runCatching {
-                    computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, angleDesc)
+
+                val baseQuality = runCatching {
+                    computePhotoQuality("foto_$index", photo.bytes, motion, cameraMetadata, angleDescription = null)
                 }.getOrElse {
                     PhotoQuality(
                         id = "foto_$index",
@@ -392,9 +462,16 @@ class CameraCaptureViewModel @Inject constructor(
                         hash = index.toLong(),
                         motionRadPerSec = motion,
                         cameraMetadata = cameraMetadata,
-                        angleDescription = angleDesc,
+                        angleDescription = null,
                     )
                 }
+                val enrichedAngleDesc = buildAngleDescription(
+                    photo = photo,
+                    motionRadPerSec = motion,
+                    sharpness = baseQuality.sharpness,
+                    brightness = baseQuality.brightness,
+                )
+                baseQuality.copy(angleDescription = enrichedAngleDesc)
             }
         }
 
@@ -405,13 +482,18 @@ class CameraCaptureViewModel @Inject constructor(
         val settings = settingsRepository.settings.first()
         val sessionId = sessionStore.session.value.sessionId
 
+        // Calcola una sola volta le metriche ottiche/qualità e popola la pillola telemetrica di sessione
+        val qualityPhotos = buildQualityPhotos(capturedPhotos)
+        sessionStore.setPhotoTelemetrySummary(OpticalGeometryCalculator.formatCompactSessionSummary(qualityPhotos))
+        val photoTelemetryBlock = OpticalGeometryCalculator.formatTelemetryPromptBlock(qualityPhotos)
+
         // Il benchmark pesato decide se la V2 ha già superato la V1 sul CHO (§13 punto 1, §20).
         val v2VisibleEnabled = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled).promoteV2
 
         if (v2VisibleEnabled && models.isNotEmpty()) {
             val v2Results = coroutineScope {
                 models.map { model ->
-                    async { runV2Visible(capturedPhotos, model) }
+                    async { runV2Visible(capturedPhotos, qualityPhotos, model) }
                 }.awaitAll().filterNotNull()
             }
             if (v2Results.isNotEmpty()) {
@@ -425,7 +507,13 @@ class CameraCaptureViewModel @Inject constructor(
 
                 if (settings.v2ShadowModeEnabled || settings.globalBiasEnabled) {
                     viewModelScope.launch {
-                        val outcomes = runVisionForModels(models, images, CAPTURED_IMAGE_MIME_TYPE, sessionId)
+                        val outcomes = runVisionForModels(
+                            models = models,
+                            images = images,
+                            imageMimeType = CAPTURED_IMAGE_MIME_TYPE,
+                            sessionId = sessionId,
+                            photoTelemetryBlock = photoTelemetryBlock,
+                        )
                         recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
                     }
                 }
@@ -433,26 +521,32 @@ class CameraCaptureViewModel @Inject constructor(
             }
         }
 
-        // La V1 resta sempre la rete di sicurezza (§13 punto 1).
-        val outcomes = runVisionForModels(models, images, CAPTURED_IMAGE_MIME_TYPE, sessionId)
+        // La V1 resta sempre la rete di sicurezza (§13 punto 1), ora arricchita con telemetria ottica CameraX/EXIF.
+        val outcomes = runVisionForModels(
+            models = models,
+            images = images,
+            imageMimeType = CAPTURED_IMAGE_MIME_TYPE,
+            sessionId = sessionId,
+            photoTelemetryBlock = photoTelemetryBlock,
+        )
         sessionStore.setVisionOutcomes(outcomes)
         _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
         notificationHelper.notifyAnalysisCompletedIfBackgrounded()
         recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
 
         if (!v2VisibleEnabled) {
-            runV2ShadowAnalysisIfEnabled(capturedPhotos, models)
+            runV2ShadowAnalysisIfEnabled(capturedPhotos, qualityPhotos, models)
         }
     }
 
     private suspend fun runV2Visible(
         capturedPhotos: List<CapturedPhoto>,
+        qualityPhotos: List<PhotoQuality>,
         model: AiModel,
     ): V2AnalysisResultInternal? {
         val sessionId = sessionStore.session.value.sessionId
         val sessionMode = sessionStore.session.value.sessionMode
         return runCatching {
-            val qualityPhotos = buildQualityPhotos(capturedPhotos)
             val photos = qualityPhotos.zip(capturedPhotos) { quality, raw -> SessionPhoto(quality, raw.bytes) }
             val selectedIds = sessionStore.session.value.selectedCalibrationIds
             val calibrations = if (selectedIds.isEmpty()) null else {
@@ -492,7 +586,11 @@ class CameraCaptureViewModel @Inject constructor(
         )
     }
 
-    private fun runV2ShadowAnalysisIfEnabled(capturedPhotos: List<CapturedPhoto>, models: List<AiModel>) {
+    private fun runV2ShadowAnalysisIfEnabled(
+        capturedPhotos: List<CapturedPhoto>,
+        qualityPhotos: List<PhotoQuality>,
+        models: List<AiModel>,
+    ) {
         val sessionId = sessionStore.session.value.sessionId
         shadowScope.launch {
             val settings = settingsRepository.settings.first()
@@ -507,7 +605,6 @@ class CameraCaptureViewModel @Inject constructor(
             if (shadowModels.isEmpty()) return@launch
             for (model in shadowModels) {
                 val outcome = runCatching {
-                    val qualityPhotos = buildQualityPhotos(capturedPhotos)
                     val photos = qualityPhotos.zip(capturedPhotos) { quality, raw -> SessionPhoto(quality, raw.bytes) }
                     val selectedIds = sessionStore.session.value.selectedCalibrationIds
                     val calibrations = if (selectedIds.isEmpty()) null else {

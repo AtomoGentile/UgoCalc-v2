@@ -22,6 +22,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
@@ -53,6 +54,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.Confidence
@@ -183,6 +185,13 @@ fun VisionResultsScreen(
                         }
                     }
 
+                    val telemetrySummary = uiState.photoTelemetrySummary
+                    if (!telemetrySummary.isNullOrBlank()) {
+                        item(key = "__photo_telemetry__") {
+                            PhotoTelemetryCard(summary = telemetrySummary)
+                        }
+                    }
+
                     items(uiState.outcomes, key = { it.model.uid }) { outcome ->
                         val successModel = (outcome as? ModelVisionOutcome.Success)?.model
                         val isSelectedAsReference = successModel != null && (
@@ -251,6 +260,107 @@ fun VisionResultsScreen(
 
             if (uiState.isMatching) {
                 LoadingOverlay(statusText = "Abbinamento tabelle nutrizionali...")
+            }
+        }
+    }
+}
+
+private fun formatEditableSummaryTokens(summary: String): List<String> =
+    summary.split("·", "\n")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun PhotoTelemetryCard(summary: String) {
+    var expanded by rememberSaveable(summary) { mutableStateOf(false) }
+    val tokens = formatEditableSummaryTokens(summary)
+
+    UgoCard(
+        onClick = { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
+        containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.28f),
+        borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Surface(
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                modifier = Modifier.size(34.dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(
+                        imageVector = Icons.Filled.CenterFocusStrong,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "CameraX · Telemetria attiva",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                if (!expanded) {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
+                contentDescription = if (expanded) "Comprimi telemetria" else "Espandi telemetria",
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        }
+
+        AnimatedVisibility(visible = expanded) {
+            Column(
+                modifier = Modifier.padding(top = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                if (tokens.size > 1) {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        tokens.forEach { token ->
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.85f),
+                                border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)),
+                            ) {
+                                Text(
+                                    text = token,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

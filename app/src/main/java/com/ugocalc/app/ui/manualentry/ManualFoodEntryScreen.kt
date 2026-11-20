@@ -44,15 +44,17 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.ui.components.AnimatedMacroMetricTile
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.FoodSearchPicker
-import com.ugocalc.app.ui.components.MacroMetricTile
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
@@ -287,6 +289,7 @@ private fun QuantityStep(
     onBack: () -> Unit,
     onProceed: () -> Unit,
 ) {
+    val haptic = LocalHapticFeedback.current
     val handleBack: () -> Unit = {
         if (uiState.skipSelectStep) onBack() else viewModel.backToSelection()
     }
@@ -367,16 +370,18 @@ private fun QuantityStep(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
-                        MacroMetricTile(
+                        AnimatedMacroMetricTile(
                             label = "CHO stimati",
-                            value = "%.1f".format(uiState.previewChoG),
+                            targetValue = uiState.previewChoG.toFloat(),
+                            decimals = 1,
                             unit = "g",
                             accentColor = UgoSemanticColors.cho,
                             modifier = Modifier.weight(1f),
                         )
-                        MacroMetricTile(
+                        AnimatedMacroMetricTile(
                             label = "Grassi stimati",
-                            value = "%.1f".format(uiState.previewGrassiG),
+                            targetValue = uiState.previewGrassiG.toFloat(),
+                            decimals = 1,
                             unit = "g",
                             accentColor = UgoSemanticColors.fat,
                             modifier = Modifier.weight(1f),
@@ -464,7 +469,10 @@ private fun QuantityStep(
                                     val isSelected = row.gramsOrNull == portionG.toDouble()
                                     FilterChip(
                                         selected = isSelected,
-                                        onClick = { viewModel.setGrams(index, portionG.toString()) },
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                            viewModel.setGrams(index, portionG.toString())
+                                        },
                                         label = { Text("${portionG}g") },
                                     )
                                 }

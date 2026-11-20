@@ -91,7 +91,7 @@ data class PhotoQuality(
     val angleDescription: String? = null,
 )
 
-/** Metadati EXIF della fotocamera (§16): tutti nullable, i tag sono spesso assenti su foto elaborate. Solo diagnostica, nessuno scarto oggi si basa su questi valori. */
+/** Metadati EXIF e telemetria ottica Camera2/sensori (§16, CameraX Pro Studio 4.1.0): tutti nullable, i tag sono spesso assenti su foto elaborate o da galleria. */
 data class CameraMetadata(
     val isoValue: Int? = null,
     val exposureTimeSeconds: Double? = null,
@@ -103,6 +103,30 @@ data class CameraMetadata(
     /** Dimensione fisica del sensore in millimetri, utile a M3 per correzioni ottiche o stime di scala alternative (§16). */
     val sensorWidthMm: Double? = null,
     val sensorHeightMm: Double? = null,
+    /** Distanza di messa a fuoco in diottrie (Camera2 `LENS_FOCUS_DISTANCE`, 1/m). */
+    val focusDistanceDiopters: Float? = null,
+    /** Distanza stimata fotocamera→piatto in centimetri (`100.0 / focusDistanceDiopters` entro limiti fisici). */
+    val estimatedDistanceCm: Double? = null,
+    /** Ampiezza fisica orizzontale del campo inquadrato (FoV) al piano di fuoco in centimetri. */
+    val fovWidthCm: Double? = null,
+    /** Ampiezza fisica verticale del campo inquadrato (FoV) al piano di fuoco in centimetri. */
+    val fovHeightCm: Double? = null,
+    /** Rapporto di zoom attivo allo scatto (es. `1.0f`, `2.0f`). */
+    val zoomRatio: Float? = null,
+    /** Stato autofocus Camera2 (`CaptureResult.CONTROL_AF_STATE`). */
+    val afState: Int? = null,
+    /** Vero se la stabilizzazione ottica (OIS) era attiva allo scatto. */
+    val oisEnabled: Boolean? = null,
+    /** Rollio laterale del telefono in gradi (`0°` = orizzontale). */
+    val rollDeg: Float? = null,
+    /** Inclinazione del telefono in gradi (`0°` = verticale, `90°` = piatto dall'alto). */
+    val pitchDeg: Float? = null,
+    /** Larghezza immagine finale orientata in pixel. */
+    val imageWidthPx: Int? = null,
+    /** Altezza immagine finale orientata in pixel. */
+    val imageHeightPx: Int? = null,
+    /** Origine dello scatto: `"CAMERAX_PRO"`, `"SYSTEM_CAMERA"` o `"GALLERY"`. */
+    val captureSource: String? = null,
 )
 
 /** Motivo per cui una foto è stata scartata da M0. */

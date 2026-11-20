@@ -283,6 +283,19 @@ class FinalResultViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Regola rapidamente il peso di una riga tramite stepper (+/- grammi), mantenendo almeno 5 g
+     * e ricalcolando subito i totali e il salvataggio automatico.
+     */
+    fun adjustWeightBy(lineIndex: Int, deltaGrams: Float) {
+        val totals = sessionStore.session.value.totals ?: _uiState.value.totals ?: return
+        val newLines = adjustLineWeight(totals.lines, lineIndex, deltaGrams) ?: return
+        val updatedTotals = AnalysisTotals(newLines)
+        sessionStore.setTotals(updatedTotals)
+        _uiState.update { it.copy(totals = updatedTotals) }
+        autoSave()
+    }
+
     private suspend fun findStrongLocalMatch(query: String): NormalizedFoodEntry? {
         var candidates = tableRepository.searchEntries(query)
         if (candidates.isEmpty() && !query.contains(' ') && query.length >= 4) {
@@ -503,5 +516,24 @@ class FinalResultViewModel @Inject constructor(
 
     companion object {
         private const val AUTO_REMATCH_MIN_SIMILARITY = 0.80
+        internal const val MIN_ADJUSTED_GRAMS = 5f
     }
+}
+
+internal fun adjustLineWeight(
+    lines: List<CalculatedFoodLine>,
+    lineIndex: Int,
+    deltaGrams: Float,
+): List<CalculatedFoodLine>? {
+    if (lineIndex !in lines.indices) return null
+    val original = lines[lineIndex]
+    val nextGrams = (original.recognizedFood.pesoStimatoG.toFloat() + deltaGrams)
+        .coerceAtLeast(FinalResultViewModel.MIN_ADJUSTED_GRAMS)
+        .toDouble()
+    if (nextGrams == original.recognizedFood.pesoStimatoG) return null
+
+    val updatedLine = original.copy(
+        recognizedFood = original.recognizedFood.copy(pesoStimatoG = nextGrams),
+    )
+    return lines.toMutableList().apply { this[lineIndex] = updatedLine }
 }
