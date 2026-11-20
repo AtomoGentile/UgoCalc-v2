@@ -4,11 +4,16 @@ import android.util.Log
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.data.remote.ai.AiCallExecutor
 import com.ugocalc.app.data.remote.ai.client.AiCallException
+import com.ugocalc.app.data.repository.CostManagementRepository
 import com.ugocalc.app.domain.inference.m0.CameraMetadata
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.ModelPricingCatalog
 import javax.inject.Inject
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 
 /**
  * M1 – Percezione unificata (piano V2 §4, §5). Unica chiamata multimodale per l'intera sessione:
@@ -20,6 +25,7 @@ import javax.inject.Inject
  */
 class UnifiedPerceptionEngine @Inject constructor(
     private val executor: AiCallExecutor,
+    private val costManagementRepository: CostManagementRepository,
 ) {
 
     /**
@@ -37,6 +43,7 @@ class UnifiedPerceptionEngine @Inject constructor(
         angleDescriptions: List<String?> = emptyList(),
         cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
+        sessionId: String? = null,
     ): PerceptionOutcome {
         val pastoParts = executor.encodeImages(images, imageMimeType)
         
@@ -47,7 +54,7 @@ class UnifiedPerceptionEngine @Inject constructor(
             cal.imagePath?.let { path ->
                 try {
                     java.io.File(path).readBytes()
-                } catch (e: Exception) {
+                } catch (_: Exception) {
                     null
                 }
             }
@@ -63,7 +70,26 @@ class UnifiedPerceptionEngine @Inject constructor(
         )
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, allImageParts)
-            
+
+            // Registra il costo di questa chiamata (M1)
+            coroutineScope {
+                launch {
+                    try {
+                        val responseJson = executor.json.encodeToString(sceneGraph)
+                        val costUsd = ModelPricingCatalog.estimateCost(model, prompt, responseJson, images.size + calibrations.size)
+                        costManagementRepository.recordCost(
+                            stage = "perception",
+                            modelId = model.id,
+                            costUsd = costUsd,
+                            description = "M1 Percezione unificata - ${images.size} foto",
+                            sessionId = sessionId
+                        )
+                    } catch (e: Exception) {
+                        Log.e("M1-Cost", "Errore durante la registrazione del costo", e)
+                    }
+                }
+            }
+
             // Log M1: identità e conteggio pezzi (§ richiesta utente)
             sceneGraph.alimenti.forEach { food ->
                 val pezziInfo = food.misureGrezze.conteggio?.let { " (pezzi: $it)" } ?: ""

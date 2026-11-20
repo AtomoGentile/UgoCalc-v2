@@ -50,9 +50,11 @@ class ConsistencyVerifier {
         }
 
         // --- Vincolo di BUON SENSO (INTUIZIONE AI): confronto M3 vs M1 (§4, §5 M4) ---
+        // I limiti di buon senso di M1 sono espressi in grammi A CRUDO: il confronto avviene
+        // su pesoCrudoG per evitare falsi positivi sistematici su pasta, riso e legumi cotti.
         val pesiFuoriIntuizione = estimates.filter { est ->
             val limiti = foodByName[est.nome]?.limitiBuonSenso ?: return@filter false
-            est.pesoG < limiti.pesoMinG || est.pesoG > limiti.pesoMaxG
+            est.pesoCrudoG < limiti.pesoMinG || est.pesoCrudoG > limiti.pesoMaxG
         }
         controlli += ConstraintCheck(
             nome = "buon senso (intuizione AI)",
@@ -60,14 +62,14 @@ class ConsistencyVerifier {
             dettaglio = if (pesiFuoriIntuizione.isEmpty()) "coerente con l'intuizione"
             else pesiFuoriIntuizione.joinToString { est ->
                 val l = foodByName[est.nome]!!.limitiBuonSenso!!
-                "${est.nome}: calcolato ${est.pesoG.toInt()}g vs plausibile ${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g"
+                "${est.nome}: calcolato ${est.pesoCrudoG.toInt()}g crudo vs plausibile ${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g crudo"
             }
         )
         pesiFuoriIntuizione.forEach { est ->
             val l = foodByName[est.nome]!!.limitiBuonSenso!!
             flaggati += FlaggedItem(
                 est.nome,
-                "calcolo geometrico (${est.pesoG.toInt()}g) incoerente con l'intuizione AI (${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g)",
+                "calcolo geometrico (${est.pesoCrudoG.toInt()}g crudo) incoerente con l'intuizione AI (${l.pesoMinG.toInt()}-${l.pesoMaxG.toInt()}g crudo)",
                 FlagType.VINCOLO_FISICO
             )
         }

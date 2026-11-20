@@ -3,19 +3,22 @@ package com.ugocalc.app.ui.results
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.repository.BenchmarkRepository
+import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
+import com.ugocalc.app.domain.model.ConfidenceScore
 import com.ugocalc.app.domain.model.ModelVisionOutcome
 import com.ugocalc.app.domain.usecase.MatchFoodsAcrossTablesUseCase
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.AnalysisNotificationHelper
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.launchIn
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -24,9 +27,13 @@ data class VisionResultsUiState(
     val referenceModelId: String? = null,
     val isMatching: Boolean = false,
     val matchingDone: Boolean = false,
+    val matchingError: String? = null,
     val usingV2Engine: Boolean = false,
+    val v2Stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate> = emptyList(),
     val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
     val shadowV2Results: Map<String, AnalysisSessionStore.V2ShadowResult> = emptyMap(),
+    val confidenceIndicatorEnabled: Boolean = false,
+    val confidenceAlertThresholdPercent: Int = ConfidenceScore.DEFAULT_ALERT_THRESHOLD_PERCENT,
 ) {
     val allFailed: Boolean get() = outcomes.isNotEmpty() && outcomes.all { it is ModelVisionOutcome.Failure }
     val successfulOutcomes: List<ModelVisionOutcome.Success> get() = outcomes.filterIsInstance<ModelVisionOutcome.Success>()
@@ -38,6 +45,7 @@ class VisionResultsViewModel @Inject constructor(
     private val matchFoodsAcrossTables: MatchFoodsAcrossTablesUseCase,
     private val notificationHelper: AnalysisNotificationHelper,
     private val benchmarkRepository: BenchmarkRepository,
+    private val settingsRepository: SettingsRepository,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(VisionResultsUiState())
@@ -45,18 +53,39 @@ class VisionResultsViewModel @Inject constructor(
 
     init {
         sessionStore.session
-            .map { s -> listOf(s.visionOutcomes, s.referenceModelId, s.usingV2Engine, s.v2AmbiguitaRisolte, s.shadowV2Results) }
+            .distinctUntilChanged { old, new ->
+                old.visionOutcomes == new.visionOutcomes &&
+                    old.referenceModelId == new.referenceModelId &&
+                    old.usingV2Engine == new.usingV2Engine &&
+                    old.v2Stime == new.v2Stime &&
+                    old.v2AmbiguitaRisolte == new.v2AmbiguitaRisolte &&
+                    old.shadowV2Results == new.shadowV2Results
+            }
+            .onEach { s ->
+                _uiState.update {
+                    it.copy(
+                        outcomes = s.visionOutcomes,
+                        referenceModelId = s.referenceModelId,
+                        usingV2Engine = s.usingV2Engine,
+                        v2Stime = s.v2Stime,
+                        v2AmbiguitaRisolte = s.v2AmbiguitaRisolte,
+                        shadowV2Results = s.shadowV2Results,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+
+        settingsRepository.settings
             .distinctUntilChanged()
-            .onEach { (outcomes, referenceModelId, usingV2Engine, v2Ambiguita, shadowResults) ->
-                @Suppress("UNCHECKED_CAST")
-                _uiState.value = _uiState.value.copy(
-                    outcomes = outcomes as List<ModelVisionOutcome>,
-                    referenceModelId = referenceModelId as String?,
-                    usingV2Engine = usingV2Engine as Boolean,
-                    v2AmbiguitaRisolte = v2Ambiguita as List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>,
-                    shadowV2Results = shadowResults as Map<String, AnalysisSessionStore.V2ShadowResult>,
-                )
-            }.launchIn(viewModelScope)
+            .onEach { settings ->
+                _uiState.update {
+                    it.copy(
+                        confidenceIndicatorEnabled = settings.confidenceIndicatorEnabled,
+                        confidenceAlertThresholdPercent = settings.confidenceAlertThresholdPercent,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
     }
 
     fun selectReferenceModel(modelId: String) {
@@ -67,47 +96,62 @@ class VisionResultsViewModel @Inject constructor(
         sessionStore.resetForRetry()
     }
 
+    fun dismissMatchingError() {
+        _uiState.update { it.copy(matchingError = null) }
+    }
+
     /**
-     * Tocco su "Ricevi i CHO" (§2.4 punto 5): esegue il Passaggio 3 e calcola i totali. Se il
-     * risultato mostrato viene dalla pipeline V2 (piano V2 §13 punto 1), M6/M7 hanno già calcolato
-     * i totali dentro la pipeline — qui non si rifà l'abbinamento, si passa solo allo stato
-     * "fatto" perché [sessionStore]'s totals sono già quelli giusti.
+     * Tocco su "Calcola CHO e Grassi" (§2.4 punto 5): esegue il Passaggio 3 e calcola i totali.
+     * In modalità V2 i totali sono già stati calcolati da M6/M7 dentro la pipeline.
      */
     fun receiveCho() {
         val state = _uiState.value
+        if (state.isMatching) return
+
         if (sessionStore.session.value.usingV2Engine) {
-            _uiState.value = state.copy(matchingDone = true)
+            _uiState.update { it.copy(matchingDone = true, matchingError = null) }
             viewModelScope.launch {
                 notificationHelper.notifyAnalysisCompletedIfBackgrounded()
             }
             return
         }
-        val referenceOutcome = state.successfulOutcomes.firstOrNull { it.model.id == state.referenceModelId }
-            ?: state.successfulOutcomes.firstOrNull()
-            ?: return
-        _uiState.value = state.copy(isMatching = true)
+
+        val referenceOutcome = resolveReferenceOutcome(state) ?: return
+
+        _uiState.update { it.copy(isMatching = true, matchingError = null) }
+        val sessionId = sessionStore.session.value.sessionId
         viewModelScope.launch {
-            val lines = matchFoodsAcrossTables(referenceOutcome.result.alimenti, referenceOutcome.model)
-            sessionStore.setTotals(AnalysisTotals(lines))
-            _uiState.value = _uiState.value.copy(isMatching = false, matchingDone = true)
-            notificationHelper.notifyAnalysisCompletedIfBackgrounded()
-            // §13 punto 5 (benchmark V1/V2): salva i coefficienti CHO/100g già trovati da V1, così la
-            // dashboard di confronto può calcolare il CHO "vero" senza richiamare l'AI di matching.
-            benchmarkRepository.recordV1NutritionCoefficients(sessionStore.session.value.sessionId, lines)
+            try {
+                val lines = matchFoodsAcrossTables(
+                    recognizedFoods = referenceOutcome.result.alimenti,
+                    referenceModel = referenceOutcome.model,
+                    sessionId = sessionId,
+                )
+                sessionStore.setTotals(AnalysisTotals(lines))
+                _uiState.update { it.copy(matchingDone = true) }
+                notificationHelper.notifyAnalysisCompletedIfBackgrounded()
+                benchmarkRepository.recordV1NutritionCoefficients(sessionId, lines)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        matchingError = e.message?.takeIf { msg -> msg.isNotBlank() }
+                            ?: "Errore durante l'abbinamento alle tabelle nutrizionali.",
+                    )
+                }
+            } finally {
+                _uiState.update { it.copy(isMatching = false) }
+            }
         }
     }
 
     /**
-     * Salva solo i pesi saltando il matching nutrizionale (§ richiesta utente): crea dei totali
-     * fittizi dove CHO e grassi sono zero (perché le righe non hanno abbinamento), ma il peso
-     * stimato resta conservato. Permette di arrivare alla schermata finale e salvare il pasto
-     * anche se non si ha tempo/voglia di aspettare il matching o di correggerlo.
+     * Salva solo i pesi saltando il matching nutrizionale (§ richiesta utente).
      */
     fun saveWeightsOnly() {
         val state = _uiState.value
-        val referenceOutcome = state.successfulOutcomes.firstOrNull { it.model.id == state.referenceModelId }
-            ?: state.successfulOutcomes.firstOrNull()
-            ?: return
+        val referenceOutcome = resolveReferenceOutcome(state) ?: return
 
         val lines = referenceOutcome.result.alimenti.map { food ->
             CalculatedFoodLine(
@@ -117,18 +161,23 @@ class VisionResultsViewModel @Inject constructor(
             )
         }
         sessionStore.setTotals(AnalysisTotals(lines))
-        _uiState.value = state.copy(matchingDone = true)
+        _uiState.update { it.copy(matchingDone = true) }
         viewModelScope.launch {
             notificationHelper.notifyAnalysisCompletedIfBackgrounded()
         }
     }
 
+    private fun resolveReferenceOutcome(state: VisionResultsUiState): ModelVisionOutcome.Success? {
+        val ref = state.referenceModelId
+        return state.successfulOutcomes.firstOrNull { it.model.uid == ref }
+            ?: state.successfulOutcomes.firstOrNull { it.model.id == ref }
+            ?: state.successfulOutcomes.firstOrNull()
+    }
+
     /**
-     * Da chiamare quando l'evento di navigazione verso i risultati finali è stato consumato dalla
-     * UI (§ bug fix): evita che tornando indietro da FinalResultScreen si venga immediatamente
-     * rimbalzati di nuovo in avanti perché matchingDone è ancora true.
+     * Consuma l'evento di navigazione verso i risultati finali (§ bug fix ritorno indietro).
      */
     fun onMatchingDoneConsumed() {
-        _uiState.value = _uiState.value.copy(matchingDone = false)
+        _uiState.update { it.copy(matchingDone = false) }
     }
 }

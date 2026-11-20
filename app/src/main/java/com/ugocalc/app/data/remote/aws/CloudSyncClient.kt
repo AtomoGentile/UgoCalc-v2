@@ -1,5 +1,6 @@
 package com.ugocalc.app.data.remote.aws
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -26,6 +27,7 @@ sealed class SyncResult {
 
 interface CloudSyncClient {
     suspend fun fetchInferenceRecords(): List<String>
+    suspend fun fetchCalibrationRecords(): List<String>
     suspend fun sendEvent(
         endpoint: String,
         eventId: String,
@@ -43,17 +45,24 @@ class RealCloudSyncClient @Inject constructor(
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
 
     /** Scarica i record INFERENCE dell'utente dal backend (l'identità viene dal token Cognito nell'AuthInterceptor). Restituisce i payload JSON grezzi oppure lista vuota in caso di errore. */
-    override suspend fun fetchInferenceRecords(): List<String> = withContext(Dispatchers.IO) {
+    override suspend fun fetchInferenceRecords(): List<String> = fetchRecords("inference")
+
+    override suspend fun fetchCalibrationRecords(): List<String> = fetchRecords("calibration")
+
+    private suspend fun fetchRecords(path: String): List<String> = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl) ?: return@withContext emptyList()
+
         val request = Request.Builder()
-            .url("$baseUrl/inference")
+            .url("$normalizedBase/$path")
             .header("Accept", "application/json")
             .header("User-Agent", "UgoCalc-Android")
             .get()
             .build()
 
         val client = okHttpClient.newBuilder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .callTimeout(20, TimeUnit.SECONDS)
             .build()
 
         try {
@@ -64,7 +73,9 @@ class RealCloudSyncClient @Inject constructor(
                 val records = root["records"]?.jsonArray ?: return@withContext emptyList()
                 records.map { it.toString() }
             }
-        } catch (_: IOException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
             emptyList()
         }
     }
@@ -75,23 +86,33 @@ class RealCloudSyncClient @Inject constructor(
         userId: String,
         payloadJson: String,
     ): SyncResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext SyncResult.FatalError("AWS backend disabled")
+
+        val parsedPayload = try {
+            json.parseToJsonElement(payloadJson)
+        } catch (_: Exception) {
+            return@withContext SyncResult.FatalError("Invalid payload JSON")
+        }
+
         val body = buildJsonObject {
             put("eventId", JsonPrimitive(eventId))
             put("userId", JsonPrimitive(userId))
-            put("payload", json.parseToJsonElement(payloadJson))
+            put("payload", parsedPayload)
         }
 
         val request = Request.Builder()
-            .url("$baseUrl/$endpoint")
+            .url("$normalizedBase/$endpoint")
             .header("Accept", "application/json")
             .header("User-Agent", "UgoCalc-Android")
             .post(body.toString().toRequestBody(jsonMediaType))
             .build()
 
         val client = okHttpClient.newBuilder()
-            .connectTimeout(15, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .writeTimeout(15, TimeUnit.SECONDS)
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(25, TimeUnit.SECONDS)
             .build()
 
         try {
@@ -103,8 +124,12 @@ class RealCloudSyncClient @Inject constructor(
                     else -> SyncResult.RetryableError("HTTP ${response.code}")
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (_: IOException) {
             SyncResult.RetryableError("network error")
+        } catch (e: Exception) {
+            SyncResult.RetryableError(e.message ?: "unexpected error")
         }
     }
 }

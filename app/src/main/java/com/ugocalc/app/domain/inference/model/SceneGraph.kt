@@ -120,11 +120,15 @@ data class RawMeasurements(
     @SerialName("altezza_cm") val altezzaCm: Double? = null,
     /** Distesa: quanto è "pieno/compatto" il cumulo [0..1], distinto dalla superficie coperta. */
     @SerialName("riempimento") val riempimento: Double? = null,
+    /** Distesa: profilo verticale del cumulo ("piatto", "cupola", "cono"). */
+    @SerialName("profilo_cumulo") val profiloCumulo: String? = null,
 
     /** A contenitore: tipo di contenitore riconosciuto (bicchiere, tazza, ciotola, scodella…). */
     @SerialName("contenitore") val contenitore: String? = null,
     /** A contenitore: frazione di riempimento del contenitore [0..1]. */
     @SerialName("frazione_riempimento") val frazioneRiempimento: Double? = null,
+    /** A contenitore: capacità stimata del contenitore in millilitri, se deducibile dalla scena. */
+    @SerialName("capacita_contenitore_ml") val capacitaContenitoreMl: Double? = null,
 
     /** Blocco misurabile: forma geometrica dichiarata (parallelepipedo, cilindro, cuneo…). */
     @SerialName("forma") val forma: String? = null,

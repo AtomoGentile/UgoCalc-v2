@@ -5,9 +5,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.local.db.entity.NormalizedFoodEntryEntity
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.util.parseLocaleDoubleOrNull
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
@@ -44,7 +46,7 @@ class TableEditorViewModel @Inject constructor(
     private val keyGenerator = AtomicInteger(0)
 
     private val _uiState = MutableStateFlow(TableEditorUiState())
-    val uiState: StateFlow<TableEditorUiState> = _uiState
+    val uiState: StateFlow<TableEditorUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
@@ -67,7 +69,8 @@ class TableEditorViewModel @Inject constructor(
         grassiPer100g = formatNumber(grassiPer100g),
     )
 
-    private fun formatNumber(value: Double): String = if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
+    private fun formatNumber(value: Double): String =
+        if (value == value.toLong().toDouble()) value.toLong().toString() else value.toString()
 
     fun updateNome(localKey: Int, value: String) = updateRow(localKey) { it.copy(nome = value) }
     fun updateCho(localKey: Int, value: String) = updateRow(localKey) { it.copy(choPer100g = value) }
@@ -81,7 +84,13 @@ class TableEditorViewModel @Inject constructor(
     }
 
     fun addRow() {
-        val newRow = EditableRow(localKey = keyGenerator.incrementAndGet(), dbId = 0, nome = "", choPer100g = "0", grassiPer100g = "0")
+        val newRow = EditableRow(
+            localKey = keyGenerator.incrementAndGet(),
+            dbId = 0,
+            nome = "",
+            choPer100g = "0",
+            grassiPer100g = "0",
+        )
         _uiState.value = _uiState.value.copy(rows = _uiState.value.rows + newRow, isDirty = true)
     }
 
@@ -101,8 +110,8 @@ class TableEditorViewModel @Inject constructor(
                         id = it.dbId,
                         tableId = tableId,
                         nome = it.nome.trim(),
-                        choPer100g = it.choPer100g.toDoubleOrNull() ?: 0.0,
-                        grassiPer100g = it.grassiPer100g.toDoubleOrNull() ?: 0.0,
+                        choPer100g = it.choPer100g.parseLocaleDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0,
+                        grassiPer100g = it.grassiPer100g.parseLocaleDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0,
                         rowOrder = 0,
                         isManuallyEdited = true,
                     )

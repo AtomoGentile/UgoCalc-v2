@@ -19,8 +19,14 @@ interface AnalysisHistoryDao {
     @Query("SELECT * FROM analysis_history WHERE id = :id")
     suspend fun getById(id: Long): AnalysisHistoryEntity?
 
+    @Query("SELECT * FROM analysis_history WHERE sessionId = :sessionId LIMIT 1")
+    suspend fun getBySessionId(sessionId: String): AnalysisHistoryEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: AnalysisHistoryEntity): Long
+
+    @Query("DELETE FROM analysis_history WHERE id = :id")
+    suspend fun deleteById(id: Long)
 
     @Query("DELETE FROM analysis_history")
     suspend fun clearAll()

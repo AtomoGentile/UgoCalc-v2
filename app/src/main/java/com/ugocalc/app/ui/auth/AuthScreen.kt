@@ -1,20 +1,37 @@
 package com.ugocalc.app.ui.auth
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.MarkEmailRead
+import androidx.compose.material.icons.rounded.Visibility
+import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -36,17 +53,35 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.fragment.app.FragmentActivity
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+
+internal tailrec fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+internal fun Context.findFragmentActivity(): FragmentActivity? = findActivity() as? FragmentActivity
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AuthScreen(
     onAuthenticated: () -> Unit,
+    onBack: (() -> Unit)? = null,
     viewModel: AuthViewModel = hiltViewModel(),
 ) {
     val authState by viewModel.authState.collectAsState()
@@ -56,17 +91,20 @@ fun AuthScreen(
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var showPassword by remember { mutableStateOf(false) }
+    var showConfirmPassword by remember { mutableStateOf(false) }
     var confirmationCode by remember { mutableStateOf("") }
     var pendingEmail by remember { mutableStateOf("") }
 
     LaunchedEffect(authState) {
         when (val state = authState) {
-            is AuthState.Success -> onAuthenticated()
+            is AuthState.Success, is AuthState.LocalMode -> onAuthenticated()
             is AuthState.NeedsConfirmation -> pendingEmail = state.email
             is AuthState.ConfirmationComplete -> {
                 snackbarHostState.showSnackbar("Account confermato! Accedi ora.")
                 selectedTab = 0
                 confirmationCode = ""
+                pendingEmail = ""
             }
             is AuthState.Error -> snackbarHostState.showSnackbar(state.message)
             else -> {}
@@ -74,9 +112,15 @@ fun AuthScreen(
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text("UgoCalc") },
+                title = { Text("Cloud Sync opzionale") },
+                navigationIcon = {
+                    if (onBack != null) {
+                        BackIconButton(onBack)
+                    }
+                },
                 colors = ugoTopAppBarColors(),
             )
         },
@@ -86,161 +130,269 @@ fun AuthScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 24.dp),
+                .imePadding()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             val isLoading = authState is AuthState.Loading
 
+            StatusBanner(
+                icon = Icons.Rounded.CloudSync,
+                title = "Cloud Sync opzionale",
+                subtitle = "UgoCalc funziona interamente sul dispositivo senza account. Accedi solo se vuoi sincronizzare o condividere il profilo su più telefoni.",
+                tone = BannerTone.INFO,
+            )
+
             if (pendingEmail.isNotBlank()) {
-                // — Confirmation screen —
-                Text(
-                    text = "Verifica email",
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "Abbiamo inviato un codice a $pendingEmail. Inseriscilo qui sotto.",
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                Spacer(Modifier.height(24.dp))
-                OutlinedTextField(
-                    value = confirmationCode,
-                    onValueChange = { confirmationCode = it.trim() },
-                    label = { Text("Codice di verifica") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                UgoCard(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(24.dp))
-                Button(
-                    onClick = { viewModel.confirmSignUp(pendingEmail, confirmationCode) },
-                    enabled = !isLoading && confirmationCode.isNotBlank(),
-                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(20.dp),
                 ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text("Conferma account")
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { pendingEmail = "" }) {
-                    Text("Torna al login")
-                }
-            } else {
-                // — Login / signup screen —
-                Text(
-                    text = "Accedi al tuo account",
-                    style = MaterialTheme.typography.headlineSmall,
-                )
-                Spacer(Modifier.height(24.dp))
-
-                TabRow(selectedTabIndex = selectedTab) {
-                    Tab(
-                        selected = selectedTab == 0,
-                        onClick = { selectedTab = 0 },
-                        text = { Text("Accedi") },
-                    )
-                    Tab(
-                        selected = selectedTab == 1,
-                        onClick = { selectedTab = 1 },
-                        text = { Text("Registrati") },
-                    )
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                OutlinedTextField(
-                    value = email,
-                    onValueChange = { email = it.trim() },
-                    label = { Text("Email") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = password,
-                    onValueChange = { password = it },
-                    label = { Text("Password") },
-                    singleLine = true,
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                if (selectedTab == 1) {
-                    Spacer(Modifier.height(12.dp))
-                    OutlinedTextField(
-                        value = confirmPassword,
-                        onValueChange = { confirmPassword = it },
-                        label = { Text("Conferma password") },
-                        singleLine = true,
-                        visualTransformation = PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    Column(
                         modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-
-                Spacer(Modifier.height(24.dp))
-
-                Button(
-                    onClick = {
-                        if (selectedTab == 0) {
-                            viewModel.signIn(email, password)
-                        } else {
-                            if (password == confirmPassword) {
-                                viewModel.signUp(email, password)
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.MarkEmailRead,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        Text(
+                            text = "Verifica email",
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "Abbiamo inviato un codice a $pendingEmail. Inseriscilo qui sotto.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        OutlinedTextField(
+                            value = confirmationCode,
+                            onValueChange = { confirmationCode = it.trim() },
+                            label = { Text("Codice di verifica") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Button(
+                            onClick = { viewModel.confirmSignUp(pendingEmail, confirmationCode) },
+                            enabled = !isLoading && confirmationCode.isNotBlank(),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                        ) {
+                            if (isLoading) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
                             } else {
-                                viewModel.setError("Le password non coincidono")
+                                Text("Conferma account")
                             }
                         }
-                    },
-                    enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(onClick = { pendingEmail = "" }) {
+                            Text("Torna al login")
+                        }
+                    }
+                }
+            } else {
+                UgoCard(
                     modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(20.dp),
                 ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                    } else {
-                        Text(if (selectedTab == 0) "Accedi" else "Crea account")
+                    Text(
+                        text = if (selectedTab == 0) "Accedi al tuo account" else "Crea un account",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(14.dp))
+
+                    TabRow(selectedTabIndex = selectedTab) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text("Accedi") },
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text("Registrati") },
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    OutlinedTextField(
+                        value = email,
+                        onValueChange = { email = it.trim() },
+                        label = { Text("Email") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it },
+                        label = { Text("Password") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        trailingIcon = {
+                            IconButton(onClick = { showPassword = !showPassword }) {
+                                Icon(
+                                    imageVector = if (showPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                    contentDescription = if (showPassword) "Nascondi password" else "Mostra password",
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+
+                    if (selectedTab == 1) {
+                        Spacer(Modifier.height(12.dp))
+                        OutlinedTextField(
+                            value = confirmPassword,
+                            onValueChange = { confirmPassword = it },
+                            label = { Text("Conferma password") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(12.dp),
+                            visualTransformation = if (showConfirmPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                            trailingIcon = {
+                                IconButton(onClick = { showConfirmPassword = !showConfirmPassword }) {
+                                    Icon(
+                                        imageVector = if (showConfirmPassword) Icons.Rounded.VisibilityOff else Icons.Rounded.Visibility,
+                                        contentDescription = if (showConfirmPassword) "Nascondi password" else "Mostra password",
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Spacer(Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            if (selectedTab == 0) {
+                                viewModel.signIn(email, password)
+                            } else {
+                                if (password == confirmPassword) {
+                                    viewModel.signUp(email, password)
+                                } else {
+                                    viewModel.setError("Le password non coincidono")
+                                }
+                            }
+                        },
+                        enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        } else {
+                            Text(if (selectedTab == 0) "Accedi" else "Crea account")
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        HorizontalDivider(modifier = Modifier.weight(1f))
+                        Text(
+                            text = "  oppure  ",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        HorizontalDivider(modifier = Modifier.weight(1f))
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    OutlinedButton(
+                        onClick = {
+                            val activity = context.findActivity()
+                            if (activity != null) {
+                                viewModel.signInWithGoogle(activity)
+                            } else {
+                                viewModel.setError("Impossibile avviare l'accesso Google in questo contesto.")
+                            }
+                        },
+                        enabled = !isLoading,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                    ) {
+                        Text("G", fontWeight = FontWeight.Bold)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Continua con Google")
+                    }
+
+                    if (selectedTab == 0) {
+                        Spacer(Modifier.height(8.dp))
+                        TextButton(
+                            onClick = { selectedTab = 1 },
+                            modifier = Modifier.align(Alignment.CenterHorizontally),
+                        ) {
+                            Text("Non hai un account? Registrati")
+                        }
                     }
                 }
 
-                Spacer(Modifier.height(16.dp))
-
-                Row(
+                UgoCard(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    contentPadding = PaddingValues(16.dp),
                 ) {
-                    HorizontalDivider(modifier = Modifier.weight(1f))
+                    TextButton(
+                        onClick = {
+                            if (onBack != null) {
+                                onBack()
+                            } else {
+                                viewModel.continueInLocalMode()
+                            }
+                        },
+                        enabled = !isLoading,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = if (onBack != null) "Continua senza account" else "Continua in locale (senza account)",
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
                     Text(
-                        "  oppure  ",
+                        text = "Analisi, tabelle, ricette, cronologia e BIAS funzionano interamente sul dispositivo senza backend cloud.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    HorizontalDivider(modifier = Modifier.weight(1f))
-                }
-
-                Spacer(Modifier.height(16.dp))
-
-                OutlinedButton(
-                    onClick = {
-                        viewModel.signInWithGoogle(context as android.app.Activity)
-                    },
-                    enabled = !isLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("G")
-                    Spacer(Modifier.width(8.dp))
-                    Text("Continua con Google")
-                }
-
-                if (selectedTab == 0) {
-                    Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { selectedTab = 1 }) {
-                        Text("Non hai un account? Registrati")
-                    }
                 }
             }
         }

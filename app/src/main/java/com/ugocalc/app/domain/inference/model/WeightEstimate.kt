@@ -67,6 +67,12 @@ data class WeightEstimate(
     @Serializable(with = LegacyConfidenceScoreSerializer::class) val confidenza: ConfidenceScore,
     /** Vero se il calcolo ha dovuto ripiegare su un valore di default (densità, peso unitario, capacità) perché non trovato in tabella (§ richiesta utente). */
     val usoDefaultFisico: Boolean = false,
+    /**
+     * Peso crudo geometrico puro calcolato da M3 PRIMA di `biasFactor` e PRIMA del taglio di
+     * `applicaGuardrailBuonSenso`. È la base usata da M8 per il calcolo del bias così la correzione
+     * non si auto-cancella sui pasti già corretti.
+     */
+    @SerialName("peso_crudo_grezzo_g") val pesoCrudoGrezzoG: Double = pesoCrudoG,
 )
 
 /** Intervallo di confidenza sul peso, in grammi. Sempre mostrato, mai nascosto (§9). */

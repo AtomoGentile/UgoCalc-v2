@@ -2,9 +2,12 @@ package com.ugocalc.app.domain.model
 
 import androidx.compose.runtime.Immutable
 import com.ugocalc.app.R
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 
 enum class AiProviderType {
-    OPENAI,
     OPENAI_API,
     ANTHROPIC,
     GEMINI,
@@ -12,10 +15,13 @@ enum class AiProviderType {
     BEDROCK_CLAUDE,
     BEDROCK_GPT,
     // AWS Bedrock Runtime diretto: credenziali IAM (Access Key + Secret + Region), SigV4 signing.
-    // Claude → bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke
-    // GPT   → bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke
+    // Claude → bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke  (formato Anthropic)
+    // GPT   → bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke  (formato OpenAI-compat)
+    // Amazon (Nova ecc.) → bedrock-runtime.{region}.amazonaws.com/model/{modelId}/invoke  (Converse/Native format)
     BEDROCK_IAM_CLAUDE,
     BEDROCK_IAM_GPT,
+    BEDROCK_IAM_AMAZON,
+    VERTEX_AI,
 }
 
 @Immutable
@@ -31,63 +37,248 @@ data class AiModel(
 }
 
 object AiModelCatalog {
-    val STATIC = listOf(
+    private val _catalogVersion = MutableStateFlow(0)
+    val catalogVersion: StateFlow<Int> = _catalogVersion.asStateFlow()
+
+    val DEFAULT_ANTHROPIC_MODELS: List<AiModel> = listOf(
         AiModel(
-            id = "openai/gpt-4o",
-            provider = AiProviderType.OPENAI,
+            id = "claude-sonnet-4-5-20250929",
+            provider = AiProviderType.ANTHROPIC,
+            displayName = "Claude Sonnet 4.5",
+            subtitle = "Anthropic",
+            logoRes = R.drawable.logoclaude,
+        ),
+        AiModel(
+            id = "claude-haiku-4-5-20251001",
+            provider = AiProviderType.ANTHROPIC,
+            displayName = "Claude Haiku 4.5",
+            subtitle = "Anthropic",
+            logoRes = R.drawable.logoclaude,
+        ),
+        AiModel(
+            id = "claude-opus-4-1-20250805",
+            provider = AiProviderType.ANTHROPIC,
+            displayName = "Claude Opus 4.1",
+            subtitle = "Anthropic",
+            logoRes = R.drawable.logoclaude,
+        ),
+    )
+
+    val DEFAULT_OPENAI_MODELS: List<AiModel> = listOf(
+        AiModel(
+            id = "gpt-4o",
+            provider = AiProviderType.OPENAI_API,
             displayName = "GPT-4o",
-            subtitle = "GitHub Models",
+            subtitle = "OpenAI",
             logoRes = R.drawable.gpt,
         ),
         AiModel(
-            id = "claude-sonnet-5",
-            provider = AiProviderType.ANTHROPIC,
-            displayName = "Sonnet 5",
-            subtitle = "Anthropic",
-            logoRes = R.drawable.logoclaude,
+            id = "gpt-4o-mini",
+            provider = AiProviderType.OPENAI_API,
+            displayName = "GPT-4o mini",
+            subtitle = "OpenAI",
+            logoRes = R.drawable.gpt,
         ),
         AiModel(
-            id = "claude-opus-4-8",
-            provider = AiProviderType.ANTHROPIC,
-            displayName = "Opus 4.8",
-            subtitle = "Anthropic",
-            logoRes = R.drawable.logoclaude,
+            id = "gpt-4.1",
+            provider = AiProviderType.OPENAI_API,
+            displayName = "GPT-4.1",
+            subtitle = "OpenAI",
+            logoRes = R.drawable.gpt,
         ),
         AiModel(
-            id = "claude-fable-5",
-            provider = AiProviderType.ANTHROPIC,
-            displayName = "Fable 5",
-            subtitle = "Anthropic",
-            logoRes = R.drawable.logoclaude,
+            id = "gpt-4.1-mini",
+            provider = AiProviderType.OPENAI_API,
+            displayName = "GPT-4.1 mini",
+            subtitle = "OpenAI",
+            logoRes = R.drawable.gpt,
         ),
+    )
+
+    val DEFAULT_GEMINI_MODELS: List<AiModel> = listOf(
         AiModel(
-            id = "gemini-3.1-pro",
+            id = "gemini-2.5-flash",
             provider = AiProviderType.GEMINI,
-            displayName = "Gemini 3.1 Pro",
+            displayName = "Gemini 2.5 Flash",
+            subtitle = "Google",
+            logoRes = R.drawable.logogemini,
+        ),
+        AiModel(
+            id = "gemini-2.5-pro",
+            provider = AiProviderType.GEMINI,
+            displayName = "Gemini 2.5 Pro",
+            subtitle = "Google",
+            logoRes = R.drawable.logogemini,
+        ),
+        AiModel(
+            id = "gemini-2.5-flash-lite",
+            provider = AiProviderType.GEMINI,
+            displayName = "Gemini 2.5 Flash Lite",
             subtitle = "Google",
             logoRes = R.drawable.logogemini,
         ),
     )
 
-    val ALL: List<AiModel> get() = STATIC + BEDROCK_MANTLE_OPTIONS + BEDROCK_IAM_OPTIONS
+    val DEFAULT_VERTEX_MODELS: List<AiModel> = listOf(
+        AiModel(
+            id = "gemini-2.5-flash",
+            provider = AiProviderType.VERTEX_AI,
+            displayName = "Gemini 2.5 Flash",
+            subtitle = "Vertex AI",
+            logoRes = R.drawable.logogemini,
+        ),
+        AiModel(
+            id = "gemini-2.5-pro",
+            provider = AiProviderType.VERTEX_AI,
+            displayName = "Gemini 2.5 Pro",
+            subtitle = "Vertex AI",
+            logoRes = R.drawable.logogemini,
+        ),
+    )
 
-    private var bedrockModels: List<AiModel> = emptyList()
-    private var iamModels: List<AiModel> = emptyList()
+    val STATIC: List<AiModel> = DEFAULT_ANTHROPIC_MODELS + DEFAULT_OPENAI_MODELS + DEFAULT_VERTEX_MODELS
+
+    @Volatile private var anthropicModels: List<AiModel> = emptyList()
+    @Volatile private var openAiModels: List<AiModel> = emptyList()
+    @Volatile private var geminiModels: List<AiModel> = emptyList()
+    @Volatile private var bedrockModels: List<AiModel> = emptyList()
+    @Volatile private var iamModels: List<AiModel> = emptyList()
+
+    val ALL: List<AiModel>
+        get() = (anthropicModels.ifEmpty { DEFAULT_ANTHROPIC_MODELS }) +
+            (openAiModels.ifEmpty { DEFAULT_OPENAI_MODELS }) +
+            (geminiModels.ifEmpty { DEFAULT_GEMINI_MODELS }) +
+            DEFAULT_VERTEX_MODELS +
+            bedrockModels +
+            iamModels
 
     val BEDROCK_MANTLE_OPTIONS: List<AiModel> get() = bedrockModels
     val BEDROCK_IAM_OPTIONS: List<AiModel> get() = iamModels
 
+    fun setAnthropicModels(modelIds: List<String>) {
+        anthropicModels = modelIds.distinct().map { id ->
+            AiModel(
+                id = id,
+                provider = AiProviderType.ANTHROPIC,
+                displayName = anthropicDisplayName(id),
+                subtitle = "Anthropic",
+                logoRes = R.drawable.logoclaude,
+            )
+        }
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun clearAnthropicModels() {
+        anthropicModels = emptyList()
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun setOpenAiModels(modelIds: List<String>) {
+        openAiModels = modelIds.distinct().map { id ->
+            AiModel(
+                id = id,
+                provider = AiProviderType.OPENAI_API,
+                displayName = openAiDisplayName(id),
+                subtitle = "OpenAI",
+                logoRes = R.drawable.gpt,
+            )
+        }
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun clearOpenAiModels() {
+        openAiModels = emptyList()
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun setGeminiModels(modelIds: List<String>) {
+        geminiModels = modelIds.distinct().map { id ->
+            AiModel(
+                id = id,
+                provider = AiProviderType.GEMINI,
+                displayName = geminiDisplayName(id),
+                subtitle = "Google",
+                logoRes = R.drawable.logogemini,
+            )
+        }
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun clearGeminiModels() {
+        geminiModels = emptyList()
+        _catalogVersion.update { it + 1 }
+    }
+
+    private fun anthropicDisplayName(id: String): String {
+        val stripped = id.replace(Regex("-\\d{8}$"), "")
+        val parts = stripped.split("-").filter { it.isNotEmpty() }
+        val merged = mutableListOf<String>()
+        for (part in parts) {
+            if (merged.isNotEmpty() && merged.last().all { it.isDigit() || it == '.' } && part.all { it.isDigit() }) {
+                merged[merged.lastIndex] = merged.last() + "." + part
+            } else {
+                merged.add(part)
+            }
+        }
+        return merged.joinToString(" ") { part ->
+            if (part.first().isDigit()) part else part.replaceFirstChar { it.uppercase() }
+        }.ifBlank { id }
+    }
+
+    private fun openAiDisplayName(id: String): String {
+        val lower = id.lowercase()
+        return when {
+            lower == "gpt-4o" -> "GPT-4o"
+            lower == "gpt-4o-mini" -> "GPT-4o mini"
+            lower.startsWith("gpt-") -> {
+                val rest = id.removePrefix("gpt-").removePrefix("GPT-")
+                val parts = rest.split("-").filter { it.isNotEmpty() }
+                if (parts.isEmpty()) "GPT"
+                else "GPT-${parts.first()}" + if (parts.size > 1) " " + parts.drop(1).joinToString(" ") else ""
+            }
+            else -> id.split("-").filter { it.isNotEmpty() }.joinToString(" ") { part ->
+                if (part.first().isDigit()) part else part.replaceFirstChar { it.uppercase() }
+            }.ifBlank { id }
+        }
+    }
+
+    private fun geminiDisplayName(id: String): String {
+        // e.g. "gemini-2.5-pro" → "Gemini 2.5 Pro", "gemini-2.5-flash-preview-05-20" → "Gemini 2.5 Flash Preview 05-20"
+        return id
+            .removePrefix("models/")
+            .split("-")
+            .filter { it.isNotEmpty() }
+            .joinToString(" ") { part ->
+                // Keep numeric parts as-is (e.g. "2.5", "05"), capitalize words
+                if (part.first().isDigit()) part else part.replaceFirstChar { it.uppercase() }
+            }
+            .ifBlank { id }
+    }
+
     fun setBedrockModels(modelIds: List<String>) {
         bedrockModels = modelIds.map { bedrockModelFrom(it) }
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun clearBedrockModels() {
+        bedrockModels = emptyList()
+        _catalogVersion.update { it + 1 }
     }
 
     fun setBedrockIamModels(modelIds: List<String>) {
         iamModels = modelIds.map { bedrockModelFrom(it, iam = true) }
+        _catalogVersion.update { it + 1 }
+    }
+
+    fun clearBedrockIamModels() {
+        iamModels = emptyList()
+        _catalogVersion.update { it + 1 }
     }
 
     fun bedrockModelFrom(modelId: String, iam: Boolean = false): AiModel {
-        // Estrai model ID da ARN inference profile se necessario
-        val actualModelId = if (modelId.startsWith("arn:aws:bedrock:")) {
+        // For IAM clients, preserve the full inference profile ARN since Bedrock Runtime requires it.
+        // For Mantle clients, extract the model ID for display and API calls.
+        val actualModelId = if (!iam && modelId.startsWith("arn:aws:bedrock:")) {
             modelId.substringAfterLast("/")
         } else {
             modelId
@@ -95,25 +286,26 @@ object AiModelCatalog {
 
         val isGpt = actualModelId.startsWith("openai.") || actualModelId.contains("gpt", ignoreCase = true)
         val isClaude = actualModelId.startsWith("anthropic.") || actualModelId.contains("claude", ignoreCase = true)
-        val isMeta = actualModelId.startsWith("meta.")
-        val isAmazon = actualModelId.startsWith("amazon.")
-        val isMistral = actualModelId.startsWith("mistral.")
-        val isCohere = actualModelId.startsWith("cohere.")
-        val isAi21 = actualModelId.startsWith("ai21.")
-        val isDeepSeek = actualModelId.startsWith("deepseek.")
-        val isQwen = actualModelId.startsWith("qwen.")
+        val isMeta = actualModelId.startsWith("meta.") || actualModelId.contains("llama", ignoreCase = true)
+        val isAmazon = actualModelId.startsWith("amazon.") || actualModelId.contains("nova", ignoreCase = true)
+        val isMistral = actualModelId.startsWith("mistral.") || actualModelId.contains("mistral", ignoreCase = true)
+        val isCohere = actualModelId.startsWith("cohere.") || actualModelId.contains("pegasus", ignoreCase = true) || actualModelId.contains("command", ignoreCase = true) || actualModelId.contains("rerank", ignoreCase = true)
+        val isAi21 = actualModelId.startsWith("ai21.") || actualModelId.contains("jamba", ignoreCase = true)
+        val isDeepSeek = actualModelId.startsWith("deepseek.") || actualModelId.contains("deepseek", ignoreCase = true)
+        val isQwen = actualModelId.startsWith("qwen.") || actualModelId.contains("qwen", ignoreCase = true)
         val isKimi = actualModelId.startsWith("moonshot.") || actualModelId.startsWith("kimi.") || actualModelId.contains("kimi", ignoreCase = true)
         val isZhipu = actualModelId.startsWith("zhipu.") || actualModelId.contains("glm", ignoreCase = true)
-        val isMinimax = actualModelId.startsWith("minimax.")
-        val isNvidia = actualModelId.startsWith("nvidia.")
-        val isWriter = actualModelId.startsWith("writer.")
+        val isMinimax = actualModelId.startsWith("minimax.") || actualModelId.contains("minimax", ignoreCase = true)
+        val isNvidia = actualModelId.startsWith("nvidia.") || actualModelId.contains("nemotron", ignoreCase = true)
+        val isWriter = actualModelId.startsWith("writer.") || actualModelId.contains("palmyra", ignoreCase = true)
         val isTwelveLabs = actualModelId.startsWith("twelvelabs.")
-        val isGemma = actualModelId.startsWith("google.") && actualModelId.contains("gemma")
+        val isGemma = (actualModelId.startsWith("google.") && actualModelId.contains("gemma")) || actualModelId.contains("gemma", ignoreCase = true)
         val isXai = actualModelId.contains("grok", ignoreCase = true) || actualModelId.contains("voxtral", ignoreCase = true)
 
         val provider = when {
+            iam && isClaude -> AiProviderType.BEDROCK_IAM_CLAUDE
             iam && isGpt -> AiProviderType.BEDROCK_IAM_GPT
-            iam -> AiProviderType.BEDROCK_IAM_CLAUDE
+            iam -> AiProviderType.BEDROCK_IAM_AMAZON  // Converse API: Amazon, Llama, Mistral, ecc.
             isGpt -> AiProviderType.BEDROCK_GPT
             else -> AiProviderType.BEDROCK_CLAUDE
         }
@@ -184,7 +376,7 @@ object AiModelCatalog {
         val subtitle = if (iam) "Bedrock IAM" else "Bedrock Mantle"
 
         return AiModel(
-            id = modelId,
+            id = actualModelId,
             provider = provider,
             displayName = displayName,
             subtitle = subtitle,

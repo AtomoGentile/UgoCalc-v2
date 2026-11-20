@@ -81,6 +81,8 @@ class BackupRepository @Inject constructor(
                 groundTruthPesiJson = it.groundTruthPesiJson,
                 groundTruthLivello = it.groundTruthLivello,
                 sessionId = it.sessionId,
+                failureReason = it.failureReason,
+                clientId = it.clientId,
             )
         }
 
@@ -93,7 +95,10 @@ class BackupRepository @Inject constructor(
                 widthCm = it.widthCm,
                 heightCm = it.heightCm,
                 capacityMl = it.capacityMl,
+                plateShapeType = it.plateShapeType,
+                plateBottomDiameterCm = it.plateBottomDiameterCm,
                 imagePath = it.imagePath,
+                clientId = it.clientId,
             )
         }
 
@@ -246,6 +251,8 @@ class BackupRepository @Inject constructor(
                     groundTruthPesiJson = it.groundTruthPesiJson,
                     groundTruthLivello = it.groundTruthLivello,
                     sessionId = it.sessionId,
+                    failureReason = it.failureReason,
+                    clientId = it.clientId,
                 ),
             )
         }
@@ -261,7 +268,10 @@ class BackupRepository @Inject constructor(
                     widthCm = it.widthCm,
                     heightCm = it.heightCm,
                     capacityMl = it.capacityMl,
+                    plateShapeType = it.plateShapeType,
+                    plateBottomDiameterCm = it.plateBottomDiameterCm,
                     imagePath = it.imagePath,
+                    clientId = it.clientId,
                 ),
             )
         }

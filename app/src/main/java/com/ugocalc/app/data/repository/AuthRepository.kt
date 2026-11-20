@@ -2,6 +2,7 @@ package com.ugocalc.app.data.repository
 
 import android.app.Activity
 import android.content.Context
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -37,11 +38,17 @@ class AuthRepository @Inject constructor(
         val USER_EMAIL = stringPreferencesKey("user_email")
         val ACCESS_TOKEN = stringPreferencesKey("access_token")
         val LOGGED_IN = stringPreferencesKey("logged_in")
+        val LOCAL_MODE = booleanPreferencesKey("local_mode")
     }
 
     val isLoggedInFlow: Flow<Boolean> = context.dataStore.data
         .map { preferences ->
             preferences[PreferencesKeys.LOGGED_IN]?.toBooleanStrictOrNull() ?: false
+        }
+
+    val isLocalModeFlow: Flow<Boolean> = context.dataStore.data
+        .map { preferences ->
+            preferences[PreferencesKeys.LOCAL_MODE] ?: false
         }
 
     val currentUserFlow: Flow<AuthUser?> = context.dataStore.data
@@ -103,8 +110,20 @@ class AuthRepository @Inject constructor(
         return result
     }
 
+    suspend fun enableLocalMode() {
+        runCatching { cloudSyncQueueDao.deleteByUserId(CloudSyncManager.DEFAULT_USER_ID) }
+        context.dataStore.edit { preferences ->
+            preferences[PreferencesKeys.LOCAL_MODE] = true
+        }
+    }
+
     suspend fun getCurrentUser(): AuthUser? {
-        return CognitoAuthManager.getCurrentUser()
+        val user = runCatching { CognitoAuthManager.getCurrentUser() }.getOrNull()
+        if (user != null && user.accessToken.isNotEmpty()) {
+            // Aggiorna la cache locale se abbiamo un token fresco
+            saveUser(user)
+        }
+        return user
     }
 
     private suspend fun saveUser(user: AuthUser) {
@@ -114,6 +133,7 @@ class AuthRepository @Inject constructor(
             preferences[PreferencesKeys.USER_EMAIL] = user.email
             preferences[PreferencesKeys.ACCESS_TOKEN] = user.accessToken
             preferences[PreferencesKeys.LOGGED_IN] = "true"
+            preferences[PreferencesKeys.LOCAL_MODE] = false
         }
         scheduleInferencePull()
     }

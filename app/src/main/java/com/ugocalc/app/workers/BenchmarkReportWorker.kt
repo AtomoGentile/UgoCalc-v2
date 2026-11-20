@@ -13,8 +13,8 @@ import androidx.hilt.work.HiltWorker
 
 @HiltWorker
 class BenchmarkReportWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted params: WorkerParameters,
+    @Assisted private val appContext: Context,
+    @Assisted private val params: WorkerParameters,
     private val benchmarkRepository: BenchmarkRepository,
     private val settingsRepository: SettingsRepository,
 ) : CoroutineWorker(appContext, params) {

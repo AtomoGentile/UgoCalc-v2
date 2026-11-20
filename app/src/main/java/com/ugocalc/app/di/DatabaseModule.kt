@@ -18,10 +18,15 @@ import com.ugocalc.app.data.local.db.MIGRATION_17_18
 import com.ugocalc.app.data.local.db.MIGRATION_18_19
 import com.ugocalc.app.data.local.db.MIGRATION_19_20
 import com.ugocalc.app.data.local.db.MIGRATION_20_21
+import com.ugocalc.app.data.local.db.MIGRATION_21_22
+import com.ugocalc.app.data.local.db.MIGRATION_22_23
+import com.ugocalc.app.data.local.db.MIGRATION_23_24
+import com.ugocalc.app.data.local.db.MIGRATION_24_25
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.dao.CloudSyncQueueDao
 import com.ugocalc.app.data.local.db.dao.BenchmarkMealDao
 import com.ugocalc.app.data.local.db.dao.BiasCorrectionDao
+import com.ugocalc.app.data.local.db.dao.CostTransactionDao
 import com.ugocalc.app.data.local.db.dao.FavoriteShortcutDao
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
@@ -49,7 +54,8 @@ object DatabaseModule {
                 MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5,
                 MIGRATION_5_6, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9,
                 MIGRATION_9_10, MIGRATION_14_15, MIGRATION_16_17, MIGRATION_17_18,
-                MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21
+                MIGRATION_18_19, MIGRATION_19_20, MIGRATION_20_21, MIGRATION_21_22,
+                MIGRATION_22_23, MIGRATION_23_24, MIGRATION_24_25
             )
             .fallbackToDestructiveMigration()
             .build()
@@ -89,4 +95,7 @@ object DatabaseModule {
 
     @Provides
     fun provideCloudSyncQueueDao(db: AppDatabase): CloudSyncQueueDao = db.cloudSyncQueueDao()
+
+    @Provides
+    fun provideCostTransactionDao(db: AppDatabase): CostTransactionDao = db.costTransactionDao()
 }

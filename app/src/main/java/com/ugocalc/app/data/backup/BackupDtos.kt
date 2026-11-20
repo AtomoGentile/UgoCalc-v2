@@ -52,6 +52,8 @@ data class V2AnalysisRecordDto(
     val groundTruthPesiJson: String?,
     val groundTruthLivello: String?,
     val sessionId: String?,
+    val failureReason: String? = null,
+    val clientId: String? = null,
 )
 
 @Serializable
@@ -63,7 +65,10 @@ data class ScaleCalibrationDto(
     val capacityMl: Double? = null,
     val widthCm: Double? = null,
     val heightCm: Double? = null,
+    val plateShapeType: String? = null,
+    val plateBottomDiameterCm: Double? = null,
     val imagePath: String? = null,
+    val clientId: String? = null,
 )
 
 /** [entries] sono le sole righe già normalizzate: il documento originale caricato dall'utente non viene esportato (§17, §7 nota su storedFilePath). */

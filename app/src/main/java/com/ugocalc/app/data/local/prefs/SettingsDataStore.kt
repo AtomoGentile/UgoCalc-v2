@@ -94,6 +94,9 @@ data class UserSettings(
      */
     val v2VisibleModeEnabled: Boolean = false,
     val globalBiasEnabled: Boolean = false,
+    val hasCompletedOnboarding: Boolean = false,
+    val hasSeededStarterTable: Boolean = false,
+    val angleOverlayEnabled: Boolean = false,
 )
 
 @Singleton
@@ -130,6 +133,9 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val ACTIVE_SESSION_MODE = stringPreferencesKey("active_session_mode")
         val V2_VISIBLE_MODE_ENABLED = booleanPreferencesKey("v2_visible_mode_enabled")
         val GLOBAL_BIAS_ENABLED = booleanPreferencesKey("global_bias_enabled")
+        val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
+        val HAS_SEEDED_STARTER_TABLE = booleanPreferencesKey("has_seeded_starter_table")
+        val ANGLE_OVERLAY_ENABLED = booleanPreferencesKey("angle_overlay_enabled")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -164,6 +170,9 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             activeSessionMode = prefs[Keys.ACTIVE_SESSION_MODE]?.let { runCatching { SessionMode.valueOf(it) }.getOrNull() } ?: SessionMode.CASA,
             v2VisibleModeEnabled = prefs[Keys.V2_VISIBLE_MODE_ENABLED] ?: false,
             globalBiasEnabled = prefs[Keys.GLOBAL_BIAS_ENABLED] ?: false,
+            hasCompletedOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
+            hasSeededStarterTable = prefs[Keys.HAS_SEEDED_STARTER_TABLE] ?: false,
+            angleOverlayEnabled = prefs[Keys.ANGLE_OVERLAY_ENABLED] ?: false,
         )
     }.distinctUntilChanged()
 
@@ -241,6 +250,12 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.V2_VISIBLE_MODE_ENABLED] = enabled }
     suspend fun setGlobalBiasEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.GLOBAL_BIAS_ENABLED] = enabled }
+    suspend fun setHasCompletedOnboarding(completed: Boolean) =
+        context.dataStore.edit { it[Keys.HAS_COMPLETED_ONBOARDING] = completed }
+    suspend fun setHasSeededStarterTable(seeded: Boolean) =
+        context.dataStore.edit { it[Keys.HAS_SEEDED_STARTER_TABLE] = seeded }
+    suspend fun setAngleOverlayEnabled(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.ANGLE_OVERLAY_ENABLED] = enabled }
 
     suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }

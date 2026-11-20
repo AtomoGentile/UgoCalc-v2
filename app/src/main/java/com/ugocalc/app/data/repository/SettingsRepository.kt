@@ -47,6 +47,9 @@ class SettingsRepository @Inject constructor(
     suspend fun setActiveSessionMode(mode: SessionMode) = dataStore.setActiveSessionMode(mode)
     suspend fun setV2VisibleModeEnabled(enabled: Boolean) = dataStore.setV2VisibleModeEnabled(enabled)
     suspend fun setGlobalBiasEnabled(enabled: Boolean) = dataStore.setGlobalBiasEnabled(enabled)
+    suspend fun setHasCompletedOnboarding(completed: Boolean) = dataStore.setHasCompletedOnboarding(completed)
+    suspend fun setHasSeededStarterTable(seeded: Boolean) = dataStore.setHasSeededStarterTable(seeded)
+    suspend fun setAngleOverlayEnabled(enabled: Boolean) = dataStore.setAngleOverlayEnabled(enabled)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)
@@ -65,6 +68,15 @@ class SettingsRepository @Inject constructor(
     fun setBedrockAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockAvailableModels(modelIds)
     fun getBedrockIamAvailableModels(): List<String> = apiKeyStore.getBedrockIamAvailableModels()
     fun setBedrockIamAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockIamAvailableModels(modelIds)
+    fun getGeminiAvailableModels(): List<String> = apiKeyStore.getGeminiAvailableModels()
+    fun setGeminiAvailableModels(modelIds: List<String>) = apiKeyStore.setGeminiAvailableModels(modelIds)
+    fun clearGeminiAvailableModels() = apiKeyStore.clearGeminiAvailableModels()
+    fun getOpenAiAvailableModels(): List<String> = apiKeyStore.getOpenAiAvailableModels()
+    fun setOpenAiAvailableModels(modelIds: List<String>) = apiKeyStore.setOpenAiAvailableModels(modelIds)
+    fun clearOpenAiAvailableModels() = apiKeyStore.clearOpenAiAvailableModels()
+    fun getAnthropicAvailableModels(): List<String> = apiKeyStore.getAnthropicAvailableModels()
+    fun setAnthropicAvailableModels(modelIds: List<String>) = apiKeyStore.setAnthropicAvailableModels(modelIds)
+    fun clearAnthropicAvailableModels() = apiKeyStore.clearAnthropicAvailableModels()
 
     // ── AWS Bedrock Runtime IAM credentials ────────────────────────────────────
     fun getBedrockIamAccessKey(): String? = apiKeyStore.getBedrockIamAccessKey()
@@ -76,12 +88,18 @@ class SettingsRepository @Inject constructor(
     fun clearBedrockIamCredentials() = apiKeyStore.clearBedrockIamCredentials()
     fun hasBedrockIamCredentials(): Boolean = apiKeyStore.hasBedrockIamCredentials()
 
+    // ── Google Vertex AI credentials ────────────────────────────────────────────
+    fun getVertexAiProjectId(): String? = apiKeyStore.getVertexAiProjectId()
+    fun getVertexAiRegion(): String = apiKeyStore.getVertexAiRegion()
+    fun setVertexAiCredentials(projectId: String, region: String) =
+        apiKeyStore.setVertexAiCredentials(projectId, region)
+    fun clearVertexAiCredentials() = apiKeyStore.clearVertexAiCredentials()
+    fun hasVertexAiCredentials(): Boolean = apiKeyStore.hasVertexAiCredentials()
+
     /** Resetta tutte le impostazioni ai valori di default e rimuove le API key salvate. */
     suspend fun resetAll() {
         dataStore.clearAll()
-        AiProviderType.entries.forEach { apiKeyStore.clearApiKey(it) }
-        apiKeyStore.clearBedrockCredentials()
-        apiKeyStore.clearBedrockIamCredentials()
+        apiKeyStore.clearAll()
     }
 }
 

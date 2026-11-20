@@ -33,6 +33,7 @@ enum class GroundTruthLevel(val jsonValue: String) {
 @Singleton
 class V2TelemetryRepository @Inject constructor(
     private val dao: V2AnalysisRecordDao,
+    private val benchmarkDao: com.ugocalc.app.data.local.db.dao.BenchmarkMealDao,
     private val json: Json,
     private val cloudSyncManager: CloudSyncManager,
     private val cloudSyncClient: CloudSyncClient,
@@ -56,7 +57,9 @@ class V2TelemetryRepository @Inject constructor(
             sessionId = sessionId,
             clientId = UUID.randomUUID().toString(),
         )
-        return dao.insert(entity)
+        val id = dao.insert(entity)
+        sync(entity.copy(id = id))
+        return id
     }
 
     /** Registra un tentativo V2 fallito prima del completamento (NessunaFotoValida, FallbackAV1, SchemaNonSupportato, eccezione). Usato dalla shadow mode per tenere il conteggio allineato con la cronologia. */
@@ -77,8 +80,22 @@ class V2TelemetryRepository @Inject constructor(
             nutritionReportJson = "",
             sessionId = sessionId,
             failureReason = reason,
+            clientId = UUID.randomUUID().toString(),
         )
-        return dao.insert(entity)
+        val id = dao.insert(entity)
+        sync(entity.copy(id = id))
+        return id
+    }
+
+    private suspend fun sync(record: V2AnalysisRecordEntity) {
+        try {
+            cloudSyncManager.enqueue(
+                eventType = CloudSyncEventType.INFERENCE,
+                payloadJson = json.encodeToString(record),
+            )
+        } catch (_: Exception) {
+            // Failure should not prevent local save
+        }
     }
 
     /** Analisi V2 ancora senza ground truth: la lista che l'utente può scegliere di correggere con un peso vero (§13 punto 3). */
@@ -97,20 +114,33 @@ class V2TelemetryRepository @Inject constructor(
 
     /** Correzione manuale o peso vero pesato per uno o più alimenti di un'analisi già salvata. Nessun effetto se [recordId] non esiste più (es. cronologia già ripulita). Dopo il salvataggio pusha l'evento INFERENCE per la sync cross-device. */
     suspend fun recordGroundTruth(recordId: Long, pesiG: Map<String, Double>, livello: GroundTruthLevel) {
-        val record = dao.getById(recordId) ?: return
-        val updated = record.copy(
-            groundTruthPesiJson = json.encodeToString(pesiG),
-            groundTruthLivello = livello.jsonValue,
-        )
-        dao.update(updated)
-        cloudSyncManager.enqueue(
-            eventType = CloudSyncEventType.INFERENCE,
-            payloadJson = json.encodeToString(updated),
-        )
+        try {
+            val record = dao.getById(recordId) ?: return
+            val updated = record.copy(
+                groundTruthPesiJson = json.encodeToString(pesiG),
+                groundTruthLivello = livello.jsonValue,
+            )
+            dao.update(updated)
+            sync(updated)
+        } catch (_: Exception) {
+            // Log but don't crash
+        }
     }
 
     suspend fun deleteRecord(id: Long) {
+        val record = dao.getById(id)
         dao.deleteById(id)
+        record?.sessionId?.let { benchmarkDao.deleteById(it) }
+    }
+
+    suspend fun deleteBySessionId(sessionId: String) {
+        dao.deleteBySessionId(sessionId)
+        benchmarkDao.deleteById(sessionId)
+    }
+
+    suspend fun deleteAll() {
+        dao.deleteAll()
+        benchmarkDao.deleteAll()
     }
 
     /**

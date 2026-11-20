@@ -1,6 +1,7 @@
 package com.ugocalc.app.data.remote.ai.dto
 
 import com.ugocalc.app.domain.model.Confidence
+import com.ugocalc.app.domain.model.ConfidenceScore
 import com.ugocalc.app.domain.model.DiscardedRow
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.MatchingResult
@@ -17,13 +18,16 @@ import kotlinx.serialization.Serializable
 data class VisionAnalysisDto(
     val alimenti: List<RecognizedFood>,
     @SerialName("confidenza_globale") val confidenzaGlobale: Confidence,
+    @SerialName("confidenza_globale_peso") val confidenzaGlobalePeso: Int? = null,
     @SerialName("fattori_incertezza") val fattoriIncertezza: List<String> = emptyList(),
     val avvertenze: String = ""
 )
 
 fun VisionAnalysisDto.toDomain() = VisionAnalysisResult(
     alimenti = alimenti,
+    ragionamento = "",
     confidenzaGlobale = confidenzaGlobale,
+    confidenzaGlobalePeso = confidenzaGlobalePeso?.let { ConfidenceScore(it) },
     fattoriIncertezza = fattoriIncertezza,
     avvertenze = avvertenze
 )

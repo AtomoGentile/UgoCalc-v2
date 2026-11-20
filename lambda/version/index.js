@@ -19,9 +19,9 @@ exports.handler = async () => {
 
   if (!result.Item) {
     return response(200, {
-      latestVersion: '2.4.0',
-      minRequiredVersion: '2.4.0',
-      changelog: '',
+      latestVersion: '3.0.4',
+      minRequiredVersion: '3.0.4',
+      changelog: 'Account sharing fixes and performance improvements.',
       apkUrl: '',
       mandatory: false,
     });
@@ -29,9 +29,9 @@ exports.handler = async () => {
 
   const item = unmarshall(result.Item);
   return response(200, {
-    latestVersion: item.latestVersion ?? '2.4.0',
-    minRequiredVersion: item.minRequiredVersion ?? '2.4.0',
-    changelog: item.changelog ?? '',
+    latestVersion: '3.0.4', // Override forced as per request
+    minRequiredVersion: item.minRequiredVersion ?? '3.0.4',
+    changelog: item.changelog ?? 'Account sharing fixes and performance improvements.',
     apkUrl: item.apkUrl ?? '',
     mandatory: item.mandatory ?? false,
   });

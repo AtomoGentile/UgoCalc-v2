@@ -38,12 +38,14 @@ private class FakeAnalysisHistoryDao : AnalysisHistoryDao {
     override fun observeAll(): Flow<List<AnalysisHistoryEntity>> = MutableStateFlow(rows)
     override fun observeByMode(mode: String): Flow<List<AnalysisHistoryEntity>> = MutableStateFlow(rows.filter { it.sessionMode == mode })
     override suspend fun getById(id: Long): AnalysisHistoryEntity? = rows.firstOrNull { it.id == id }
+    override suspend fun getBySessionId(sessionId: String): AnalysisHistoryEntity? = rows.firstOrNull { it.sessionId == sessionId }
     override suspend fun getAllOnce(): List<AnalysisHistoryEntity> = rows.toList()
     override suspend fun insert(entity: AnalysisHistoryEntity): Long {
         val id = nextId++
         rows += entity.copy(id = id)
         return id
     }
+    override suspend fun deleteById(id: Long) { rows.removeAll { it.id == id } }
     override suspend fun clearAll() { rows.clear() }
 }
 
@@ -144,6 +146,9 @@ private class BackupFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
         rows.values.firstOrNull { it.clientId == clientId }
     override suspend fun deleteAll() { rows.clear() }
     override suspend fun deleteById(id: Long) { rows.remove(id) }
+    override suspend fun deleteBySessionId(sessionId: String) {
+        rows.values.removeAll { it.sessionId == sessionId }
+    }
 }
 
 private class FakeScaleCalibrationDao : ScaleCalibrationDao {
@@ -152,9 +157,15 @@ private class FakeScaleCalibrationDao : ScaleCalibrationDao {
     override suspend fun getAllOnce(): List<ScaleCalibrationEntity> = rows.toList()
     override suspend fun getByType(type: String, sessionMode: String): List<ScaleCalibrationEntity> = emptyList()
     override suspend fun getById(id: Long): ScaleCalibrationEntity? = rows.firstOrNull { it.id == id }
+    override suspend fun getByClientId(clientId: String): ScaleCalibrationEntity? = rows.firstOrNull { it.clientId == clientId }
     override suspend fun insert(calibration: ScaleCalibrationEntity): Long {
         rows.add(calibration)
         return calibration.id
+    }
+    override suspend fun insertIfAbsent(calibration: ScaleCalibrationEntity): Long {
+        val cid = calibration.clientId
+        if (cid != null && rows.any { it.clientId == cid }) return -1L
+        return insert(calibration)
     }
     override suspend fun deleteById(id: Long) { rows.removeAll { it.id == id } }
     override suspend fun deleteAll() { rows.clear() }

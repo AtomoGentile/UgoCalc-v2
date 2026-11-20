@@ -7,15 +7,24 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 
 /**
- * Barra in alto nel colore primario *pieno* (§ richiesta utente: "il menù, le impostazioni, i
- * pulsanti... non hanno nessun colore" / "non è chiaro, non assume uno dei colori primario-
- * secondario-terziario"): non un tono "container" derivato (troppo tenue/ambiguo da riconoscere),
- * ma esattamente il colore primario scelto in Impostazioni, così è inequivocabile quale colore
- * riflette. Usata da `TopAppBar` e `CenterAlignedTopAppBar` in tutte le schermate.
+ * Colori puliti abbinati alla superficie per TopAppBar moderne.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ugoTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBarColors(
+    containerColor = MaterialTheme.colorScheme.surface,
+    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+    titleContentColor = MaterialTheme.colorScheme.onSurface,
+    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+)
+
+/**
+ * Variante accentata nel colore primario per TopAppBar ad alto risalto.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ugoAccentTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBarColors(
     containerColor = MaterialTheme.colorScheme.primary,
     scrolledContainerColor = MaterialTheme.colorScheme.primary,
     navigationIconContentColor = MaterialTheme.colorScheme.onPrimary,

@@ -1,13 +1,22 @@
 package com.ugocalc.app.ui.bias
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Card
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.filled.Insights
+import androidx.compose.material.icons.filled.Scale
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -15,66 +24,107 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.repository.EngineStats
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.EmptyStateMessage
+import com.ugocalc.app.ui.components.MacroMetricTile
+import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
+import com.ugocalc.app.ui.components.UgoSectionHeader
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
-import com.ugocalc.app.ui.theme.UgoGrey
+import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.util.Locale
 
 /**
- * Dashboard di confronto V1 vs V2 (piano V2 §10, §12, §13 punto 5): cresce man mano che si
- * registrano pasti pesati con [BenchmarkGroundTruthEntryScreen]. Mostra anche l'esito della
- * decisione automatica ([com.ugocalc.app.data.repository.BenchmarkRepository.evaluatePromotion])
- * che sceglie davvero il motore in produzione — qui è solo trasparenza, il calcolo avviene altrove.
+ * Dashboard di confronto V1 vs V2 (piano V2 §10, §12, §13 punto 5).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BenchmarkDashboardScreen(onBack: () -> Unit, viewModel: BenchmarkDashboardViewModel = hiltViewModel()) {
+fun BenchmarkDashboardScreen(
+    onBack: () -> Unit,
+    viewModel: BenchmarkDashboardViewModel = hiltViewModel(),
+) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(topBar = { TopAppBar(title = { Text("Benchmark V1 vs V2") }, navigationIcon = { BackIconButton(onBack) }, colors = ugoTopAppBarColors()) }) { padding ->
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp)) {
-            item {
-                Text(
-                    "Confronto diagnostico tra il motore attuale (V1) e il nuovo motore V2, sugli stessi " +
-                        "pasti a cui hai registrato un peso vero. Il motore mostrato in produzione passa a " +
-                        "V2 automaticamente quando questa dashboard lo indica: nessuno switch manuale.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(vertical = 12.dp),
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Benchmark V1 vs V2") },
+                navigationIcon = { BackIconButton(onBack) },
+                colors = ugoTopAppBarColors(),
+            )
+        },
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier.fillMaxSize().padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            item(key = "promotion_banner") {
+                StatusBanner(
+                    icon = if (uiState.v2Promoted) Icons.Default.Science else Icons.Default.CompareArrows,
+                    title = if (uiState.v2Promoted) {
+                        "Motore in produzione: V2"
+                    } else {
+                        "Motore in produzione: V1"
+                    },
+                    subtitle = if (uiState.v2Promoted) {
+                        "V2 ha superato V1 sul CHO entro il 10%."
+                    } else {
+                        "V2 non ancora migliore o dati insufficienti (${uiState.mealCount}/${uiState.recommendedMinMeals}–${uiState.recommendedMaxMeals} pasti)."
+                    },
+                    tone = if (uiState.v2Promoted) BannerTone.SUCCESS else BannerTone.INFO,
                 )
-                Text(
-                    "Pasti raccolti: ${uiState.mealCount} (consigliati ${uiState.recommendedMinMeals}-${uiState.recommendedMaxMeals})",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                )
-                Text(
-                    if (uiState.v2Promoted) "Motore in produzione: V2 (ha superato V1 sul CHO entro 10%)" else "Motore in produzione: V1 (V2 non ancora migliore, o dati insufficienti)",
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = if (uiState.v2Promoted) MaterialTheme.colorScheme.primary else UgoGrey,
-                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-                )
-                HorizontalDivider()
             }
-            if (uiState.loading) {
-                item { Text("Caricamento...", style = MaterialTheme.typography.bodyMedium, color = UgoGrey, modifier = Modifier.padding(vertical = 16.dp)) }
-            } else if (uiState.mealCount == 0) {
-                item {
+
+            item(key = "summary_card") {
+                UgoCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = PaddingValues(14.dp),
+                ) {
                     Text(
-                        "Nessun pasto con peso vero ancora registrato. Usa \"Benchmark: registra peso vero\" " +
-                            "dopo aver pesato un pasto con la bilancia.",
+                        text = "Confronto diagnostico tra il motore attuale (V1) e il nuovo motore V2 sugli stessi pasti pesati.",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = UgoGrey,
-                        modifier = Modifier.padding(vertical = 16.dp),
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Pasti raccolti: ${uiState.mealCount} (consigliati ${uiState.recommendedMinMeals}–${uiState.recommendedMaxMeals})",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+
+            if (uiState.loading) {
+                item(key = "loading") {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+            } else if (uiState.mealCount == 0) {
+                item(key = "empty") {
+                    EmptyStateMessage(
+                        icon = Icons.Default.Scale,
+                        title = "Nessun pasto pesato",
+                        message = "Usa \"Registra peso vero\" dopo aver pesato un pasto con la bilancia per confrontare V1 e V2.",
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
                     )
                 }
             } else {
-                item {
+                item(key = "v1_stats") {
                     EngineStatsCard("Motore attuale (V1)", uiState.v1)
+                }
+                item(key = "v2_stats") {
                     EngineStatsCard("Motore nuovo (V2)", uiState.v2)
                 }
             }
@@ -84,26 +134,43 @@ fun BenchmarkDashboardScreen(onBack: () -> Unit, viewModel: BenchmarkDashboardVi
 
 @Composable
 private fun EngineStatsCard(titolo: String, stats: EngineStats) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-        Column(modifier = Modifier.padding(12.dp)) {
-            Text(titolo, fontWeight = FontWeight.Bold)
-            Text(
-                "Errore medio peso per alimento: ${formatGrams(stats.weightMaeG)} ${formatErrorPercent(stats.weightMaeG, stats.weightSampleCount)}(${stats.weightSampleCount} alimenti pesati)",
-                style = MaterialTheme.typography.bodySmall,
-                modifier = Modifier.padding(top = 6.dp),
+    UgoCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(16.dp),
+    ) {
+        UgoSectionHeader(
+            title = titolo,
+            subtitle = "${stats.weightSampleCount} alimenti pesati · ${stats.choMealCount} pasti confrontabili",
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MacroMetricTile(
+                label = "MAE peso",
+                value = formatGramsValue(stats.weightMaeG),
+                unit = "g",
+                accentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
             )
-            Text(
-                "CHO entro 10%: ${formatPercent(stats.choWithin10gPercent)} — entro 20%: ${formatPercent(stats.choWithin20gPercent)} (${stats.choMealCount} pasti confrontabili)",
-                style = MaterialTheme.typography.bodySmall,
+            MacroMetricTile(
+                label = "CHO ≤ 10%",
+                value = formatPercentValue(stats.choWithin10gPercent),
+                unit = "%",
+                accentColor = UgoSemanticColors.cho,
+                modifier = Modifier.weight(1f),
+            )
+            MacroMetricTile(
+                label = "CHO ≤ 20%",
+                value = formatPercentValue(stats.choWithin20gPercent),
+                unit = "%",
+                accentColor = UgoSemanticColors.fat,
+                modifier = Modifier.weight(1f),
             )
         }
     }
 }
 
-private fun formatGrams(value: Double?) = "${String.format(Locale.ITALIAN, "%.1f", value ?: 0.0)} g"
-private fun formatPercent(value: Double?) = "${String.format(Locale.ITALIAN, "%.0f", value ?: 0.0)}%"
-private fun formatErrorPercent(weightMaeG: Double?, sampleCount: Int) =
-    if (weightMaeG == null || sampleCount == 0) "" else {
-        val estimatedPercent = (weightMaeG / 200.0 * 100).toInt().coerceIn(0, 100)
-        "($estimatedPercent%) "
-    }
+private fun formatGramsValue(value: Double?) = String.format(Locale.ITALIAN, "%.1f", value ?: 0.0)
+private fun formatPercentValue(value: Double?) = String.format(Locale.ITALIAN, "%.0f", value ?: 0.0)

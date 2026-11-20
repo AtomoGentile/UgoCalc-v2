@@ -61,6 +61,10 @@ private class BiasFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
         rows.remove(id)
     }
 
+    override suspend fun deleteBySessionId(sessionId: String) {
+        rows.entries.removeAll { it.value.sessionId == sessionId }
+    }
+
     override suspend fun getWithGroundTruth(sessionMode: String, aiModelId: String): List<V2AnalysisRecordEntity> =
         rows.values.filter { it.groundTruthPesiJson != null && it.sessionMode == sessionMode && it.aiModelId == aiModelId }
 
@@ -111,14 +115,24 @@ class BiasCorrectionRepositoryTest {
     private val json = Json { ignoreUnknownKeys = true }
     private val modelId = "claude-opus-4.8"
 
-    private fun estimate(nome: String, pesoG: Double, strategia: EstimationStrategy = EstimationStrategy.DISTESA_SUL_PIATTO) = WeightEstimate(
+    private fun estimate(
+        nome: String,
+        pesoG: Double,
+        strategia: EstimationStrategy = EstimationStrategy.DISTESA_SUL_PIATTO,
+        pesoCrudoG: Double = pesoG,
+        pesoCrudoGrezzoG: Double = pesoCrudoG,
+        confidenzaPercent: Int = 90,
+        usoDefaultFisico: Boolean = false,
+    ) = WeightEstimate(
         nome = nome,
         strategia = strategia,
         pesoG = pesoG,
-        pesoCrudoG = pesoG,
-        intervallo = ConfidenceInterval(pesoG * 0.8, pesoG * 1.2),
-        catenaCalcolo = CalculationChain(formula = "test", valori = emptyMap(), fonti = emptyList(), sintesi = "$pesoG g"),
-        confidenza = ConfidenceScore(90),
+        pesoCrudoG = pesoCrudoG,
+        intervallo = ConfidenceInterval(pesoCrudoG * 0.8, pesoCrudoG * 1.2),
+        catenaCalcolo = CalculationChain(formula = "test", valori = emptyMap(), fonti = emptyList(), sintesi = "$pesoCrudoG g"),
+        confidenza = ConfidenceScore(confidenzaPercent),
+        usoDefaultFisico = usoDefaultFisico,
+        pesoCrudoGrezzoG = pesoCrudoGrezzoG,
     )
 
     private fun recordWithGroundTruth(analysisDao: BiasFakeV2AnalysisRecordDao, estimates: List<WeightEstimate>, groundTruth: Map<String, Double>) = runBlocking {
@@ -247,5 +261,86 @@ class BiasCorrectionRepositoryTest {
         assertEquals(0.0, stats.correctedMeanErrorG, 1e-9)
         assertEquals(0.0, stats.correctedMeanAbsoluteErrorG, 1e-9)
         assertEquals(0.0, stats.correctedRootMeanSquaredErrorG, 1e-9)
+    }
+
+    @Test
+    fun `recalculate uses raw pre-bias pesoCrudoGrezzoG so already-corrected meals do not cancel out the bias`() = runBlocking {
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
+        val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
+
+        // M3 grezzo stima sempre 100g, ma era già attivo un fattore 1.20 che ha prodotto pesoCrudoG = 120g
+        // coincidente col ground truth (120g). Senza pesoCrudoGrezzoG il bias si auto-annullerebbe a 1.00!
+        repeat(5) {
+            recordWithGroundTruth(
+                analysisDao,
+                listOf(
+                    estimate(
+                        nome = "riso in bianco",
+                        pesoG = 300.0,
+                        pesoCrudoG = 120.0,
+                        pesoCrudoGrezzoG = 100.0,
+                    )
+                ),
+                mapOf("riso in bianco" to 120.0),
+            )
+        }
+
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+
+        val fattore = repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        assertEquals(1.20, fattore!!, 1e-9)
+
+        val stats = repository.getAllCorrectionsWithUsageStats().single().usageStats!!
+        assertEquals(100.0, stats.meanEstimatedWeightG, 1e-9)
+        assertEquals(120.0, stats.meanCorrectedWeightG, 1e-9)
+    }
+
+    @Test
+    fun `two consistent observations save a damped factor and fallback hierarchically across categories of same strategy and model`() = runBlocking {
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
+        val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
+
+        // Bastano 2 pesate di pasta per attivare il fattore su PASTA (1.0 + (1.20 - 1.0) * 2/5 = 1.08)
+        repeat(2) {
+            recordWithGroundTruth(analysisDao, listOf(estimate("pasta penne", 100.0)), mapOf("pasta penne" to 120.0))
+        }
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.PASTA, consentGiven = true)
+
+        val pastaFactor = repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.PASTA, consentGiven = true)
+        assertEquals(1.08, pastaFactor!!, 1e-9)
+
+        // Fallback gerarchico su RISO_E_CEREALI (stessa strategia + stesso modello, nessuna osservazione di riso ancora):
+        // mediana smorzata al 50% verso 1.0 -> 1.0 + (1.08 - 1.0) * 0.5 = 1.04
+        val riceFallback = repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        assertEquals(1.04, riceFallback!!, 1e-9)
+
+        // Mai mescolare strategie diverse o modelli diversi
+        assertNull(repository.currentFactor(EstimationStrategy.BLOCCO_MISURABILE, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true))
+        assertNull(repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, "altro-modello", FoodCategory.RISO_E_CEREALI, consentGiven = true))
+    }
+
+    @Test
+    fun `low confidence and default-fallback noisy estimates are filtered out when better observations exist`() = runBlocking {
+        val analysisDao = BiasFakeV2AnalysisRecordDao()
+        val biasDao = BiasFakeBiasCorrectionDao()
+        val repository = BiasCorrectionRepository(analysisDao, biasDao, json)
+
+        // 5 stime pulite a 1.20
+        repeat(5) {
+            recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0, confidenzaPercent = 85)), mapOf("riso in bianco" to 120.0))
+        }
+        // 1 stima sotto 45% (da scartare sempre) + 1 stima con default fisico sotto 50% (da scartare perché ci sono stime migliori)
+        recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0, confidenzaPercent = 40)), mapOf("riso in bianco" to 300.0))
+        recordWithGroundTruth(analysisDao, listOf(estimate("riso in bianco", 100.0, confidenzaPercent = 48, usoDefaultFisico = true)), mapOf("riso in bianco" to 250.0))
+
+        repository.recalculate(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+
+        val fattore = repository.currentFactor(EstimationStrategy.DISTESA_SUL_PIATTO, modelId, FoodCategory.RISO_E_CEREALI, consentGiven = true)
+        assertEquals(1.20, fattore!!, 1e-9)
+
+        val stats = repository.getAllCorrectionsWithUsageStats().single().usageStats!!
+        assertEquals(5, stats.observationCount)
     }
 }

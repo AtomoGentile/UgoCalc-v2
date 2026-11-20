@@ -37,3 +37,6 @@ gradle-app.setting
 # Lambda build artifacts
 infra/*.zip
 lambda/node_modules/
+
+# Kotlin
+.kotlin/

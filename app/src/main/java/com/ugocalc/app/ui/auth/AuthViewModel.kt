@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+import javax.inject.Named
 
 sealed class AuthState {
     data object Idle : AuthState()
     data object Loading : AuthState()
     data class Success(val user: AuthUser) : AuthState()
+    data object LocalMode : AuthState()
     data class NeedsConfirmation(val email: String) : AuthState()
     data object ConfirmationComplete : AuthState()
     data class Error(val message: String) : AuthState()
@@ -23,8 +25,11 @@ sealed class AuthState {
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository
+    private val authRepository: AuthRepository,
+    @Named("aws_base_url") awsBaseUrl: String,
 ) : ViewModel() {
+
+    val isAwsConfigured: Boolean = awsBaseUrl.isNotBlank()
 
     private val _authState = MutableStateFlow<AuthState>(AuthState.Idle)
     val authState = _authState.asStateFlow()
@@ -85,6 +90,13 @@ class AuthViewModel @Inject constructor(
             _authState.value = AuthState.Loading
             authRepository.signOut()
             _authState.value = AuthState.Idle
+        }
+    }
+
+    fun continueInLocalMode() {
+        viewModelScope.launch {
+            authRepository.enableLocalMode()
+            _authState.value = AuthState.LocalMode
         }
     }
 

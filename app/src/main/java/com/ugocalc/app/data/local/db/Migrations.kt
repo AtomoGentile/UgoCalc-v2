@@ -231,6 +231,25 @@ val MIGRATION_20_21 = object : Migration(20, 21) {
     }
 }
 
+/** Tracciamento dei costi per API e modelli (M2-M7): nuova tabella `cost_transactions`. */
+val MIGRATION_21_22 = object : Migration(21, 22) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `cost_transactions` (
+                `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                `transactionAtEpochMillis` INTEGER NOT NULL,
+                `stage` TEXT NOT NULL,
+                `modelId` TEXT NOT NULL,
+                `costUsd` REAL NOT NULL,
+                `description` TEXT NOT NULL,
+                `sessionId` TEXT
+            )
+            """.trimIndent()
+        )
+    }
+}
+
 /** CloudSync (Prompt 5): coda offline-first degli eventi da trasmettere al backend AWS. */
 val MIGRATION_16_17 = object : Migration(16, 17) {
     override fun migrate(db: SupportSQLiteDatabase) {
@@ -248,5 +267,24 @@ val MIGRATION_16_17 = object : Migration(16, 17) {
             )
             """.trimIndent()
         )
+    }
+}
+
+/** Risoluzione crash schema mismatch (§ bug fix): forza l'aggiornamento del numero di versione per riallineare gli identity hash. */
+val MIGRATION_22_23 = object : Migration(22, 23) {
+    override fun migrate(db: SupportSQLiteDatabase) {}
+}
+
+/** Risoluzione crash schema mismatch (§ bug fix): forza l'aggiornamento del numero di versione per riallineare gli identity hash. */
+val MIGRATION_23_24 = object : Migration(23, 24) {
+    override fun migrate(db: SupportSQLiteDatabase) {}
+}
+
+/** Risoluzione crash schema mismatch (§ bug fix): aggiunge i campi mancanti su scale_calibrations per allineare lo schema. */
+val MIGRATION_24_25 = object : Migration(24, 25) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE scale_calibrations ADD COLUMN plateShapeType TEXT")
+        db.execSQL("ALTER TABLE scale_calibrations ADD COLUMN plateBottomDiameterCm REAL")
+        db.execSQL("ALTER TABLE scale_calibrations ADD COLUMN clientId TEXT")
     }
 }

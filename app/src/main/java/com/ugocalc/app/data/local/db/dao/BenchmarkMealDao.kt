@@ -29,4 +29,10 @@ interface BenchmarkMealDao {
     /** Pasti con peso vero registrato: la base della dashboard di confronto V1/V2. */
     @Query("SELECT * FROM benchmark_meals WHERE groundTruthPesiJson IS NOT NULL ORDER BY capturedAtEpochMillis DESC")
     suspend fun getAllWithGroundTruth(): List<BenchmarkMealEntity>
+
+    @Query("DELETE FROM benchmark_meals WHERE sessionId = :sessionId")
+    suspend fun deleteById(sessionId: String)
+
+    @Query("DELETE FROM benchmark_meals")
+    suspend fun deleteAll()
 }

@@ -1,5 +1,6 @@
 package com.ugocalc.app.domain.inference.m3
 
+import com.ugocalc.app.domain.inference.m2.StrategyRouter
 import com.ugocalc.app.domain.inference.model.CalculationChain
 import com.ugocalc.app.domain.inference.model.CalculationSource
 import com.ugocalc.app.domain.inference.model.ConfidenceInterval
@@ -40,7 +41,7 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
         val raw = when (strategy) {
             EstimationStrategy.CONTABILE -> countable(food)
             EstimationStrategy.DISTESA_SUL_PIATTO -> spread(food, scale)
-            EstimationStrategy.A_CONTENITORE -> container(food)
+            EstimationStrategy.A_CONTENITORE -> container(food, scale)
             EstimationStrategy.BLOCCO_MISURABILE -> block(food)
             EstimationStrategy.COMPOSTO_OCCLUSO -> composite(food)
             EstimationStrategy.TRASCURABILE -> negligible()
@@ -116,40 +117,115 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
         val m = food.misureGrezze
         val frazione = m.frazionePiatto ?: FALLBACK_FRAZIONE_PIATTO
         val altezza = m.altezzaCm ?: FALLBACK_ALTEZZA_CM
-        val riemp = m.riempimento ?: FALLBACK_RIEMPIMENTO
         val d = scale.plateDiameterCm
         val dens = data.density(food.nome)
-        val area = PI * (d / 2.0) * (d / 2.0)
-        val peso = frazione * area * altezza * riemp * dens.valore
         val fontePiatto = if (scale.plateDiameterIsDefault) "piatto di default" else "ancora piatto"
-        return RawEstimate(
-            pesoG = peso,
-            chain = CalculationChain(
-                formula = "frazione × π·(Ø/2)² × altezza × riempimento × densità",
-                valori = mapOf(
-                    "frazione_piatto" to frazione,
-                    "diametro_piatto_cm" to d,
-                    "altezza_cm" to altezza,
-                    "riempimento" to riemp,
-                    "densità" to dens.valore,
+
+        // Calcolo del volume in base alla forma del piatto
+        val (baseVolume, volumeFormula) = when (scale.plateShapeType.lowercase()) {
+            "conico" -> {
+                val dBottom = scale.plateBottomDiameterCm ?: d
+                val rTop = d / 2.0
+                val rBottom = dBottom / 2.0
+                // Se nota la profondità calibrata del piatto, interpola il raggio superiore effettivo alla quota altezza
+                val rTopEff = if (scale.plateHeightCm != null && scale.plateHeightCm > 0.0) {
+                    val ratio = (altezza / scale.plateHeightCm).coerceIn(0.0, 1.0)
+                    rBottom + (rTop - rBottom) * ratio
+                } else {
+                    rTop
+                }
+                // Volume di tronco di cono moltiplicato per la frazione di piatto occupata
+                val v = frazione * (altezza / 3.0) * PI * (rTopEff * rTopEff + rTopEff * rBottom + rBottom * rBottom)
+                v to "tronco_di_cono"
+            }
+            else -> {
+                // Cilindro (default)
+                val area = PI * (d / 2.0) * (d / 2.0)
+                (frazione * area * altezza) to "cilindro"
+            }
+        }
+
+        val profileFactor = moundProfileFactor(m.profiloCumulo)
+        val volume = baseVolume * profileFactor
+        val profileLabel = if (profileFactor != 1.0) " × profilo(${m.profiloCumulo}=$profileFactor)" else ""
+        val extraValori = if (m.profiloCumulo != null) mapOf("profilo_cumulo_fattore" to profileFactor) else emptyMap()
+        val shapeDesc = if (volumeFormula == "tronco_di_cono") "${pct(frazione)} di piatto conico" else "${pct(frazione)} di piatto"
+
+        // Per densità BULK (pasta, riso, cereali) il valore CREA include già gli spazi d'aria tra i
+        // pezzi: applicare anche "riempimento" conterebbe la porosità due volte.
+        return if (dens.isBulkDensity) {
+            val peso = volume * dens.valore
+            RawEstimate(
+                pesoG = peso,
+                chain = CalculationChain(
+                    formula = when (volumeFormula) {
+                        "tronco_di_cono" -> "frazione × volume_tronco_cono$profileLabel × densità_bulk"
+                        else -> "frazione × π·(Ø/2)² × altezza$profileLabel × densità_bulk"
+                    },
+                    valori = mapOf(
+                        "frazione_piatto" to frazione,
+                        "diametro_piatto_cm" to d,
+                        "altezza_cm" to altezza,
+                        "volume_cm3" to volume,
+                        "densità" to dens.valore,
+                    ) + extraValori,
+                    fonti = listOf(
+                        CalculationSource("densità_bulk", dens.valore, dens.fonte),
+                        CalculationSource("diametro_piatto", d, fontePiatto),
+                    ),
+                    sintesi = "${g(peso)} g — $shapeDesc Ø${g(d)}, alt ${cm(altezza)} cm, ${dens.fonte} (bulk, no riempimento)",
                 ),
-                fonti = listOf(
-                    CalculationSource("densità", dens.valore, dens.fonte),
-                    CalculationSource("diametro_piatto", d, fontePiatto),
+                usoDefaultFisico = dens.isDefault,
+                usoFallbackMisura = (m.frazionePiatto == null) || (m.altezzaCm == null),
+            )
+        } else {
+            val riemp = m.riempimento ?: FALLBACK_RIEMPIMENTO
+            val peso = volume * riemp * dens.valore
+            RawEstimate(
+                pesoG = peso,
+                chain = CalculationChain(
+                    formula = when (volumeFormula) {
+                        "tronco_di_cono" -> "frazione × volume_tronco_cono$profileLabel × riempimento × densità"
+                        else -> "frazione × π·(Ø/2)² × altezza$profileLabel × riempimento × densità"
+                    },
+                    valori = mapOf(
+                        "frazione_piatto" to frazione,
+                        "diametro_piatto_cm" to d,
+                        "altezza_cm" to altezza,
+                        "volume_cm3" to volume,
+                        "riempimento" to riemp,
+                        "densità" to dens.valore,
+                    ) + extraValori,
+                    fonti = listOf(
+                        CalculationSource("densità", dens.valore, dens.fonte),
+                        CalculationSource("diametro_piatto", d, fontePiatto),
+                    ),
+                    sintesi = "${g(peso)} g — $shapeDesc Ø${g(d)}, alt ${cm(altezza)} cm, ${dens.fonte}",
                 ),
-                sintesi = "${g(peso)} g — ${pct(frazione)} di piatto Ø${g(d)}, alt ${cm(altezza)} cm, ${dens.fonte}",
-            ),
-            usoDefaultFisico = dens.isDefault,
-            usoFallbackMisura = (m.frazionePiatto == null) || (m.altezzaCm == null) || (m.riempimento == null),
-        )
+                usoDefaultFisico = dens.isDefault,
+                usoFallbackMisura = (m.frazionePiatto == null) || (m.altezzaCm == null) || (m.riempimento == null),
+            )
+        }
     }
 
-    private fun container(food: PerceivedFood): RawEstimate {
+    /** Fattore geometrico di forma del cumulo rispetto al cilindro circoscritto; null mantiene 1.0 per retrocompatibilità. */
+    private fun moundProfileFactor(profilo: String?): Double = when (profilo?.trim()?.lowercase()) {
+        "cono" -> 0.45
+        "cupola" -> 0.65
+        "piatto" -> 1.0
+        else -> 1.0
+    }
+
+    private fun container(food: PerceivedFood, scale: ScaleContext): RawEstimate {
         val m = food.misureGrezze
-        val cap = data.capacity(m.contenitore ?: "")
+        val cap = resolveContainerCapacity(m, scale)
         val frazione = m.frazioneRiempimento ?: FALLBACK_FRAZIONE_RIEMPIMENTO
         val dens = data.density(food.nome)
         val peso = cap.valore * frazione * dens.valore
+        val hasKnownCapacity = !cap.isDefault && (
+            (m.capacitaContenitoreMl != null && m.capacitaContenitoreMl > 0.0) ||
+                cap.fonte.startsWith("calibrazione")
+            )
         return RawEstimate(
             pesoG = peso,
             chain = CalculationChain(
@@ -166,8 +242,36 @@ class PhysicsEngine(private val data: PhysicalData = PhysicalData.INSTANCE) {
                 sintesi = "${g(peso)} g — ${cap.fonte} ${g(cap.valore)} ml al ${pct(frazione)}, ${dens.fonte}",
             ),
             usoDefaultFisico = cap.isDefault || dens.isDefault,
-            usoFallbackMisura = m.frazioneRiempimento == null || m.contenitore == null,
+            usoFallbackMisura = m.frazioneRiempimento == null || (m.contenitore == null && !hasKnownCapacity),
         )
+    }
+
+    private fun resolveContainerCapacity(
+        m: com.ugocalc.app.domain.inference.model.RawMeasurements,
+        scale: ScaleContext,
+    ): PhysicalValue {
+        m.capacitaContenitoreMl?.takeIf { it > 0.0 }?.let { ml ->
+            return PhysicalValue(ml, "capacità contenitore (M1)", isDefault = false)
+        }
+
+        val contenitore = m.contenitore?.trim().orEmpty()
+        if (contenitore.isNotEmpty() && scale.calibratedCapacitiesByName.isNotEmpty()) {
+            val norm = StrategyRouter.normalize(contenitore)
+            scale.calibratedCapacitiesByName[norm]?.let { ml ->
+                return PhysicalValue(ml, "calibrazione contenitore ($contenitore)", isDefault = false)
+            }
+            scale.calibratedCapacitiesByName.entries
+                .firstOrNull { (k, _) -> k.isNotEmpty() && (norm.contains(k) || k.contains(norm)) }
+                ?.let { (k, ml) ->
+                    return PhysicalValue(ml, "calibrazione contenitore ($k)", isDefault = false)
+                }
+        }
+
+        scale.calibratedCapacityMl?.takeIf { it > 0.0 }?.let { ml ->
+            return PhysicalValue(ml, "calibrazione ancora contenitore", isDefault = false)
+        }
+
+        return data.capacity(contenitore)
     }
 
     private fun block(food: PerceivedFood): RawEstimate {
@@ -319,4 +423,14 @@ data class ScaleContext(
     val plateDiameterCm: Double = PhysicalData.DEFAULT_PLATE_DIAMETER_CM,
     val plateDiameterIsDefault: Boolean = true,
     val quality: Confidence = Confidence.BASSO,
+    /** Forma del piatto: "cilindro" (default) o "conico". */
+    val plateShapeType: String = "cilindro",
+    /** Diametro del fondo del piatto conico in centimetri (ignorato se plateShapeType non è "conico"). */
+    val plateBottomDiameterCm: Double? = null,
+    /** Profondità/altezza calibrata del piatto conico in centimetri, se nota, per interpolare il raggio superiore effettivo. */
+    val plateHeightCm: Double? = null,
+    /** Capacità calibrata in ml dell'ancora scelta (se è un contenitore calibrato). */
+    val calibratedCapacityMl: Double? = null,
+    /** Mappa delle capacità calibrate (nome normalizzato -> ml) disponibili tra le calibrazioni utente. */
+    val calibratedCapacitiesByName: Map<String, Double> = emptyMap(),
 )

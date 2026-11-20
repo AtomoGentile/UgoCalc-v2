@@ -65,12 +65,7 @@ class BiasEvolutionViewModel @Inject constructor(
         _selectedModelId,
         _recordsDisplayLimit
     ) { settings, corrections, allV2, selectedModel, displayLimit ->
-        // Mostra tutti i modelli per cui esistono record, indipendentemente da quali sono
-        // attualmente abilitati: un modello disabilitato in seguito non deve far sparire le
-        // correzioni già calcolate per quel modello dalla vista di trasparenza.
         val availableModelIds = allV2.map { it.aiModelId }.distinct().sorted()
-        // Default = null (Tutti): non pre-selezionare il primo modello per evitare di nascondere
-        // correzioni di modelli diversi dall'attivo, causa del bug "0 analisi".
         val effectiveSelectedModel = selectedModel
 
         val filteredCorrections = if (effectiveSelectedModel != null) {
@@ -88,14 +83,13 @@ class BiasEvolutionViewModel @Inject constructor(
         val availableModels = availableModelIds.mapNotNull { id ->
             com.ugocalc.app.domain.model.AiModelCatalog.ALL.find { it.id == id }
         }
-        val promotion = benchmarkRepository.evaluatePromotion(forceV2 = settings.v2VisibleModeEnabled)
 
         BiasEvolutionUiState(
             loading = false,
             consentGiven = settings.biasDataConsentGiven,
             v2ShadowModeEnabled = settings.v2ShadowModeEnabled,
             v2VisibleModeEnabled = settings.v2VisibleModeEnabled,
-            v2Promoted = promotion.promoteV2,
+            v2Promoted = settings.v2VisibleModeEnabled,
             corrections = filteredCorrections,
             recentV2Records = filteredRecords.take(displayLimit),
             allV2Records = filteredRecords,

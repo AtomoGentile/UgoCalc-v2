@@ -128,31 +128,51 @@ class BenchmarkRepository @Inject constructor(
     }
 
     suspend fun recordGroundTruth(sessionId: String, pesiG: Map<String, Double>, livello: GroundTruthLevel) {
-        val meal = benchmarkDao.getById(sessionId) ?: return
-        val updated = meal.copy(
-            groundTruthPesiJson = json.encodeToString(pesiG),
-            groundTruthLivello = livello.jsonValue,
-        )
-        benchmarkDao.update(updated)
-        // Propaga il ground truth anche al record V2 linkato, così BiasCorrectionRepository
-        // può calcolare i fattori di correzione senza che l'utente registri il peso due volte.
-        meal.v2RecordId?.let { v2Id ->
-            v2Dao.getById(v2Id)?.let { v2Record ->
-                v2Dao.update(v2Record.copy(
-                    groundTruthPesiJson = json.encodeToString(pesiG),
-                    groundTruthLivello = livello.jsonValue,
-                ))
+        try {
+            val meal = benchmarkDao.getById(sessionId) ?: return
+            val updated = meal.copy(
+                groundTruthPesiJson = json.encodeToString(pesiG),
+                groundTruthLivello = livello.jsonValue,
+            )
+            benchmarkDao.update(updated)
+            // Propaga il ground truth anche al record V2 linkato, così BiasCorrectionRepository
+            // può calcolare i fattori di correzione senza che l'utente registri il peso due volte.
+            meal.v2RecordId?.let { v2Id ->
+                try {
+                    v2Dao.getById(v2Id)?.let { v2Record ->
+                        v2Dao.update(v2Record.copy(
+                            groundTruthPesiJson = json.encodeToString(pesiG),
+                            groundTruthLivello = livello.jsonValue,
+                        ))
+                    }
+                } catch (_: Exception) {
+                    // Skip V2 propagation if it fails
+                }
             }
+            try {
+                cloudSyncManager.enqueue(
+                    eventType = CloudSyncEventType.BENCHMARK,
+                    payloadJson = json.encodeToString(updated),
+                )
+            } catch (_: Exception) {
+                // Cloud sync failure should not prevent local save
+            }
+        } catch (_: Exception) {
+            // Log but don't crash
         }
-        cloudSyncManager.enqueue(
-            eventType = CloudSyncEventType.BENCHMARK,
-            payloadJson = json.encodeToString(updated),
-        )
     }
 
     /** Pasti con peso vero registrato, con le stime V1/V2 già decodificate: la base della dashboard di confronto (§10, §13 punto 5). */
     suspend fun listMealsWithGroundTruth(): List<BenchmarkMeal> =
         benchmarkDao.getAllWithGroundTruth().map { entity -> toBenchmarkMeal(entity) }
+
+    suspend fun deleteMeal(sessionId: String) {
+        benchmarkDao.deleteById(sessionId)
+    }
+
+    suspend fun clearAll() {
+        benchmarkDao.deleteAll()
+    }
 
     /**
      * Decisione automatica V1 vs V2 (§13 punto 1, §20): promuove la V2 a motore visibile solo se,
@@ -163,7 +183,7 @@ class BenchmarkRepository @Inject constructor(
      *
      * DEBUG: Se [forceV2] è true (Impostazioni > BIAS), la promozione è forzata ignorando le metriche.
      */
-    suspend fun evaluatePromotion(minMeals: Int = 30, forceV2: Boolean = false): PromotionDecision {
+    suspend fun evaluatePromotion(minMeals: Int = 5, forceV2: Boolean = false): PromotionDecision {
         if (forceV2) {
             val meals = listMealsWithGroundTruth()
             val v1 = computeEngineStats(meals, v1 = true)

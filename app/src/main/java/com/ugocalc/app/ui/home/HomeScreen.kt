@@ -1,11 +1,17 @@
 package com.ugocalc.app.ui.home
 
+import android.content.res.Configuration
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,56 +19,42 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.platform.LocalConfiguration
-import android.content.res.Configuration
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Menu
-import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Restaurant
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material3.Card
-import androidx.compose.material3.DrawerValue
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.EditNote
+import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.QrCodeScanner
+import androidx.compose.material.icons.rounded.Restaurant
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.StarOutline
+import androidx.compose.material.icons.rounded.TableChart
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalNavigationDrawer
-import androidx.compose.material3.NavigationDrawerItem
-import androidx.compose.material3.NavigationDrawerItemDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberDrawerState
-import androidx.compose.material3.Button
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -71,21 +63,39 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
+import com.ugocalc.app.R
+import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
-import com.ugocalc.app.ui.components.GlassmorphicCard
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
-import com.ugocalc.app.R
-import com.ugocalc.app.ui.theme.UgoGrey
+import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.MacroMetricTile
+import com.ugocalc.app.ui.components.MacroPill
+import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
+import com.ugocalc.app.ui.components.UgoSectionHeader
+import com.ugocalc.app.ui.components.isDarkSurfaceTheme
+import com.ugocalc.app.ui.theme.UgoSemanticColors
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
+import kotlin.math.roundToInt
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigateToModelSelection: () -> Unit,
@@ -93,313 +103,207 @@ fun HomeScreen(
     onNavigateToManualEntry: () -> Unit,
     onNavigateToBarcodeScan: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    onNavigateToBiasEvolution: () -> Unit,
-    onNavigateToSettings: () -> Unit,
-    /** Preferito con peso già noto (§ richiesta utente): il totale è già stato calcolato, si va dritti al risultato. */
+    onOpenHistoryEntry: (Long) -> Unit,
+    onNavigateToApiSettings: () -> Unit,
+    onNavigateToTables: () -> Unit,
+    /** Preferito con peso già noto: il totale è già calcolato, si va dritti al risultato. */
     onFavoriteReadyForResult: () -> Unit,
-    /** Preferito legato a cronologia o senza peso fissato (§ richiesta utente "portano alla sezione quantità"). */
+    /** Preferito legato a cronologia o senza peso fissato: apre il passo Quantità. */
     onFavoriteNeedsQuantity: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
+    var showAiSetupDialog by remember { mutableStateOf(false) }
+    var showOfflineAiDialog by remember { mutableStateOf(false) }
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        drawerContent = {
-            val primaryContainer = MaterialTheme.colorScheme.primaryContainer
-            val onPrimaryContainer = MaterialTheme.colorScheme.onPrimaryContainer
-            val itemColors = NavigationDrawerItemDefaults.colors(
-                selectedContainerColor = primaryContainer,
-                unselectedContainerColor = Color.Transparent,
-                selectedTextColor = onPrimaryContainer,
-                selectedIconColor = onPrimaryContainer,
-            )
-            ModalDrawerSheet(
-                drawerState = drawerState,
-                modifier = Modifier.width(240.dp),
-                drawerContainerColor = MaterialTheme.colorScheme.surface
-            ) {
-                Text(
-                    "UgoCalc",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(16.dp)
-                )
-                NavigationDrawerItem(
-                    label = { Text("Analisi", fontWeight = FontWeight.Bold) },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    selected = true,
-                    colors = itemColors,
-                    onClick = { scope.launch { drawerState.close() } },
-                )
-                NavigationDrawerItem(
-                    label = { Text("BIAS ed evoluzione") },
-                    icon = { Icon(Icons.Default.TrendingUp, contentDescription = null) },
-                    selected = false,
-                    colors = itemColors,
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToBiasEvolution() },
-                )
-                NavigationDrawerItem(
-                    label = { Text("Cronologia") },
-                    icon = { Icon(Icons.Default.History, contentDescription = null) },
-                    selected = false,
-                    colors = itemColors,
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToHistory() },
-                )
-                NavigationDrawerItem(
-                    label = { Text("Impostazioni") },
-                    icon = { Icon(Icons.Default.Settings, contentDescription = null) },
-                    selected = false,
-                    colors = itemColors,
-                    onClick = { scope.launch { drawerState.close() }; onNavigateToSettings() },
-                )
-                Spacer(Modifier.weight(1f))
-                Column(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.ugocalc_logo),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(64.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                    )
-                    Text(
-                        "Versione ${com.ugocalc.app.BuildConfig.VERSION_NAME}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = UgoGrey,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                }
+    LaunchedEffect(Unit) {
+        viewModel.refresh()
+    }
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        viewModel.refresh()
+    }
+
+    val onLaunchPhotoAi: () -> Unit = {
+        when {
+            uiState.tableCount == 0 -> onNavigateToTables()
+            !uiState.hasAnyAiKey -> showAiSetupDialog = true
+            !uiState.isOnline -> showOfflineAiDialog = true
+            uiState.preferredModels.isNotEmpty() -> {
+                viewModel.startAnalysisWithPreferredModels()
+                onNavigateDirectlyToCamera(uiState.preferredModels.map { it.uid })
             }
+            else -> {
+                viewModel.startNewAnalysis()
+                onNavigateToModelSelection()
+            }
+        }
+    }
+
+    val onLaunchManual: () -> Unit = {
+        if (uiState.tableCount == 0) {
+            onNavigateToTables()
+        } else {
+            viewModel.startNewAnalysis()
+            onNavigateToManualEntry()
+        }
+    }
+
+    val onFavoriteClick: (FavoriteDisplay) -> Unit = { favorite ->
+        if (favorite.comboGrams != null) {
+            viewModel.useComboFavoriteDirectly(favorite)
+            onFavoriteReadyForResult()
+        } else {
+            scope.launch {
+                viewModel.openFavoriteForQuantityEntry(favorite)
+                onFavoriteNeedsQuantity()
+            }
+        }
+    }
+
+    val configuration = LocalConfiguration.current
+    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+
+    Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            HomeHeader(
+                sessionMode = uiState.sessionMode,
+                onSelectMode = viewModel::setSessionMode,
+            )
         },
-    ) {
-        Scaffold(
-            topBar = {
-                Surface(
-                    shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    shadowElevation = 4.dp,
-                ) {
-                    TopAppBar(
-                        title = { Text("UgoCalc", fontWeight = FontWeight.Bold) },
-                        colors = ugoTopAppBarColors(),
-                        navigationIcon = {
-                            IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                Icon(Icons.Default.Menu, contentDescription = "Menu")
-                            }
-                        },
-                        actions = {
-                            IconButton(
-                                onClick = { viewModel.setSessionMode(if (uiState.sessionMode == SessionMode.CASA) SessionMode.RISTORANTE else SessionMode.CASA) }
-                            ) {
-                                Icon(
-                                    if (uiState.sessionMode == SessionMode.CASA) Icons.Default.Home else Icons.Default.Restaurant,
-                                    contentDescription = if (uiState.sessionMode == SessionMode.CASA) "Modalità Casa" else "Modalità Ristorante"
-                                )
-                            }
-                        },
-                    )
-                }
-            },
-            bottomBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 16.dp)
-                ) {
-                    GlassmorphicCard(
-                        modifier = Modifier.fillMaxWidth(),
-                        backgroundColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(24.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 8.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            FilledTonalButton(
-                                onClick = {
-                                    viewModel.startNewAnalysis()
-                                    onNavigateToManualEntry()
-                                },
-                                enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                                Text("Manuale")
-                            }
-                            FilledTonalButton(
-                                onClick = onNavigateToBarcodeScan,
-                                enabled = uiState.analyzeButtonState != AnalyzeButtonState.DISABLED_NO_TABLE,
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.padding(end = 8.dp))
-                                Text("Barcode")
-                            }
-                        }
-                    }
-                }
-            },
-        ) { padding: PaddingValues ->
-            val configuration = LocalConfiguration.current
-            val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-
-            if (isLandscape) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(24.dp),
-                    horizontalArrangement = Arrangement.spacedBy(32.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AnalyzeButton(
-                        state = uiState.analyzeButtonState,
-                        modifier = Modifier.padding(start = 32.dp).size(180.dp),
-                        onClick = {
-                            val preferred = uiState.preferredModels
-                            if (preferred.isNotEmpty()) {
-                                viewModel.startAnalysisWithPreferredModels()
-                                onNavigateDirectlyToCamera(preferred.map { it.id })
-                            } else {
-                                viewModel.startNewAnalysis()
-                                onNavigateToModelSelection()
-                            }
-                        }
-                    )
-
-                    LazyColumn(
-                        modifier = Modifier.weight(1f),
-                        horizontalAlignment = Alignment.Start
-                    ) {
-                        if (uiState.favoritesEnabled) {
-                            item {
-                                GlassmorphicCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 16.dp, bottom = 8.dp),
-                                    backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                                    borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
-                                    shape = RoundedCornerShape(12.dp),
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 8.dp)
-                                    ) {
-                                        Text("Preferiti", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-                                        IconButton(onClick = { showAddFavoriteDialog = true }, modifier = Modifier.size(32.dp)) {
-                                            Icon(Icons.Default.Add, contentDescription = "Aggiungi", modifier = Modifier.size(20.dp))
-                                        }
-                                    }
-                                }
-                            }
-                            items(uiState.favorites, key = { it.id }) { favorite ->
-                                FavoriteCard(
-                                    favorite = favorite,
-                                    onClick = {
-                                        if (favorite.comboGrams != null) {
-                                            viewModel.useComboFavoriteDirectly(favorite)
-                                            onFavoriteReadyForResult()
-                                        } else {
-                                            scope.launch {
-                                                viewModel.openFavoriteForQuantityEntry(favorite)
-                                                onFavoriteNeedsQuantity()
-                                            }
-                                        }
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-            } else {
+    ) { padding ->
+        if (isLandscape) {
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .padding(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+            ) {
                 LazyColumn(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(padding)
-                        .padding(horizontal = 24.dp, vertical = 24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Top,
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    item {
-                        Box(modifier = Modifier.padding(bottom = 32.dp)) {
-                            AnalyzeButton(state = uiState.analyzeButtonState, onClick = {
-                                val preferred = uiState.preferredModels
-                                if (preferred.isNotEmpty()) {
-                                    viewModel.startAnalysisWithPreferredModels()
-                                    onNavigateDirectlyToCamera(preferred.map { it.id })
-                                } else {
-                                    viewModel.startNewAnalysis()
-                                    onNavigateToModelSelection()
-                                }
-                            })
+                    item(key = "hero") {
+                        PhotoAiHeroCard(
+                            uiState = uiState,
+                            onClick = onLaunchPhotoAi,
+                        )
+                    }
+                    item(key = "quick_actions") {
+                        QuickActionsRow(
+                            enabled = uiState.tableCount > 0,
+                            onBarcodeClick = onNavigateToBarcodeScan,
+                            onManualClick = onLaunchManual,
+                        )
+                    }
+                    item(key = "today_summary") {
+                        TodayNutritionCard(
+                            mealsCount = uiState.todayMealsCount,
+                            choG = uiState.todayChoG,
+                            grassiG = uiState.todayGrassiG,
+                            onClick = onNavigateToHistory,
+                        )
+                    }
+                }
+
+                LazyColumn(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (shouldShowHomeBanner(uiState)) {
+                        item(key = "status_banner") {
+                            HomeStatusBanner(
+                                uiState = uiState,
+                                onOpenApiSettings = onNavigateToApiSettings,
+                                onOpenTables = onNavigateToTables,
+                            )
                         }
                     }
-
-                    item {
-                        if (uiState.analyzeButtonState == AnalyzeButtonState.DISABLED_NO_TABLE) {
-                            Text(
-                                text = "Carica una tabella di valori ufficiali nelle Impostazioni per iniziare",
-                                style = MaterialTheme.typography.bodyMedium,
-                                modifier = Modifier.padding(bottom = 16.dp),
-                            )
-                        } else if (uiState.analyzeButtonState == AnalyzeButtonState.ENABLED_OFFLINE) {
-                            Text(
-                                text = "Nessuna connessione: nessun modello sarà selezionabile finché non torni online",
-                                style = MaterialTheme.typography.bodySmall,
-                                modifier = Modifier.padding(bottom = 16.dp),
-                            )
-                        }
-                    }
-
                     if (uiState.favoritesEnabled) {
-                        item {
-                            GlassmorphicCard(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp, bottom = 4.dp),
-                                backgroundColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                                borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                                shape = RoundedCornerShape(12.dp),
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                ) {
-                                    Text("Preferiti", style = MaterialTheme.typography.titleMedium)
-                                    IconButton(onClick = { showAddFavoriteDialog = true }, modifier = Modifier.size(32.dp)) {
-                                        Icon(Icons.Default.Add, contentDescription = "Aggiungi", modifier = Modifier.size(20.dp))
-                                    }
-                                }
-                            }
-                        }
-                        items(uiState.favorites, key = { it.id }) { favorite ->
-                            FavoriteCard(
-                                favorite = favorite,
-                                onClick = {
-                                    if (favorite.comboGrams != null) {
-                                        viewModel.useComboFavoriteDirectly(favorite)
-                                        onFavoriteReadyForResult()
-                                    } else {
-                                        scope.launch {
-                                            viewModel.openFavoriteForQuantityEntry(favorite)
-                                            onFavoriteNeedsQuantity()
-                                        }
-                                    }
-                                }
+                        item(key = "favorites_section") {
+                            FavoritesSection(
+                                favorites = uiState.favorites,
+                                onAddClick = { showAddFavoriteDialog = true },
+                                onFavoriteClick = onFavoriteClick,
                             )
                         }
                     }
+                    item(key = "recent_meals_section") {
+                        RecentMealsSection(
+                            recentMeals = uiState.recentMeals,
+                            onSeeAllClick = onNavigateToHistory,
+                            onMealClick = onOpenHistoryEntry,
+                        )
+                    }
+                }
+            }
+        } else {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                item(key = "today_summary") {
+                    TodayNutritionCard(
+                        mealsCount = uiState.todayMealsCount,
+                        choG = uiState.todayChoG,
+                        grassiG = uiState.todayGrassiG,
+                        onClick = onNavigateToHistory,
+                    )
+                }
+
+                if (shouldShowHomeBanner(uiState)) {
+                    item(key = "status_banner") {
+                        HomeStatusBanner(
+                            uiState = uiState,
+                            onOpenApiSettings = onNavigateToApiSettings,
+                            onOpenTables = onNavigateToTables,
+                        )
+                    }
+                }
+
+                item(key = "hero_photo_ai") {
+                    PhotoAiHeroCard(
+                        uiState = uiState,
+                        onClick = onLaunchPhotoAi,
+                    )
+                }
+
+                item(key = "quick_actions") {
+                    QuickActionsRow(
+                        enabled = uiState.tableCount > 0,
+                        onBarcodeClick = onNavigateToBarcodeScan,
+                        onManualClick = onLaunchManual,
+                    )
+                }
+
+                if (uiState.favoritesEnabled) {
+                    item(key = "favorites_section") {
+                        FavoritesSection(
+                            favorites = uiState.favorites,
+                            onAddClick = { showAddFavoriteDialog = true },
+                            onFavoriteClick = onFavoriteClick,
+                        )
+                    }
+                }
+
+                item(key = "recent_meals_section") {
+                    RecentMealsSection(
+                        recentMeals = uiState.recentMeals,
+                        onSeeAllClick = onNavigateToHistory,
+                        onMealClick = onOpenHistoryEntry,
+                    )
                 }
             }
         }
@@ -414,94 +318,895 @@ fun HomeScreen(
             },
         )
     }
+
+    if (showAiSetupDialog) {
+        AlertDialog(
+            onDismissRequest = { showAiSetupDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.primaryContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Key,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            },
+            title = {
+                Text(
+                    text = "Configura una chiave AI",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "Per riconoscere i piatti dalle foto serve almeno una chiave API (es. Google Gemini su AI Studio, gratuita per uso personale). In alternativa puoi usare subito l'inserimento manuale con i ${uiState.totalFoodCount} alimenti già disponibili offline.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showAiSetupDialog = false
+                        onNavigateToApiSettings()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Vai alle API")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    FilledTonalButton(
+                        onClick = {
+                            showAiSetupDialog = false
+                            onLaunchManual()
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Usa Manuale")
+                    }
+                    TextButton(onClick = { showAiSetupDialog = false }) {
+                        Text("Chiudi")
+                    }
+                }
+            },
+        )
+    }
+
+    if (showOfflineAiDialog) {
+        AlertDialog(
+            onDismissRequest = { showOfflineAiDialog = false },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            icon = {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(UgoSemanticColors.warningContainer),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.CloudOff,
+                        contentDescription = null,
+                        tint = UgoSemanticColors.warning,
+                    )
+                }
+            },
+            title = {
+                Text(
+                    text = "Connessione assente",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                )
+            },
+            text = {
+                Text(
+                    text = "L'analisi foto AI richiede una connessione internet. Puoi comunque calcolare subito CHO e Grassi con l'inserimento manuale e i tuoi preferiti offline.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showOfflineAiDialog = false
+                        onLaunchManual()
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Usa Manuale")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showOfflineAiDialog = false }) {
+                    Text("Chiudi")
+                }
+            },
+        )
+    }
 }
 
 @Composable
-private fun FavoriteCard(favorite: FavoriteDisplay, onClick: () -> Unit) {
-    GlassmorphicCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-            .clickable { onClick() },
-        backgroundColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f),
-        borderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f),
-        shape = RoundedCornerShape(12.dp),
+private fun HomeHeader(
+    sessionMode: SessionMode,
+    onSelectMode: (SessionMode) -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.background,
+        tonalElevation = 0.dp,
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                favorite.label,
-                fontWeight = FontWeight.Bold,
-                maxLines = 2,
-                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                if (favorite.isPerHundredGrams) {
-                    "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g / 100g"
-                } else {
-                    "CHO ${favorite.choG.toInt()}g · Grassi ${favorite.grassiG.toInt()}g"
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Image(
+                    painter = painterResource(id = R.drawable.ugocalc_logo),
+                    contentDescription = "UgoCalc",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(10.dp)),
+                )
+                Text(
+                    text = "UgoCalc",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onBackground,
+                )
+            }
+
+            SessionModeSegmentedPill(
+                selectedMode = sessionMode,
+                onSelect = onSelectMode,
             )
         }
     }
 }
 
 @Composable
-private fun AnalyzeButton(state: AnalyzeButtonState, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val color = when (state) {
-        AnalyzeButtonState.ENABLED_ONLINE -> MaterialTheme.colorScheme.primary
-        AnalyzeButtonState.ENABLED_OFFLINE -> MaterialTheme.colorScheme.error
-        AnalyzeButtonState.DISABLED_NO_TABLE -> UgoGrey
-    }
-    val pulse = rememberInfiniteTransition(label = "aura_pulse")
-    // Onda 1: parte subito
-    val wave1 by pulse.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-        ),
-        label = "wave1",
-    )
-    // Onda 2: sfasata di metà ciclo
-    val wave2 by pulse.animateFloat(
-        initialValue = 0f, targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(4000, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart,
-            initialStartOffset = StartOffset(2000),
-        ),
-        label = "wave2",
-    )
-    Box(
-        modifier = modifier.size(260.dp),
-        contentAlignment = Alignment.Center,
+private fun SessionModeSegmentedPill(
+    selectedMode: SessionMode,
+    onSelect: (SessionMode) -> Unit,
+) {
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
     ) {
-        listOf(wave1, wave2).forEach { t ->
-            val waveSizeDp = 160f + t * 100f
-            val waveAlpha = when {
-                t < 0.5f -> 0.25f * (t * 2f)
-                else -> 0.25f * (2f - t * 2f)
-            }
-            Box(
-                modifier = Modifier
-                    .size(waveSizeDp.dp)
-                    .background(color.copy(alpha = waveAlpha), CircleShape)
+        Row(
+            modifier = Modifier.padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ModePillOption(
+                label = "Casa",
+                icon = Icons.Rounded.Home,
+                selected = selectedMode == SessionMode.CASA,
+                onClick = { onSelect(SessionMode.CASA) },
+            )
+            ModePillOption(
+                label = "Ristorante",
+                icon = Icons.Rounded.Restaurant,
+                selected = selectedMode == SessionMode.RISTORANTE,
+                onClick = { onSelect(SessionMode.RISTORANTE) },
             )
         }
+    }
+}
+
+@Composable
+private fun ModePillOption(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val bgColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+        animationSpec = tween(200),
+        label = "mode_pill_bg_$label",
+    )
+    val contentColor by animateColorAsState(
+        targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+        animationSpec = tween(200),
+        label = "mode_pill_fg_$label",
+    )
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(50))
+            .background(bgColor)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = contentColor,
+            modifier = Modifier.size(16.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            color = contentColor,
+            maxLines = 1,
+            softWrap = false,
+        )
+    }
+}
+
+@Composable
+private fun TodayNutritionCard(
+    mealsCount: Int,
+    choG: Double,
+    grassiG: Double,
+    onClick: () -> Unit,
+) {
+    val todayLabel = remember {
+        SimpleDateFormat("EEEE d MMM", Locale.ITALIAN)
+            .format(Date())
+            .replaceFirstChar { it.uppercase() }
+    }
+    val estimatedKcal = (choG * 4.0 + grassiG * 9.0).roundToInt()
+
+    UgoCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Column {
+                Text(
+                    text = "Oggi",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Text(
+                    text = todayLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = "Cronologia",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MacroMetricTile(
+                label = "CHO",
+                value = formatMacroValue(choG),
+                unit = "g",
+                accentColor = UgoSemanticColors.cho,
+                modifier = Modifier.weight(1f),
+            )
+            MacroMetricTile(
+                label = "Grassi",
+                value = formatMacroValue(grassiG),
+                unit = "g",
+                accentColor = UgoSemanticColors.fat,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            MacroMetricTile(
+                label = "kcal stim.",
+                value = estimatedKcal.toString(),
+                unit = "kcal",
+                accentColor = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.weight(1f),
+            )
+            MacroMetricTile(
+                label = "Pasti",
+                value = mealsCount.toString(),
+                unit = if (mealsCount == 1) "pasto" else "pasti",
+                accentColor = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+private fun shouldShowHomeBanner(uiState: HomeUiState): Boolean =
+    uiState.tableCount == 0 || !uiState.isOnline || !uiState.hasAnyAiKey
+
+@Composable
+private fun HomeStatusBanner(
+    uiState: HomeUiState,
+    onOpenApiSettings: () -> Unit,
+    onOpenTables: () -> Unit,
+) {
+    when {
+        uiState.tableCount == 0 -> StatusBanner(
+            icon = Icons.Rounded.TableChart,
+            title = "Nessuna tabella nutrizionale",
+            subtitle = "Ripristina la tabella base CREA o importane una per iniziare i calcoli.",
+            tone = BannerTone.WARNING,
+            actionLabel = "Tabelle",
+            onAction = onOpenTables,
+        )
+        !uiState.isOnline -> StatusBanner(
+            icon = Icons.Rounded.CloudOff,
+            title = "Sei offline",
+            subtitle = "Manuale, preferiti e tabelle locali funzionano normalmente; la foto AI richiede rete.",
+            tone = BannerTone.WARNING,
+        )
+        !uiState.hasAnyAiKey -> StatusBanner(
+            icon = Icons.Rounded.AutoAwesome,
+            title = "Foto AI non ancora configurata",
+            subtitle = "Collega una chiave API (es. Gemini gratuito) per stimare i piatti da foto.",
+            tone = BannerTone.INFO,
+            actionLabel = "Configura",
+            onAction = onOpenApiSettings,
+        )
+    }
+}
+
+@Composable
+private fun PhotoAiHeroCard(
+    uiState: HomeUiState,
+    onClick: () -> Unit,
+) {
+    val isDark = isDarkSurfaceTheme()
+    val primary = MaterialTheme.colorScheme.primary
+    val primaryContainer = MaterialTheme.colorScheme.primaryContainer
+    val gradientColors = if (isDark) {
+        listOf(
+            primaryContainer,
+            lerp(primaryContainer, primary, 0.30f),
+        )
+    } else {
+        listOf(
+            primary,
+            lerp(primary, Color.Black, 0.18f),
+        )
+    }
+    val contentColor = if (isDark) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onPrimary
+    }
+
+    val statusChipText = when {
+        uiState.tableCount == 0 -> "Tabella richiesta"
+        !uiState.hasAnyAiKey -> "Richiede chiave AI"
+        !uiState.isOnline -> "Offline"
+        uiState.preferredModels.size == 1 -> uiState.preferredModels.first().displayName
+        uiState.preferredModels.size > 1 -> "${uiState.preferredModels.size} modelli preferiti"
+        else -> "Pronto · Scegli modello"
+    }
+
+    val subtitleText = when {
+        uiState.tableCount == 0 -> "Aggiungi o ripristina una tabella nutrizionale per sbloccare l'analisi."
+        !uiState.hasAnyAiKey -> "Scatta una foto del piatto per stimare pesi, CHO e Grassi automaticamente."
+        !uiState.isOnline -> "Torna online per usare la stima fotografica oppure usa l'inserimento manuale."
+        uiState.preferredModels.isNotEmpty() -> "Avvio diretto fotocamera con ${uiState.preferredModels.joinToString(", ") { it.displayName }}."
+        else -> "Scatta una o più foto del piatto e ottieni la stima nutrizionale completa."
+    }
+
+    val ctaText = when {
+        uiState.tableCount == 0 -> "Apri tabelle"
+        !uiState.hasAnyAiKey -> "Configura chiave AI"
+        !uiState.isOnline -> "Modalità offline"
+        else -> "Scatta foto"
+    }
+
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        border = if (isDark) BorderStroke(1.dp, primary.copy(alpha = 0.40f)) else null,
+        shadowElevation = if (isDark) 2.dp else 6.dp,
+    ) {
         Box(
             modifier = Modifier
-                .size(160.dp)
-                .background(color, CircleShape)
-                .clickable(enabled = state != AnalyzeButtonState.DISABLED_NO_TABLE) { onClick() },
+                .fillMaxWidth()
+                .background(Brush.linearGradient(gradientColors))
+                .padding(20.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(contentColor.copy(alpha = 0.16f)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.PhotoCamera,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(26.dp),
+                        )
+                    }
+
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = contentColor.copy(alpha = 0.16f),
+                    ) {
+                        Text(
+                            text = statusChipText,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = contentColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .widthIn(max = 200.dp)
+                                .padding(horizontal = 12.dp, vertical = 5.dp),
+                        )
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "Analizza Piatto con Foto AI",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                    )
+                    Text(
+                        text = subtitleText,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = contentColor.copy(alpha = 0.88f),
+                    )
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = contentColor.copy(alpha = 0.18f),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = ctaText,
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = contentColor,
+                        )
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
+                            contentDescription = null,
+                            tint = contentColor,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun QuickActionsRow(
+    enabled: Boolean,
+    onBarcodeClick: () -> Unit,
+    onManualClick: () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        QuickActionCard(
+            icon = Icons.Rounded.QrCodeScanner,
+            accent = MaterialTheme.colorScheme.secondary,
+            title = "Barcode",
+            subtitle = "Scansiona etichetta",
+            enabled = enabled,
+            onClick = onBarcodeClick,
+            modifier = Modifier.weight(1f),
+        )
+        QuickActionCard(
+            icon = Icons.Rounded.EditNote,
+            accent = MaterialTheme.colorScheme.primary,
+            title = "Manuale",
+            subtitle = "Cerca & componi",
+            enabled = enabled,
+            onClick = onManualClick,
+            modifier = Modifier.weight(1f),
+        )
+    }
+}
+
+@Composable
+private fun QuickActionCard(
+    icon: ImageVector,
+    accent: Color,
+    title: String,
+    subtitle: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    UgoCard(
+        onClick = if (enabled) onClick else null,
+        modifier = modifier,
+        contentPadding = PaddingValues(14.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .size(40.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(accent.copy(alpha = if (enabled) 0.14f else 0.08f)),
             contentAlignment = Alignment.Center,
         ) {
-            Text("Analizza", color = androidx.compose.ui.graphics.Color.White, style = MaterialTheme.typography.titleLarge)
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (enabled) accent else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.size(22.dp),
+            )
         }
+        Spacer(modifier = Modifier.height(10.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (enabled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+            text = subtitle,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(top = 2.dp),
+        )
+    }
+}
+
+@Composable
+private fun FavoritesSection(
+    favorites: List<FavoriteDisplay>,
+    onAddClick: () -> Unit,
+    onFavoriteClick: (FavoriteDisplay) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        UgoSectionHeader(
+            title = "Preferiti rapidi",
+            subtitle = if (favorites.isNotEmpty()) "Tocca per calcolare subito" else null,
+            actionLabel = "+ Aggiungi",
+            onAction = onAddClick,
+        )
+
+        if (favorites.isEmpty()) {
+            UgoCard(
+                onClick = onAddClick,
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.tertiaryContainer),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.StarOutline,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(22.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Salva i tuoi piatti ricorrenti",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "Aggiungi un alimento o una porzione fissa per calcolarli in un tocco.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.Rounded.Add,
+                        contentDescription = "Aggiungi preferito",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                contentPadding = PaddingValues(horizontal = 2.dp),
+            ) {
+                items(favorites, key = { it.id }) { favorite ->
+                    FavoriteQuickCard(
+                        favorite = favorite,
+                        onClick = { onFavoriteClick(favorite) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FavoriteQuickCard(
+    favorite: FavoriteDisplay,
+    onClick: () -> Unit,
+) {
+    UgoCard(
+        onClick = onClick,
+        modifier = Modifier.widthIn(min = 176.dp, max = 236.dp),
+        contentPadding = PaddingValues(14.dp),
+    ) {
+        Text(
+            text = favorite.label,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            MacroPill(
+                label = "CHO",
+                value = "${formatMacroValue(favorite.choG)}g",
+                containerColor = UgoSemanticColors.choContainer,
+                contentColor = UgoSemanticColors.onChoContainer,
+            )
+            MacroPill(
+                label = "Grassi",
+                value = "${formatMacroValue(favorite.grassiG)}g",
+                containerColor = UgoSemanticColors.fatContainer,
+                contentColor = UgoSemanticColors.onFatContainer,
+            )
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            text = when {
+                favorite.comboGrams != null -> "Porzione rapida · ${favorite.comboGrams.toInt()}g"
+                favorite.isPerHundredGrams -> "Valori per 100g · scegli peso"
+                else -> "Da cronologia · modifica pesi"
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun RecentMealsSection(
+    recentMeals: List<AnalysisHistoryEntity>,
+    onSeeAllClick: () -> Unit,
+    onMealClick: (Long) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        UgoSectionHeader(
+            title = "Ultimi pasti",
+            actionLabel = if (recentMeals.isNotEmpty()) "Vedi tutti" else null,
+            onAction = if (recentMeals.isNotEmpty()) onSeeAllClick else null,
+        )
+
+        if (recentMeals.isEmpty()) {
+            UgoCard(
+                modifier = Modifier.fillMaxWidth(),
+                contentPadding = PaddingValues(16.dp),
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.surfaceContainerHigh),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                    }
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Nessun pasto registrato",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Text(
+                            text = "I tuoi pasti salvati appariranno qui con il riepilogo di CHO e Grassi.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
+                }
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                recentMeals.forEach { meal ->
+                    RecentMealRowCard(
+                        meal = meal,
+                        onClick = { onMealClick(meal.id) },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun RecentMealRowCard(
+    meal: AnalysisHistoryEntity,
+    onClick: () -> Unit,
+) {
+    val isRistorante = meal.sessionMode == SessionMode.RISTORANTE.name
+    val timeLabel = remember(meal.analyzedAtEpochMillis) {
+        formatRelativeTimestamp(meal.analyzedAtEpochMillis)
+    }
+
+    UgoCard(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isRistorante) Icons.Rounded.Restaurant else Icons.Rounded.Home,
+                    contentDescription = if (isRistorante) "Ristorante" else "Casa",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = meal.foodTitle.ifBlank { "Pasto" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                    text = timeLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    MacroPill(
+                        label = "CHO",
+                        value = "${formatMacroValue(meal.totalChoG)}g",
+                        containerColor = UgoSemanticColors.choContainer,
+                        contentColor = UgoSemanticColors.onChoContainer,
+                    )
+                    MacroPill(
+                        label = "Grassi",
+                        value = "${formatMacroValue(meal.totalGrassiG)}g",
+                        containerColor = UgoSemanticColors.fatContainer,
+                        contentColor = UgoSemanticColors.onFatContainer,
+                    )
+                }
+            }
+
+            Icon(
+                imageVector = Icons.Rounded.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun formatMacroValue(value: Double): String = when {
+    value == 0.0 -> "0"
+    value >= 100.0 -> "%.0f".format(Locale.ITALIAN, value)
+    else -> "%.1f".format(Locale.ITALIAN, value)
+}
+
+private fun formatRelativeTimestamp(epochMillis: Long): String {
+    val now = Calendar.getInstance()
+    val target = Calendar.getInstance().apply { timeInMillis = epochMillis }
+    val timePart = SimpleDateFormat("HH:mm", Locale.ITALIAN).format(Date(epochMillis))
+
+    val sameYear = now.get(Calendar.YEAR) == target.get(Calendar.YEAR)
+    val dayDiff = now.get(Calendar.DAY_OF_YEAR) - target.get(Calendar.DAY_OF_YEAR)
+    return when {
+        sameYear && dayDiff == 0 -> "Oggi, $timePart"
+        sameYear && dayDiff == 1 -> "Ieri, $timePart"
+        else -> SimpleDateFormat("d MMM, HH:mm", Locale.ITALIAN).format(Date(epochMillis))
     }
 }

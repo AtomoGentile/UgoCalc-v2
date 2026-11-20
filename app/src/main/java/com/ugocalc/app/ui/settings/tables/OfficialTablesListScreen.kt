@@ -4,23 +4,33 @@ import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -28,7 +38,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,7 +60,13 @@ import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
 import com.ugocalc.app.domain.model.OfficialFileType
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.EmptyStateMessage
+import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
+import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 private val ACCEPTED_MIME_TYPES = arrayOf(
     "application/pdf",
@@ -63,8 +81,7 @@ private const val XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocumen
 
 /**
  * "Tabelle valori ufficiali" (§2.2): elenco dei file caricati, con priorità riordinabile e accesso
- * all'editor tipo Excel di ciascuna tabella (requisito utente: piccola pagina di selezione se più
- * di un documento è presente).
+ * all'editor tipo Excel di ciascuna tabella.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -78,18 +95,23 @@ fun OfficialTablesListScreen(
     val context = LocalContext.current
     var showImportChoiceDialog by remember { mutableStateOf(false) }
     var showAiModelMenu by remember { mutableStateOf(false) }
+    var pendingDeleteTable by remember { mutableStateOf<OfficialTableEntity?>(null) }
 
-    val aiFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
-        if (uri == null) return@rememberLauncherForActivityResult
-        val mimeType = context.contentResolver.getType(uri)
+    val aiFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris: List<Uri> ->
+        if (uris.isEmpty()) return@rememberLauncherForActivityResult
+        val mimeType = context.contentResolver.getType(uris.first())
         val fileType = mimeTypeToFileType(mimeType)
-        val displayName = queryDisplayName(context, uri) ?: "Tabella"
-        if (fileType != null) viewModel.importFile(uri, displayName, fileType)
+        if (fileType != null) {
+            val displayName = if (uris.size == 1) {
+                queryDisplayName(context, uris.first()) ?: "Tabella"
+            } else {
+                val first = queryDisplayName(context, uris.first()) ?: "Tabella"
+                "$first (+${uris.size - 1})"
+            }
+            viewModel.importFiles(uris, displayName, fileType)
+        }
     }
 
-    // "File già pronto" (§ richiesta utente): un Excel con colonne nome/CHO/grassi già nella
-    // prima riga viene letto direttamente, senza passare dal Passaggio 2 AI — utile su tabelle
-    // molto grandi dove la normalizzazione va spesso in errore per limiti di quota dei provider.
     val preFormattedFilePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
         if (uri == null) return@rememberLauncherForActivityResult
         val displayName = queryDisplayName(context, uri) ?: "Tabella"
@@ -112,8 +134,6 @@ fun OfficialTablesListScreen(
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { showImportChoiceDialog = true },
-                // Bug fix: secondaryContainer è un tono sfumato verso bianco/nero, non il
-                // colore secondario scelto dall'utente in Accessibilità (vedi Theme.kt).
                 containerColor = MaterialTheme.colorScheme.secondary,
                 contentColor = MaterialTheme.colorScheme.onSecondary,
             ) {
@@ -121,14 +141,59 @@ fun OfficialTablesListScreen(
             }
         },
     ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding).padding(16.dp)) {
-            uiState.errorMessage?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(bottom = 8.dp))
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            uiState.errorMessage?.let { error ->
+                item(key = "error_banner") {
+                    StatusBanner(
+                        icon = Icons.Default.ErrorOutline,
+                        title = "Errore tabella",
+                        subtitle = error,
+                        tone = BannerTone.ERROR,
+                    )
+                }
             }
+
+            uiState.statusMessage?.let { msg ->
+                item(key = "status_banner") {
+                    StatusBanner(
+                        icon = Icons.Default.CheckCircle,
+                        title = "Operazione completata",
+                        subtitle = msg,
+                        tone = BannerTone.SUCCESS,
+                    )
+                }
+            }
+
+            item(key = "restore_starter") {
+                OutlinedButton(
+                    onClick = { viewModel.restoreStarterTable() },
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Ripristina Tabella Base")
+                }
+            }
+
             if (uiState.tables.isEmpty()) {
-                Text("Nessuna tabella caricata. Tocca + per aggiungerne una.")
-            }
-            LazyColumn {
+                item(key = "empty_tables") {
+                    EmptyStateMessage(
+                        icon = Icons.Default.TableChart,
+                        title = "Nessuna tabella presente",
+                        message = "Carica un file PDF/Excel con + oppure ripristina la Tabella Base Italiana (CREA).",
+                        actionLabel = "Ripristina Tabella Base",
+                        onAction = { viewModel.restoreStarterTable() },
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp),
+                    )
+                }
+            } else {
                 items(uiState.tables, key = { it.id }) { table ->
                     TableRow(
                         table = table,
@@ -136,10 +201,14 @@ fun OfficialTablesListScreen(
                         onClick = { onOpenTable(table.id) },
                         onMoveUp = { viewModel.moveUp(table) },
                         onMoveDown = { viewModel.moveDown(table) },
-                        onDelete = { viewModel.deleteTable(table) },
+                        onDelete = { pendingDeleteTable = table },
                         onRetry = { viewModel.retryNormalization(table.id) },
                     )
                 }
+            }
+
+            item(key = "fab_spacer") {
+                Spacer(modifier = Modifier.height(64.dp))
             }
         }
     }
@@ -147,7 +216,9 @@ fun OfficialTablesListScreen(
     if (showImportChoiceDialog) {
         AlertDialog(
             onDismissRequest = { showImportChoiceDialog = false },
-            title = { Text("Come vuoi aggiungere la tabella?") },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            title = { Text("Come vuoi aggiungere la tabella?", fontWeight = FontWeight.Bold) },
             text = {
                 Text(
                     "\"Normalizza con AI\" accetta PDF/Word/Excel in qualsiasi formato, ma su tabelle molto grandi può fallire per i limiti di quota dei provider. " +
@@ -157,24 +228,25 @@ fun OfficialTablesListScreen(
                 )
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showImportChoiceDialog = false
-                    preFormattedFilePicker.launch(arrayOf(XLSX_MIME_TYPE))
-                }) { Text("File già pronto (Excel)") }
+                TextButton(
+                    onClick = {
+                        showImportChoiceDialog = false
+                        preFormattedFilePicker.launch(arrayOf(XLSX_MIME_TYPE))
+                    },
+                ) { Text("File già pronto (Excel)") }
             },
             dismissButton = {
-                // Il modello serve solo per normalizzare con l'AI (né per "file già pronto" né per
-                // la lista in sé), quindi non ha senso tenerlo sempre visibile in schermata: appare
-                // qui, in un menu, solo quando l'utente sceglie esplicitamente questa via.
                 Box {
-                    TextButton(onClick = {
-                        if (uiState.availableModels.size > 1) {
-                            showAiModelMenu = true
-                        } else {
-                            showImportChoiceDialog = false
-                            aiFilePicker.launch(ACCEPTED_MIME_TYPES)
-                        }
-                    }) { Text("Normalizza con AI") }
+                    TextButton(
+                        onClick = {
+                            if (uiState.availableModels.size > 1) {
+                                showAiModelMenu = true
+                            } else {
+                                showImportChoiceDialog = false
+                                aiFilePicker.launch(ACCEPTED_MIME_TYPES)
+                            }
+                        },
+                    ) { Text("Normalizza con AI") }
                     DropdownMenu(expanded = showAiModelMenu, onDismissRequest = { showAiModelMenu = false }) {
                         uiState.availableModels.forEach { model ->
                             DropdownMenuItem(
@@ -192,6 +264,20 @@ fun OfficialTablesListScreen(
             },
         )
     }
+
+    pendingDeleteTable?.let { table ->
+        UgoConfirmDialog(
+            title = "Elimina tabella",
+            message = "Vuoi eliminare \"${table.displayName}\" e tutte le sue voci dal database?",
+            confirmLabel = "Elimina",
+            isDestructive = true,
+            onConfirm = {
+                pendingDeleteTable = null
+                viewModel.deleteTable(table)
+            },
+            onDismiss = { pendingDeleteTable = null },
+        )
+    }
 }
 
 @Composable
@@ -204,35 +290,108 @@ private fun TableRow(
     onDelete: () -> Unit,
     onRetry: () -> Unit,
 ) {
-    Card(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Column {
-                IconButton(onClick = onMoveUp) { Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Priorità su") }
-                IconButton(onClick = onMoveDown) { Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Priorità giù") }
-            }
-            Column(modifier = Modifier.weight(1f).padding(start = 8.dp).clickableTable(onClick)) {
-                Text(table.displayName, fontWeight = FontWeight.Bold)
-                Text("Priorità ${table.priorityOrder + 1} · ${table.fileType}", style = MaterialTheme.typography.bodySmall)
-                when (table.normalizationStatus) {
-                    NormalizationStatus.PENDING, NormalizationStatus.PROCESSING -> {
-                        val suffix = progress?.let { " (parte $it)" }.orEmpty()
-                        Text("Normalizzazione in corso...$suffix", style = MaterialTheme.typography.bodySmall)
-                    }
-                    NormalizationStatus.FAILED ->
-                        Text("Normalizzazione fallita: ${table.normalizationErrorMessage}", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
-                    NormalizationStatus.DONE -> Text("Pronta", style = MaterialTheme.typography.bodySmall)
+    UgoCard(
+        modifier = Modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(10.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                IconButton(onClick = onMoveUp, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Priorità su")
+                }
+                IconButton(onClick = onMoveDown, modifier = Modifier.size(34.dp)) {
+                    Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Priorità giù")
                 }
             }
-            if (table.normalizationStatus == NormalizationStatus.FAILED) {
-                IconButton(onClick = onRetry) { Icon(Icons.Default.Refresh, contentDescription = "Riprova normalizzazione") }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .clickable(onClick = onClick)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+            ) {
+                Text(
+                    text = table.displayName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = "Priorità ${table.priorityOrder + 1} · ${table.fileType}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                TableStatusPill(status = table.normalizationStatus, progress = progress)
+                if (table.normalizationStatus == NormalizationStatus.FAILED && !table.normalizationErrorMessage.isNullOrBlank()) {
+                    Text(
+                        text = table.normalizationErrorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp),
+                    )
+                }
             }
-            IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = "Elimina tabella") }
+
+            if (table.normalizationStatus == NormalizationStatus.FAILED) {
+                IconButton(onClick = onRetry) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = "Riprova normalizzazione",
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            IconButton(onClick = onDelete) {
+                Icon(
+                    Icons.Default.DeleteOutline,
+                    contentDescription = "Elimina tabella",
+                    tint = MaterialTheme.colorScheme.error,
+                )
+            }
         }
     }
 }
 
-private fun Modifier.clickableTable(onClick: () -> Unit): Modifier =
-    this.then(Modifier.clickable { onClick() })
+@Composable
+private fun TableStatusPill(status: NormalizationStatus, progress: String?) {
+    val (label, containerColor, contentColor) = when (status) {
+        NormalizationStatus.DONE -> Triple(
+            "Pronta ✓",
+            UgoSemanticColors.successContainer,
+            UgoSemanticColors.onSuccessContainer,
+        )
+        NormalizationStatus.PENDING, NormalizationStatus.PROCESSING -> {
+            val suffix = progress?.let { " ($it)" }.orEmpty()
+            Triple(
+                "In corso$suffix",
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        NormalizationStatus.FAILED -> Triple(
+            "Errore",
+            MaterialTheme.colorScheme.errorContainer,
+            MaterialTheme.colorScheme.onErrorContainer,
+        )
+    }
+
+    Surface(
+        shape = RoundedCornerShape(50),
+        color = containerColor,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = contentColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+        )
+    }
+}
 
 private fun mimeTypeToFileType(mimeType: String?): OfficialFileType? = when (mimeType) {
     "application/pdf" -> OfficialFileType.PDF

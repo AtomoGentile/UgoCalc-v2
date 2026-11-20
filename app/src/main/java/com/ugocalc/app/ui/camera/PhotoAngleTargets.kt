@@ -10,17 +10,21 @@ data class PhotoAngleTarget(
 )
 
 /**
- * 5 scatti pensati per dare a M3 più viste geometriche dello stesso piatto: uno dall'alto (area e
- * forma), poi quattro a 45° girando intorno al piatto di 90° alla volta (0°, 90°, 180°, 270°), per
- * stimare altezza/volume da lati diversi e ridurre le occlusioni rispetto a un singolo punto di
- * vista (§ richiesta utente).
+ * Protocollo rapido fotocamera (piano V2 §13 punto 7):
+ * - I primi [RECOMMENDED_MIN_PHOTOS] scatti (Foto 1 dall'alto a 90° per area/diametro del piatto +
+ *   Foto 2 laterale a 45° per altezza e profilo del cumulo) costituiscono il protocollo base
+ *   ottimale e bastano nella quasi totalità dei casi.
+ * - Gli scatti 3–5 (45° ruotati di 90°, 180°, 270°) restano disponibili in coda come viste
+ *   opzionali solo per piatti con forti occlusioni.
  */
+const val RECOMMENDED_MIN_PHOTOS = 2
+
 val PHOTO_ANGLE_TARGETS = listOf(
-    PhotoAngleTarget(pitchDeg = 90f, turnDeg = 0f, label = "Foto 1 — dall'alto (visione aerea)"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 0f, label = "Foto 2 — inclinato 0°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 3 — inclinato 90°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 180f, label = "Foto 4 — inclinato 180°"),
-    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 270f, label = "Foto 5 — inclinato 270°"),
+    PhotoAngleTarget(pitchDeg = 90f, turnDeg = 0f, label = "Foto 1 — dall'alto 90° (area piatto)"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 0f, label = "Foto 2 — laterale 45° (altezza/profilo)"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 90f, label = "Foto 3 (opzionale) — 45° ruotata 90°"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 180f, label = "Foto 4 (opzionale) — 45° ruotata 180°"),
+    PhotoAngleTarget(pitchDeg = 45f, turnDeg = 270f, label = "Foto 5 (opzionale) — 45° ruotata 270°"),
 )
 
 const val PHOTO_ANGLE_PITCH_TOLERANCE_DEG = 3f

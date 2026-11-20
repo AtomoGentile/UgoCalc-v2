@@ -2,6 +2,55 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.0.0] - 2026-11-19
+
+### Added
+- **Local-First Onboarding & Italian Starter Database**: Added a guided first-launch onboarding flow (API keys, scale calibration, starter database setup) and a curated ~180-entry Italian CREA nutritional starter database (`Tabella Base Italiana (CREA)`).
+- **CI/CD Pipeline**: Added GitHub Actions workflow (`.github/workflows/android-ci.yml`) running unit tests, Android Lint, debug APK build, and R8/ProGuard release APK verification with artifact uploads.
+
+### Changed
+- **Complete UI/UX Overhaul**: Redesigned visual identity, theme tokens, cards, pills, empty states, navigation, camera capture, results, history, and settings screens with modern Material 3 aesthetics and accessibility improvements.
+- **Food Search & Catalog**: Improved food search browsing with immediate starter database exploration, recent searches, and dynamic AI model catalog updates across providers.
+
+### Fixed
+- **AI Provider & Hybrid Matching Reliability**: Hardened response parsing across Gemini, Vertex AI, OpenAI, and Anthropic clients, added EncryptedSharedPreferences corruption recovery, and improved locale-aware numeric parsing and hybrid food matching reliability.
+
+## [3.0.4] - 2026-08-14
+
+### Fixed
+- **Account Sharing Flow**: The invite link navigation is now correctly gated behind authentication, preventing token loss for non-logged-in users.
+- **Data Synchronization**: Added an immediate data pull trigger after a guest's sharing request is approved, ensuring instant access to shared history and bias data.
+- **API Resilience**: Improved error handling and response validation in `ShareClient` for AWS backend calls.
+
+### Changed
+- **Network Logging**: Increased OkHttp logging level to `BODY` for improved debuggability of API interactions.
+
+## [3.0.3] - 2026-07-27
+
+### Added
+- **OCR Support for Scanned PDFs and Images**
+  - ML Kit Text Recognition for on-device OCR processing
+  - Support for JPG and PNG image formats
+  - Automatic scanned PDF detection (blank/minimal text extraction triggers OCR prompt)
+  - Multi-language support: Latin model (Italian, English, French, German, Spanish, Portuguese, Turkish) + modular packs (Chinese Simplified/Traditional, Japanese, Korean, Devanagari)
+  - Async OCR processing with `Dispatchers.Default` to avoid UI blocking
+
+### Fixed
+- **Scanned PDF handling**: Users can now retry failed scanned PDFs — second attempt triggers OCR automatically
+- **ML Kit OCR initialization**: Use default TextRecognition client without explicit options (Latin script recognition enabled by default)
+
+### Changed
+- Extended `OfficialFileType` enum with `JPG` and `PNG` variants
+- Updated file picker to accept MIME types: `image/jpeg`, `image/png`
+- `DocumentTextExtractor` modified to route JPG/PNG to `extractWithOcr()` path
+
+### Dependencies
+- Added: `com.google.mlkit:text-recognition:16.0.0` (base model)
+- Added: `com.google.mlkit:text-recognition-{chinese,devanagari,japanese,korean}:16.0.0` (language packs)
+- Added: `org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1` (Task.await() integration)
+
+---
+
 ## [3.0.1] - 2026-07-23
 
 ### Fixed

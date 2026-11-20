@@ -10,12 +10,15 @@ import com.ugocalc.app.domain.model.CalculatedFoodLine
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 
 data class HistoryDetailUiState(
     val foodTitle: String = "",
+    val analyzedAtEpochMillis: Long? = null,
+    val sessionMode: String = "",
     val totalChoG: Double = 0.0,
     val totalGrassiG: Double = 0.0,
     val modelNames: List<String> = emptyList(),
@@ -32,21 +35,35 @@ class HistoryDetailViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(HistoryDetailUiState())
-    val uiState: StateFlow<HistoryDetailUiState> = _uiState
+    val uiState: StateFlow<HistoryDetailUiState> = _uiState.asStateFlow()
+
+    private var _historyId: Long = 0
 
     init {
         val historyId = checkNotNull(savedStateHandle.get<String>("historyId")).toLong()
+        _historyId = historyId
         viewModelScope.launch {
             val entry = historyRepository.getById(historyId) ?: return@launch
             val v2Record = entry.sessionId?.let { telemetryRepository.getBySessionId(it) }
             _uiState.value = HistoryDetailUiState(
                 foodTitle = entry.foodTitle,
+                analyzedAtEpochMillis = entry.analyzedAtEpochMillis,
+                sessionMode = entry.sessionMode,
                 totalChoG = entry.totalChoG,
                 totalGrassiG = entry.totalGrassiG,
-                modelNames = json.decodeFromString(entry.modelDisplayNamesJson),
-                lines = json.decodeFromString(entry.detailsJson),
+                modelNames = runCatching { json.decodeFromString<List<String>>(entry.modelDisplayNamesJson) }.getOrDefault(emptyList()),
+                lines = runCatching { json.decodeFromString<List<CalculatedFoodLine>>(entry.detailsJson) }.getOrDefault(emptyList()),
                 v2Record = v2Record,
             )
+        }
+    }
+
+    fun deleteEntry(onDeleted: () -> Unit) {
+        viewModelScope.launch {
+            val entry = historyRepository.getById(_historyId)
+            historyRepository.deleteAnalysis(_historyId)
+            entry?.sessionId?.let { telemetryRepository.deleteBySessionId(it) }
+            onDeleted()
         }
     }
 }

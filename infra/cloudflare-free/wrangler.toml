@@ -1,0 +1,19 @@
+﻿name = "ugocalc-api"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+# Binding Cloudflare D1 (SQLite serverless gratuito fino a 5 GB)
+# Dopo `npx wrangler d1 create ugocalc-db`, sostituisci database_id con quello generato.
+[[d1_databases]]
+binding = "DB"
+database_name = "ugocalc-db"
+database_id = "f4f84bdd-ce09-4141-b1a9-d634a8b407be"
+
+[vars]
+# Configurato con Cognito (Always Free fino a 50.000 MAU) per verifica JWT RS256 nativa in Web Crypto.
+# Se in futuro vuoi rimuovere anche Cognito, svuota questi due valori e imposta AUTH_SECRET.
+COGNITO_USER_POOL_ID = "us-east-1_gOp0VnNOr"
+COGNITO_CLIENT_ID = "4gfpgtj235f4da6cmdaki8d1l0"
+
+# URL pubblico del Worker per i deep link di invito (/invite).
+API_BASE_URL = "https://ugocalc-api.circolareclass.workers.dev"

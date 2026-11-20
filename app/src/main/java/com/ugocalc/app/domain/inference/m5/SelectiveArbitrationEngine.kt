@@ -1,13 +1,19 @@
 package com.ugocalc.app.domain.inference.m5
 
+import android.util.Log
 import com.ugocalc.app.data.remote.ai.AiCallExecutor
 import com.ugocalc.app.data.remote.ai.client.AiCallException
+import com.ugocalc.app.data.repository.CostManagementRepository
 import com.ugocalc.app.domain.inference.model.ArbitrationResponse
 import com.ugocalc.app.domain.inference.model.FlaggedItem
 import com.ugocalc.app.domain.inference.model.RevisedFood
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.ModelPricingCatalog
 import javax.inject.Inject
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 
 /**
  * M5 – Arbitrato selettivo (piano V2 §4, §5). Si attiva SOLO quando M4 ha flaggato almeno un
@@ -20,6 +26,7 @@ import javax.inject.Inject
  */
 class SelectiveArbitrationEngine @Inject constructor(
     private val executor: AiCallExecutor,
+    private val costManagementRepository: CostManagementRepository,
 ) {
 
     suspend fun arbitrate(
@@ -28,6 +35,7 @@ class SelectiveArbitrationEngine @Inject constructor(
         imageMimeType: String,
         scene: SceneGraph,
         flaggati: List<FlaggedItem>,
+        sessionId: String? = null,
     ): ArbitrationOutcome {
         if (flaggati.isEmpty()) return ArbitrationOutcome.Riuscita(emptyList())
 
@@ -35,6 +43,26 @@ class SelectiveArbitrationEngine @Inject constructor(
         val prompt = ArbitrationPrompt.build(scene, flaggati)
         return try {
             val response = executor.completeJson<ArbitrationResponse>(model, prompt, imageParts)
+
+            // Registra il costo di questa chiamata (M5)
+            coroutineScope {
+                launch {
+                    try {
+                        val responseJson = executor.json.encodeToString(response)
+                        val costUsd = ModelPricingCatalog.estimateCost(model, prompt, responseJson, images.size)
+                        costManagementRepository.recordCost(
+                            stage = "arbitration",
+                            modelId = model.id,
+                            costUsd = costUsd,
+                            description = "M5 Arbitrato selettivo - ${flaggati.size} alimenti flaggati",
+                            sessionId = sessionId
+                        )
+                    } catch (e: Exception) {
+                        Log.e("M5-Cost", "Errore durante la registrazione del costo", e)
+                    }
+                }
+            }
+
             if (response.schemaVersion != SceneGraph.SCHEMA_VERSION) {
                 ArbitrationOutcome.NonDisponibile(
                     "schema_version non riconosciuta nella risposta di arbitrato: ${response.schemaVersion}",

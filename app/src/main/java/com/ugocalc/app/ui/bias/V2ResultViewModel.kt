@@ -39,7 +39,8 @@ class V2ResultViewModel @Inject constructor(
     private var _recordId: Long? = null
 
     init {
-        val recordId = savedStateHandle.get<String>("recordId")?.toLongOrNull()
+        val recordIdStr = savedStateHandle.get<String>("recordId")
+        val recordId = if (recordIdStr == "null") null else recordIdStr?.toLongOrNull()
         _recordId = recordId
         if (recordId != null) {
             viewModelScope.launch {
@@ -56,9 +57,28 @@ class V2ResultViewModel @Inject constructor(
         } else {
             viewModelScope.launch {
                 sessionStore.session.collect { session ->
+                    // In shadow mode, i risultati V2 non sono quelli primari della sessione.
+                    // Se v2Stime è vuoto, proviamo a recuperare il primo risultato shadow disponibile (piano V2 §13.1).
+                    val stime = if (session.usingV2Engine) session.v2Stime else {
+                        session.shadowV2Results.values.firstOrNull()?.let { shadow ->
+                            (shadow.outcome as? AnalysisSessionStore.PipelineOutcomeForShadow.Success)?.stime
+                        } ?: emptyList()
+                    }
+                    val ambiguita = if (session.usingV2Engine) session.v2AmbiguitaRisolte else {
+                        session.shadowV2Results.values.firstOrNull()?.let { shadow ->
+                            (shadow.outcome as? AnalysisSessionStore.PipelineOutcomeForShadow.Success)?.ambiguita
+                        } ?: emptyList()
+                    }
+                    val reasoning = if (session.usingV2Engine) "" else {
+                        session.shadowV2Results.values.firstOrNull()?.let { shadow ->
+                            (shadow.outcome as? AnalysisSessionStore.PipelineOutcomeForShadow.Success)?.visionOutcome?.result?.ragionamento
+                        } ?: ""
+                    }
+
                     _uiState.update { it.copy(
-                        v2Stime = session.v2Stime,
-                        ambiguities = session.v2AmbiguitaRisolte
+                        reasoning = reasoning,
+                        v2Stime = stime,
+                        ambiguities = ambiguita
                     ) }
                 }
             }

@@ -2,30 +2,38 @@ package com.ugocalc.app.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Typography
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.isSpecified
 import androidx.compose.ui.unit.sp
-import com.ugocalc.app.R
 import com.ugocalc.app.data.local.prefs.AppTheme
 
 val NunitoFamily = FontFamily.SansSerif
 
 /**
- * Famiglie di carattere (§ richiesta utente "colore, carattere se riesci"): Nunito come default
- * (warm & friendly per food app), poi font di sistema (`FontFamily.SansSerif`/`Serif`/`Monospace`/`Cursive`)
+ * Famiglie di carattere configurabili in Accessibilità.
  */
 enum class AppFontFamily(val label: String) {
     DEFAULT("Predefinito"),
@@ -42,34 +50,32 @@ enum class AppFontFamily(val label: String) {
         CURSIVE -> FontFamily.Cursive
     }
 
-    /** Su alcuni dispositivi Monospace risulta quasi identico a Sans serif (§ segnalazione utente): un peso marcato lo rende subito riconoscibile anche lì. */
+    /** Su alcuni dispositivi Monospace risulta simile a Sans serif: un peso marcato lo rende riconoscibile. */
     val fontWeight: FontWeight? get() = if (this == MONOSPACE) FontWeight.Bold else null
 }
 
-// Palette principale (warm & food-focused)
-val UgoGreen = Color(0xFF2E7D32) // Verde brand (invariato, top bar + bottoni)
-val UgoRed = Color(0xFFC62828) // Error rosso (invariato)
-val UgoGrey = Color(0xFF9E9E9E) // Placeholder/disabled
+// Token storici mantenuti per compatibilità con i call-site esistenti
+val UgoGreen = Color(0xFF15803D)
+val UgoRed = Color(0xFFDC2626)
+val UgoGrey = Color(0xFF71717A)
 
-// Nuova palette warm per light theme
-val WarmCream = Color(0xFFFDF8F2) // Background calda (crema)
-val WarmWhite = Color(0xFFFFFDF8) // Surface bianco caldo
-val WarmSand = Color(0xFFEDE0D0) // surfaceVariant sabbia
-val WarmTerracotta = Color(0xFFC0622B) // secondary terracotta (rimpiazza lime)
-val WarmAmber = Color(0xFFBF9B30) // tertiary amber (già esiste come RistoranteGold)
+// Palette semantiche di base (Casa & Ristorante)
+val WarmCream = Color(0xFFFAF9F6)
+val WarmWhite = Color(0xFFFFFFFF)
+val WarmSand = Color(0xFFECEBE4)
+val WarmTerracotta = Color(0xFFEA580C)
+val WarmAmber = Color(0xFFD97706)
 
-// Nuova palette dark theme (charcoal/slate + accenti saturi)
-val DarkCharcoal = Color(0xFF37474F) // background slate-blue scuro
-val DarkSurface = Color(0xFF263238) // surface slate più scuro
-val DarkSurfaceVariant = Color(0xFF455A64) // surfaceVariant slate medio
-val DarkSecondaryVibrant = Color(0xFFFF9E5F) // secondary pesca saturo (rimpiazza lime, più vibrant)
+val DarkCharcoal = Color(0xFF0E1113)
+val DarkSurface = Color(0xFF0E1113)
+val DarkSurfaceVariant = Color(0xFF1F272C)
+val DarkSecondaryVibrant = Color(0xFFFB923C)
 
-// Colori Ristorante (§ richiesta utente "colori diversi"): toni caldi, oro e bordeaux
-val RistoranteGold = Color(0xFFBF9B30)
-val RistoranteWine = Color(0xFF722F37)
-val RistoranteCream = Color(0xFFFFFDD0)
+val RistoranteGold = Color(0xFFB45309)
+val RistoranteWine = Color(0xFF9F1239)
+val RistoranteCream = Color(0xFFFBF8F5)
 
-// Spacing token (design system)
+// Spacing tokens
 val SpaceXS = 4.dp
 val SpaceS = 8.dp
 val SpaceM = 16.dp
@@ -77,71 +83,393 @@ val SpaceL = 24.dp
 val SpaceXL = 32.dp
 
 private val LightColors = lightColorScheme(
-    primary = UgoGreen,
-    secondary = WarmTerracotta, // Terracotta warm (food-focused)
-    tertiary = WarmAmber, // Amber warm
-    error = UgoRed,
-    background = WarmCream, // Crema calda background
-    surface = WarmWhite, // Bianco caldo surface
+    primary = Color(0xFF15803D),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFDCFCE7),
+    onPrimaryContainer = Color(0xFF052E16),
+    secondary = Color(0xFFEA580C),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFFEDD5),
+    onSecondaryContainer = Color(0xFF431407),
+    tertiary = Color(0xFFD97706),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFFEF3C7),
+    onTertiaryContainer = Color(0xFF451A03),
+    background = Color(0xFFFAF9F6),
+    onBackground = Color(0xFF18181B),
+    surface = Color(0xFFFAF9F6),
+    onSurface = Color(0xFF18181B),
+    surfaceVariant = Color(0xFFECEBE4),
+    onSurfaceVariant = Color(0xFF52525B),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF4F3EE),
+    surfaceContainer = Color(0xFFECEBE4),
+    surfaceContainerHigh = Color(0xFFE4E2D9),
+    surfaceContainerHighest = Color(0xFFDAD8CE),
+    surfaceBright = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFE4E2D9),
+    surfaceTint = Color(0xFF15803D),
+    outline = Color(0xFF78716C),
+    outlineVariant = Color(0xFFE5E2DC),
+    error = Color(0xFFDC2626),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFEE2E2),
+    onErrorContainer = Color(0xFF7F1D1D),
+    inverseSurface = Color(0xFF18181B),
+    inverseOnSurface = Color(0xFFFAF9F6),
+    inversePrimary = Color(0xFF34D399),
+    scrim = Color(0xFF090B0C),
 )
 
 private val DarkColors = darkColorScheme(
-    primary = Color(0xFF66BB6A), // Verde acceso anche in dark mode
-    secondary = DarkSecondaryVibrant, // Pesca saturo, più vibrant
-    tertiary = Color(0xFFFFD54F), // Ambra più saturato
-    error = Color(0xFFEF9A9A),
-    background = DarkCharcoal, // Slate-blue scuro
-    surface = DarkSurface, // Slate surface
-    surfaceVariant = DarkSurfaceVariant, // Slate medio — usato per card/settings in dark
-    onBackground = Color.White,
-    onSurface = Color.White,
-    onSurfaceVariant = Color(0xFFCFD8DC), // Testo secondario — più leggibile su slate
+    primary = Color(0xFF34D399),
+    onPrimary = Color(0xFF022C22),
+    primaryContainer = Color(0xFF064E3B),
+    onPrimaryContainer = Color(0xFFA7F3D0),
+    secondary = Color(0xFFFB923C),
+    onSecondary = Color(0xFF431407),
+    secondaryContainer = Color(0xFF7C2D12),
+    onSecondaryContainer = Color(0xFFFFEDD5),
+    tertiary = Color(0xFFFBBF24),
+    onTertiary = Color(0xFF451A03),
+    tertiaryContainer = Color(0xFF78350F),
+    onTertiaryContainer = Color(0xFFFEF3C7),
+    background = Color(0xFF0E1113),
+    onBackground = Color(0xFFF4F6F8),
+    surface = Color(0xFF0E1113),
+    onSurface = Color(0xFFF4F6F8),
+    surfaceVariant = Color(0xFF1F272C),
+    onSurfaceVariant = Color(0xFF94A3B8),
+    surfaceContainerLowest = Color(0xFF090B0C),
+    surfaceContainerLow = Color(0xFF15191C),
+    surfaceContainer = Color(0xFF1B2125),
+    surfaceContainerHigh = Color(0xFF232B30),
+    surfaceContainerHighest = Color(0xFF2C363C),
+    surfaceBright = Color(0xFF2C363C),
+    surfaceDim = Color(0xFF090B0C),
+    surfaceTint = Color(0xFF34D399),
+    outline = Color(0xFF64748B),
+    outlineVariant = Color(0xFF2A3339),
+    error = Color(0xFFF87171),
+    onError = Color(0xFF450A0A),
+    errorContainer = Color(0xFF7F1D1D),
+    onErrorContainer = Color(0xFFFECACA),
+    inverseSurface = Color(0xFFF4F6F8),
+    inverseOnSurface = Color(0xFF18181B),
+    inversePrimary = Color(0xFF15803D),
+    scrim = Color(0xFF000000),
 )
 
 private val RistoranteLightColors = lightColorScheme(
-    primary = RistoranteGold,
-    secondary = RistoranteWine,
-    tertiary = Color(0xFF8D6E63),
-    error = UgoRed,
-    background = RistoranteCream,
-    surface = RistoranteCream,
+    primary = Color(0xFF9F1239),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFFFFE4E6),
+    onPrimaryContainer = Color(0xFF4C0519),
+    secondary = Color(0xFFB45309),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFFFEF3C7),
+    onSecondaryContainer = Color(0xFF451A03),
+    tertiary = Color(0xFF78350F),
+    onTertiary = Color(0xFFFFFFFF),
+    tertiaryContainer = Color(0xFFF5EBE0),
+    onTertiaryContainer = Color(0xFF2E1505),
+    background = Color(0xFFFBF8F5),
+    onBackground = Color(0xFF1C1917),
+    surface = Color(0xFFFBF8F5),
+    onSurface = Color(0xFF1C1917),
+    surfaceVariant = Color(0xFFEFE8E0),
+    onSurfaceVariant = Color(0xFF57534E),
+    surfaceContainerLowest = Color(0xFFFFFFFF),
+    surfaceContainerLow = Color(0xFFF6F1EB),
+    surfaceContainer = Color(0xFFEFE8E0),
+    surfaceContainerHigh = Color(0xFFE8DFD5),
+    surfaceContainerHighest = Color(0xFFE0D5C9),
+    surfaceBright = Color(0xFFFFFFFF),
+    surfaceDim = Color(0xFFE8DFD5),
+    surfaceTint = Color(0xFF9F1239),
+    outline = Color(0xFF78716C),
+    outlineVariant = Color(0xFFE7E0D8),
+    error = Color(0xFFDC2626),
+    onError = Color(0xFFFFFFFF),
+    errorContainer = Color(0xFFFEE2E2),
+    onErrorContainer = Color(0xFF7F1D1D),
+    inverseSurface = Color(0xFF1C1917),
+    inverseOnSurface = Color(0xFFFBF8F5),
+    inversePrimary = Color(0xFFFB7185),
+    scrim = Color(0xFF130E10),
 )
 
 private val RistoranteDarkColors = darkColorScheme(
-    primary = Color(0xFFFFD54F),
-    secondary = Color(0xFFD32F2F),
-    tertiary = Color(0xFFA1887F),
-    error = Color(0xFFEF9A9A),
-    background = Color(0xFF2D2926),  // Marrone scuro (mantenuto per distinzione Ristorante)
-    surface = Color(0xFF2D2926),
-    onBackground = Color.White,
-    onSurface = Color.White,
+    primary = Color(0xFFFB7185),
+    onPrimary = Color(0xFF4C0519),
+    primaryContainer = Color(0xFF881337),
+    onPrimaryContainer = Color(0xFFFFE4E6),
+    secondary = Color(0xFFFBBF24),
+    onSecondary = Color(0xFF451A03),
+    secondaryContainer = Color(0xFF78350F),
+    onSecondaryContainer = Color(0xFFFEF3C7),
+    tertiary = Color(0xFFF59E0B),
+    onTertiary = Color(0xFF451A03),
+    tertiaryContainer = Color(0xFF5C280A),
+    onTertiaryContainer = Color(0xFFFEF3C7),
+    background = Color(0xFF130E10),
+    onBackground = Color(0xFFFAF5F6),
+    surface = Color(0xFF130E10),
+    onSurface = Color(0xFFFAF5F6),
+    surfaceVariant = Color(0xFF22191D),
+    onSurfaceVariant = Color(0xFFCBD5E1),
+    surfaceContainerLowest = Color(0xFF0C080A),
+    surfaceContainerLow = Color(0xFF1A1316),
+    surfaceContainer = Color(0xFF22191D),
+    surfaceContainerHigh = Color(0xFF2C2126),
+    surfaceContainerHighest = Color(0xFF372A30),
+    surfaceBright = Color(0xFF372A30),
+    surfaceDim = Color(0xFF0C080A),
+    surfaceTint = Color(0xFFFB7185),
+    outline = Color(0xFF64748B),
+    outlineVariant = Color(0xFF3A2D32),
+    error = Color(0xFFF87171),
+    onError = Color(0xFF450A0A),
+    errorContainer = Color(0xFF7F1D1D),
+    onErrorContainer = Color(0xFFFECACA),
+    inverseSurface = Color(0xFFFAF5F6),
+    inverseOnSurface = Color(0xFF1C1917),
+    inversePrimary = Color(0xFF9F1239),
+    scrim = Color(0xFF000000),
 )
 
-/** Colori del tema *senza* personalizzazione (§ "Predefinito" nel selettore colori), per seminare i cursori e per il reset. */
-fun defaultThemeColors(useDark: Boolean) = if (useDark) DarkColors else LightColors
+@Immutable
+data class UgoSemanticPalette(
+    val cho: Color,
+    val onCho: Color,
+    val choContainer: Color,
+    val onChoContainer: Color,
+    val fat: Color,
+    val onFat: Color,
+    val fatContainer: Color,
+    val onFatContainer: Color,
+    val success: Color,
+    val onSuccess: Color,
+    val successContainer: Color,
+    val onSuccessContainer: Color,
+    val warning: Color,
+    val onWarning: Color,
+    val warningContainer: Color,
+    val onWarningContainer: Color,
+)
 
-/** Testo/icona leggibile sopra [color]: bianco su colori scuri, nero su colori chiari. */
-private fun contrastingOn(color: Color): Color = if (color.luminance() > 0.5f) Color.Black else Color.White
+private val DefaultLightSemanticColors = UgoSemanticPalette(
+    cho = Color(0xFF15803D),
+    onCho = Color(0xFFFFFFFF),
+    choContainer = Color(0xFFDCFCE7),
+    onChoContainer = Color(0xFF052E16),
+    fat = Color(0xFFEA580C),
+    onFat = Color(0xFFFFFFFF),
+    fatContainer = Color(0xFFFFEDD5),
+    onFatContainer = Color(0xFF431407),
+    success = Color(0xFF16A34A),
+    onSuccess = Color(0xFFFFFFFF),
+    successContainer = Color(0xFFDCFCE7),
+    onSuccessContainer = Color(0xFF052E16),
+    warning = Color(0xFFD97706),
+    onWarning = Color(0xFFFFFFFF),
+    warningContainer = Color(0xFFFEF3C7),
+    onWarningContainer = Color(0xFF451A03),
+)
+
+private val DefaultDarkSemanticColors = UgoSemanticPalette(
+    cho = Color(0xFF34D399),
+    onCho = Color(0xFF022C22),
+    choContainer = Color(0xFF064E3B),
+    onChoContainer = Color(0xFFA7F3D0),
+    fat = Color(0xFFFB923C),
+    onFat = Color(0xFF431407),
+    fatContainer = Color(0xFF7C2D12),
+    onFatContainer = Color(0xFFFFEDD5),
+    success = Color(0xFF4ADE80),
+    onSuccess = Color(0xFF052E16),
+    successContainer = Color(0xFF064E3B),
+    onSuccessContainer = Color(0xFFA7F3D0),
+    warning = Color(0xFFFBBF24),
+    onWarning = Color(0xFF451A03),
+    warningContainer = Color(0xFF78350F),
+    onWarningContainer = Color(0xFFFEF3C7),
+)
+
+val LocalUgoSemanticColors = staticCompositionLocalOf { DefaultLightSemanticColors }
 
 /**
- * Tono "container" (§ Material 3: superficie tenue abbinata a [base]) e il suo testo leggibile.
- * Niente libreria Material Color Utilities: un blend semplice verso bianco/nero è sufficiente per
- * restare visivamente coerenti con qualunque colore scelto dall'utente, senza il calcolo HCT completo.
+ * Palette semantica dedicata ai macronutrienti e agli stati di feedback.
  */
+object UgoSemanticColors {
+    val current: UgoSemanticPalette
+        @Composable
+        @ReadOnlyComposable
+        get() = LocalUgoSemanticColors.current
+
+    val cho: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.cho
+    val onCho: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onCho
+    val choContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.choContainer
+    val onChoContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onChoContainer
+
+    val fat: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.fat
+    val onFat: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onFat
+    val fatContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.fatContainer
+    val onFatContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onFatContainer
+
+    val success: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.success
+    val onSuccess: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onSuccess
+    val successContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.successContainer
+    val onSuccessContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onSuccessContainer
+
+    val warning: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.warning
+    val onWarning: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onWarning
+    val warningContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.warningContainer
+    val onWarningContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onWarningContainer
+}
+
+val UgoTypography = Typography(
+    displayLarge = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 40.sp,
+        lineHeight = 46.sp,
+        letterSpacing = (-0.5).sp,
+    ),
+    displayMedium = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 34.sp,
+        lineHeight = 40.sp,
+        letterSpacing = (-0.25).sp,
+    ),
+    displaySmall = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 28.sp,
+        lineHeight = 34.sp,
+        letterSpacing = 0.sp,
+    ),
+    headlineLarge = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Bold,
+        fontSize = 26.sp,
+        lineHeight = 32.sp,
+        letterSpacing = (-0.2).sp,
+    ),
+    headlineMedium = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp,
+        letterSpacing = 0.sp,
+    ),
+    headlineSmall = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+        letterSpacing = 0.sp,
+    ),
+    titleLarge = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 19.sp,
+        lineHeight = 25.sp,
+        letterSpacing = 0.sp,
+    ),
+    titleMedium = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    titleSmall = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    bodyLarge = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 16.sp,
+        lineHeight = 24.sp,
+        letterSpacing = 0.15.sp,
+    ),
+    bodyMedium = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.2.sp,
+    ),
+    bodySmall = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.3.sp,
+    ),
+    labelLarge = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp,
+        letterSpacing = 0.1.sp,
+    ),
+    labelMedium = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        letterSpacing = 0.4.sp,
+    ),
+    labelSmall = TextStyle(
+        fontFamily = NunitoFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = 11.sp,
+        lineHeight = 14.sp,
+        letterSpacing = 0.4.sp,
+    ),
+)
+
+val UgoShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(12.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(24.dp),
+    extraLarge = RoundedCornerShape(28.dp),
+)
+
+/** Colori del tema *senza* personalizzazione, per seminare i cursori e per il reset. */
+fun defaultThemeColors(useDark: Boolean, isRistorante: Boolean = false): ColorScheme = when {
+    isRistorante && useDark -> RistoranteDarkColors
+    isRistorante -> RistoranteLightColors
+    useDark -> DarkColors
+    else -> LightColors
+}
+
+/** Testo/icona leggibile sopra [color]. */
+private fun contrastingOn(color: Color): Color =
+    if (color.luminance() > 0.45f) Color(0xFF18181B) else Color(0xFFFAF9F6)
+
 private fun containerColors(base: Color, useDark: Boolean): Pair<Color, Color> {
-    // Blend più marcato del "90/10" da manuale Material 3: a quell'intensità il tono risultava
-    // troppo tenue e le Impostazioni sembravano "senza colore" (§ segnalazione utente).
-    val container = if (useDark) lerp(base, Color.Black, 0.5f) else lerp(base, Color.White, 0.55f)
-    val onContainer = if (useDark) lerp(base, Color.White, 0.8f) else lerp(base, Color.Black, 0.75f)
+    val container = if (useDark) lerp(base, Color(0xFF090B0C), 0.55f) else lerp(base, Color.White, 0.72f)
+    val onContainer = if (container.luminance() > 0.45f) {
+        lerp(base, Color(0xFF050505), 0.65f)
+    } else {
+        lerp(base, Color.White, 0.82f)
+    }
     return container to onContainer
 }
 
 /**
- * Applica personalizzazione (§ richiesta utente "personalizzazione colori") a uno schema base,
- * ricalcolando *tutti* i ruoli derivati (container, on-color) invece di sovrascrivere solo
- * primary/secondary/tertiary lasciando il resto alla tavolozza viola/rosa generica di Material 3
- * — la causa della "stella bianca" e del menu "senza colore" segnalati.
+ * Applica personalizzazione colori ricalcolando tutti i ruoli derivati inclusi
+ * surfaceContainerLowest..Highest, surfaceVariant, onSurfaceVariant e outlineVariant,
+ * così da non far mai trapelare toni M3 predefiniti (lilla/viola).
  */
 private fun ColorScheme.withCustomColors(
     useDark: Boolean,
@@ -152,59 +480,161 @@ private fun ColorScheme.withCustomColors(
     errorColor: Color?,
 ): ColorScheme {
     val primary = primaryColor ?: this.primary
+    val onPrimary = if (primaryColor != null) contrastingOn(primary) else this.onPrimary
+    val (primaryContainer, onPrimaryContainer) = if (primaryColor != null) {
+        containerColors(primary, useDark)
+    } else {
+        this.primaryContainer to this.onPrimaryContainer
+    }
+
     val secondary = secondaryColor ?: this.secondary
+    val onSecondary = if (secondaryColor != null) contrastingOn(secondary) else this.onSecondary
+    val (secondaryContainer, onSecondaryContainer) = if (secondaryColor != null) {
+        containerColors(secondary, useDark)
+    } else {
+        this.secondaryContainer to this.onSecondaryContainer
+    }
+
     val tertiary = tertiaryColor ?: this.tertiary
+    val onTertiary = if (tertiaryColor != null) contrastingOn(tertiary) else this.onTertiary
+    val (tertiaryContainer, onTertiaryContainer) = if (tertiaryColor != null) {
+        containerColors(tertiary, useDark)
+    } else {
+        this.tertiaryContainer to this.onTertiaryContainer
+    }
+
     val error = errorColor ?: this.error
-    val (primaryContainer, onPrimaryContainer) = containerColors(primary, useDark)
-    val (secondaryContainer, onSecondaryContainer) = containerColors(secondary, useDark)
-    val (tertiaryContainer, onTertiaryContainer) = containerColors(tertiary, useDark)
-    val (errorContainer, onErrorContainer) = containerColors(error, useDark)
+    val onError = if (errorColor != null) contrastingOn(error) else this.onError
+    val (errorContainer, onErrorContainer) = if (errorColor != null) {
+        containerColors(error, useDark)
+    } else {
+        this.errorContainer to this.onErrorContainer
+    }
+
     val background = backgroundColor ?: this.background
     val surface = backgroundColor ?: this.surface
+    val bgIsDark = if (backgroundColor != null) background.luminance() < 0.45f else useDark
+
+    val onBg = if (backgroundColor != null) contrastingOn(background) else this.onBackground
+    val onSurf = if (backgroundColor != null) contrastingOn(surface) else this.onSurface
+
+    val surfaceContainerLowest = if (backgroundColor != null) {
+        if (bgIsDark) lerp(background, Color.Black, 0.35f) else lerp(background, Color.White, 0.72f)
+    } else {
+        this.surfaceContainerLowest
+    }
+    val surfaceContainerLow = if (backgroundColor != null) {
+        if (bgIsDark) lerp(background, Color.White, 0.04f) else lerp(background, Color.Black, 0.03f)
+    } else {
+        this.surfaceContainerLow
+    }
+    val surfaceContainer = if (backgroundColor != null) {
+        if (bgIsDark) lerp(background, Color.White, 0.08f) else lerp(background, Color.Black, 0.06f)
+    } else {
+        this.surfaceContainer
+    }
+    val surfaceContainerHigh = if (backgroundColor != null) {
+        if (bgIsDark) lerp(background, Color.White, 0.12f) else lerp(background, Color.Black, 0.10f)
+    } else {
+        this.surfaceContainerHigh
+    }
+    val surfaceContainerHighest = if (backgroundColor != null) {
+        if (bgIsDark) lerp(background, Color.White, 0.17f) else lerp(background, Color.Black, 0.14f)
+    } else {
+        this.surfaceContainerHighest
+    }
+    val surfaceVariant = if (backgroundColor != null) surfaceContainer else this.surfaceVariant
+    val onSurfaceVariant = if (backgroundColor != null) lerp(onBg, background, 0.32f) else this.onSurfaceVariant
+    val outline = if (backgroundColor != null) lerp(onBg, background, 0.52f) else this.outline
+    val outlineVariant = if (backgroundColor != null) lerp(background, onBg, 0.18f) else this.outlineVariant
+    val surfaceBright = if (backgroundColor != null) {
+        if (bgIsDark) surfaceContainerHighest else surfaceContainerLowest
+    } else {
+        this.surfaceBright
+    }
+    val surfaceDim = if (backgroundColor != null) {
+        if (bgIsDark) surfaceContainerLowest else surfaceContainerHigh
+    } else {
+        this.surfaceDim
+    }
+    val inversePrimary = if (primaryColor != null) {
+        if (useDark) lerp(primary, Color.Black, 0.25f) else lerp(primary, Color.White, 0.35f)
+    } else {
+        this.inversePrimary
+    }
 
     return copy(
         primary = primary,
-        onPrimary = contrastingOn(primary),
+        onPrimary = onPrimary,
         primaryContainer = primaryContainer,
         onPrimaryContainer = onPrimaryContainer,
         secondary = secondary,
-        onSecondary = contrastingOn(secondary),
+        onSecondary = onSecondary,
         secondaryContainer = secondaryContainer,
         onSecondaryContainer = onSecondaryContainer,
         tertiary = tertiary,
-        onTertiary = contrastingOn(tertiary),
+        onTertiary = onTertiary,
         tertiaryContainer = tertiaryContainer,
         onTertiaryContainer = onTertiaryContainer,
-        // Il rosso resta "intenso" (colore pieno, non un tono container tenue): è l'avviso più
-        // urgente dell'app, es. il pulsante Analizza quando sei offline (§ richiesta utente).
         error = error,
-        onError = contrastingOn(error),
+        onError = onError,
         errorContainer = errorContainer,
         onErrorContainer = onErrorContainer,
         background = background,
-        onBackground = contrastingOn(background),
+        onBackground = onBg,
         surface = surface,
-        onSurface = contrastingOn(surface),
+        onSurface = onSurf,
+        surfaceVariant = surfaceVariant,
+        onSurfaceVariant = onSurfaceVariant,
+        surfaceContainerLowest = surfaceContainerLowest,
+        surfaceContainerLow = surfaceContainerLow,
+        surfaceContainer = surfaceContainer,
+        surfaceContainerHigh = surfaceContainerHigh,
+        surfaceContainerHighest = surfaceContainerHighest,
+        surfaceBright = surfaceBright,
+        surfaceDim = surfaceDim,
         surfaceTint = primary,
+        outline = outline,
+        outlineVariant = outlineVariant,
+        inversePrimary = inversePrimary,
     )
 }
 
-/**
- * [textScale] implementa "Accessibilità: dimensione testo" (§2.2): moltiplica tutte le dimensioni
- * tipografiche di base, senza dover duplicare l'intera Typography per ogni livello.
- *
- * [primaryColor]/[secondaryColor]/[tertiaryColor]/[backgroundColor] (§ richiesta utente,
- * "personalizzazione colori"): se valorizzati sovrascrivono il colore corrispondente e tutti i
- * ruoli derivati (container, on-color), altrimenti restano quelli del tema chiaro/scuro predefinito.
- *
- * [fontFamily]/[fontColor] (§ richiesta utente, "colore, carattere se riesci"): [fontColor] passa
- * dal `contentColor` della Surface radice, così arriva a qualunque `Text` che non specifichi già
- * un colore proprio, senza dover toccare ogni schermata una per una.
- */
+private fun buildSemanticPalette(
+    colors: ColorScheme,
+    useDark: Boolean,
+    isRistorante: Boolean,
+): UgoSemanticPalette {
+    val base = if (useDark) DefaultDarkSemanticColors else DefaultLightSemanticColors
+    return if (isRistorante) {
+        base.copy(
+            cho = if (useDark) Color(0xFF2DD4BF) else Color(0xFF0F766E),
+            onCho = if (useDark) Color(0xFF042F2E) else Color(0xFFFFFFFF),
+            choContainer = if (useDark) Color(0xFF115E59) else Color(0xFFCCFBF1),
+            onChoContainer = if (useDark) Color(0xFFCCFBF1) else Color(0xFF134E4A),
+            fat = colors.secondary,
+            onFat = colors.onSecondary,
+            fatContainer = colors.secondaryContainer,
+            onFatContainer = colors.onSecondaryContainer,
+        )
+    } else {
+        base.copy(
+            cho = colors.primary,
+            onCho = colors.onPrimary,
+            choContainer = colors.primaryContainer,
+            onChoContainer = colors.onPrimaryContainer,
+            fat = colors.secondary,
+            onFat = colors.onSecondary,
+            fatContainer = colors.secondaryContainer,
+            onFatContainer = colors.onSecondaryContainer,
+        )
+    }
+}
+
 @Composable
 fun UgoCalcTheme(
     appTheme: AppTheme = AppTheme.SYSTEM,
-    isRistorante: Boolean = false, // Nuova flag per switch temi (§ richiesta utente)
+    isRistorante: Boolean = false,
     textScale: Float = 1.0f,
     primaryColor: Color? = null,
     secondaryColor: Color? = null,
@@ -221,53 +651,74 @@ fun UgoCalcTheme(
         AppTheme.DARK -> true
         AppTheme.SYSTEM -> isSystemInDarkTheme()
     }
-    
-    val colors = androidx.compose.runtime.remember(useDark, isRistorante, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor) {
-        val baseColors = when {
-            isRistorante && useDark -> RistoranteDarkColors
-            isRistorante -> RistoranteLightColors
-            useDark -> DarkColors
-            else -> LightColors
-        }
-        baseColors.withCustomColors(useDark, primaryColor, secondaryColor, tertiaryColor, backgroundColor, errorColor)
+
+    val colors = remember(
+        useDark,
+        isRistorante,
+        primaryColor,
+        secondaryColor,
+        tertiaryColor,
+        backgroundColor,
+        errorColor,
+    ) {
+        defaultThemeColors(useDark, isRistorante).withCustomColors(
+            useDark = useDark,
+            primaryColor = primaryColor,
+            secondaryColor = secondaryColor,
+            tertiaryColor = tertiaryColor,
+            backgroundColor = backgroundColor,
+            errorColor = errorColor,
+        )
     }
 
-    val baseTypography = MaterialTheme.typography
-    val scaledTypography = androidx.compose.runtime.remember(baseTypography, textScale, fontFamily, fontWeight, fontColor) {
-        fun scaled(size: androidx.compose.ui.unit.TextUnit) = (size.value * textScale).sp
-        // Il colore va "cotto" dentro ogni TextStyle, non solo passato come contentColor della
-        // Surface radice: qualunque Card/Button/Surface annidato (usatissimi in questa app) reimposta
-        // il proprio contentColor in base al proprio sfondo, sovrascrivendo quello ereditato dall'alto
-        // — un TextStyle.color esplicito invece vince sempre, indipendentemente da dove si trova il Text.
-        fun style(base: androidx.compose.ui.text.TextStyle, size: androidx.compose.ui.unit.TextUnit) = base.copy(
-            fontSize = scaled(size),
+    val semanticColors = remember(colors, useDark, isRistorante) {
+        buildSemanticPalette(colors, useDark, isRistorante)
+    }
+
+    val scaledTypography = remember(textScale, fontFamily, fontWeight, fontColor) {
+        fun scaled(unit: TextUnit): TextUnit =
+            if (unit.isSpecified) (unit.value * textScale).sp else unit
+
+        fun style(base: TextStyle): TextStyle = base.copy(
+            fontSize = scaled(base.fontSize),
+            lineHeight = scaled(base.lineHeight),
             fontFamily = fontFamily ?: base.fontFamily,
             fontWeight = fontWeight ?: base.fontWeight,
             color = fontColor ?: base.color,
         )
-        baseTypography.copy(
-            bodyLarge = style(baseTypography.bodyLarge, baseTypography.bodyLarge.fontSize),
-            bodyMedium = style(baseTypography.bodyMedium, baseTypography.bodyMedium.fontSize),
-            bodySmall = style(baseTypography.bodySmall, baseTypography.bodySmall.fontSize),
-            titleLarge = style(baseTypography.titleLarge, baseTypography.titleLarge.fontSize),
-            titleMedium = style(baseTypography.titleMedium, baseTypography.titleMedium.fontSize),
-            labelLarge = style(baseTypography.labelLarge, baseTypography.labelLarge.fontSize),
+
+        UgoTypography.copy(
+            displayLarge = style(UgoTypography.displayLarge),
+            displayMedium = style(UgoTypography.displayMedium),
+            displaySmall = style(UgoTypography.displaySmall),
+            headlineLarge = style(UgoTypography.headlineLarge),
+            headlineMedium = style(UgoTypography.headlineMedium),
+            headlineSmall = style(UgoTypography.headlineSmall),
+            titleLarge = style(UgoTypography.titleLarge),
+            titleMedium = style(UgoTypography.titleMedium),
+            titleSmall = style(UgoTypography.titleSmall),
+            bodyLarge = style(UgoTypography.bodyLarge),
+            bodyMedium = style(UgoTypography.bodyMedium),
+            bodySmall = style(UgoTypography.bodySmall),
+            labelLarge = style(UgoTypography.labelLarge),
+            labelMedium = style(UgoTypography.labelMedium),
+            labelSmall = style(UgoTypography.labelSmall),
         )
     }
 
-    MaterialTheme(
-        colorScheme = colors,
-        typography = scaledTypography,
-    ) {
-        // Sfondo opaco a piena schermata: senza, durante le transizioni fadeIn/fadeOut tra
-        // schermate (vedi UgoCalcNavHost) si intravede per un istante il windowBackground
-        // dell'Activity invece del tema Compose corrente (flash bianco/chiaro).
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.background,
-            contentColor = fontColor ?: contentColorFor(MaterialTheme.colorScheme.background),
+    CompositionLocalProvider(LocalUgoSemanticColors provides semanticColors) {
+        MaterialTheme(
+            colorScheme = colors,
+            typography = scaledTypography,
+            shapes = UgoShapes,
         ) {
-            content()
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background,
+                contentColor = fontColor ?: contentColorFor(MaterialTheme.colorScheme.background),
+            ) {
+                content()
+            }
         }
     }
 }

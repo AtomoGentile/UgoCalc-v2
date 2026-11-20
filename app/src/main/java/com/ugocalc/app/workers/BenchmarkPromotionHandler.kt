@@ -13,7 +13,7 @@ class BenchmarkPromotionHandler(
      * Esegue la valutazione e, se opportuno, abilita la modalita' visibile V2.
      * Restituisce true se la promozione e' stata applicata.
      */
-    suspend fun handlePromotion(minMeals: Int = 30): Boolean {
+    suspend fun handlePromotion(minMeals: Int = 5): Boolean {
         val decision = evaluator.evaluatePromotion(minMeals)
         // Logging minimo per ambiente non-Android (testable)
         println("BenchmarkPromotionHandler: V1 choWithin10=${decision.v1.choWithin10gPercent} V2 choWithin10=${decision.v2.choWithin10gPercent} promoteV2=${decision.promoteV2}")
@@ -26,7 +26,7 @@ class BenchmarkPromotionHandler(
 }
 
 interface PromotionEvaluator {
-    suspend fun evaluatePromotion(minMeals: Int = 30): com.ugocalc.app.data.repository.PromotionDecision
+    suspend fun evaluatePromotion(minMeals: Int = 5): com.ugocalc.app.data.repository.PromotionDecision
 }
 
 interface V2VisibleModeSetter {

@@ -6,7 +6,9 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,37 +19,58 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.filled.Check
-import com.ugocalc.app.ui.theme.UgoGrey
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddAPhoto
+import androidx.compose.material.icons.filled.BrokenImage
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.Text
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,10 +83,10 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
@@ -74,38 +97,30 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.LoadingOverlay
+import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
+import com.ugocalc.app.ui.components.UgoSectionHeader
+import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.theme.UgoSemanticColors
 import com.ugocalc.app.util.OverlayPermissionHelper
 import com.ugocalc.app.util.isCameraPermissionGranted
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.File
 
-/** Limite ragionevole di scatti per sessione: più foto migliorano l'analisi ma allungano tempo di invio e costo per chiamata AI. */
-private const val MAX_PHOTOS = 5
-
 /**
- * Scatto foto (§2.4 punto 2) delegato alla fotocamera di sistema tramite Intent standard
- * (`ActivityResultContracts.TakePicture`), invece di una preview live custom con CameraX: qualità,
- * gestione delle ottiche multiple, zoom, HDR, stabilizzazione e messa a fuoco sono già gestiti in
- * modo professionale dall'app fotocamera del produttore — molto meglio di quanto sia realistico
- * replicare in-app. Il file va scritto tramite FileProvider (`app/src/main/res/xml/file_paths.xml`,
- * percorso `cache/photos/`) perché la fotocamera di sistema è un'altra app e non può scrivere
- * direttamente nello storage privato di UgoCalc.
- *
- * L'utente può scattare più foto dello stesso piatto in una sessione (angolazioni/distanze
- * diverse), tutte inviate insieme all'AI per un'analisi più efficace: la galleria qui sotto
- * mostra le miniature degli scatti raccolti finora, con la possibilità di aggiungerne altri,
- * ispezionarli a schermo intero (pizzicando per ingrandire) o rimuoverli prima di confermare.
- *
- * Durante ogni scatto (compreso il primo) una livella in tempo reale (accelerometro + giroscopio,
- * [CameraAngleOverlayService]) suggerisce l'inclinazione e la rotazione intorno al piatto per il
- * target di quello scatto (vedi [PHOTO_ANGLE_TARGETS]) disegnata come overlay flottante SOPRA la
- * fotocamera di sistema — non più su una schermata separata prima di aprirla (vecchio
- * `PhotoAngleGuideScreen`, rimosso): l'utente vede la guida mentre inquadra davvero. Per questo
- * serve il permesso overlay ([OverlayPermissionHelper]), oltre a quello fotocamera.
+ * Hub di acquisizione foto (§2.4 punto 2):
+ * - presenta una guida chiara in 2 passi (90° dall'alto + 45° laterale opzionale) senza aprire
+ *   a sorpresa la fotocamera o le impostazioni di sistema;
+ * - consente di scattare con la fotocamera di sistema oppure scegliere immagini dalla galleria;
+ * - offre un toggle opzionale "Livella overlay" che chiede il permesso overlay solo se attivato.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CameraCaptureScreen(
     selectedModels: List<AiModel>,
@@ -117,17 +132,18 @@ fun CameraCaptureScreen(
     val uiState by viewModel.uiState.collectAsState()
 
     LaunchedEffect(uiState.analysisDone) {
-        if (uiState.analysisDone) onAnalysisReady()
+        if (uiState.analysisDone) {
+            onAnalysisReady()
+            viewModel.onAnalysisDoneConsumed()
+        }
     }
 
-    // rememberSaveable (non remember): scattare in orizzontale ruota fisicamente il dispositivo
-    // mentre la fotocamera di sistema è in primo piano, quindi questa Activity — in background —
-    // subisce un cambio di configurazione e viene ricreata quando l'utente torna indietro. Con un
-    // semplice `remember`, il riferimento al file in scrittura andava perso alla ricreazione: la
-    // callback qui sotto vedeva `file == null` e trattava una foto scattata con successo come un
-    // annullamento, perdendo lo scatto. Si salva solo il path (String, sempre pacchettizzabile),
-    // non il File stesso.
+    // rememberSaveable: la rotazione durante la fotocamera esterna può ricreare l'Activity.
     var pendingCapturePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var pendingPhotoIndex by rememberSaveable { mutableStateOf<Int?>(null) }
+    var zoomIndex by remember { mutableStateOf<Int?>(null) }
+    var cameraPermissionDeniedMessage by remember { mutableStateOf<String?>(null) }
+    var hasOverlayPermission by remember { mutableStateOf(OverlayPermissionHelper.hasOverlayPermission(context)) }
     val coroutineScope = rememberCoroutineScope()
 
     fun stopAngleOverlay() {
@@ -138,10 +154,8 @@ fun CameraCaptureScreen(
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                // Se torniamo in foreground e il service è ancora attivo, probabilmente l'utente
-                // è tornato senza scattare la foto (es. tasto Home o chiusura forzata).
-                // Lo fermiamo per sicurezza (§ bug segnalato).
                 stopAngleOverlay()
+                hasOverlayPermission = OverlayPermissionHelper.hasOverlayPermission(context)
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -151,54 +165,49 @@ fun CameraCaptureScreen(
         }
     }
 
+    LaunchedEffect(uiState.capturedImages.size) {
+        val currentZoom = zoomIndex
+        if (currentZoom != null && currentZoom >= uiState.capturedImages.size) {
+            zoomIndex = null
+        }
+    }
+
     val takePictureLauncher = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { success ->
-        // Letta PRIMA di fermare il service (che comunque non la cancella, vedi
-        // CameraAngleOverlayService.LastReading): è l'angolazione realmente misurata per questo
-        // scatto, non solo il target che era stato suggerito.
         val measuredAngle = CameraAngleOverlayService.LastReading.value
         stopAngleOverlay()
         val file = pendingCapturePath?.let(::File)
         pendingCapturePath = null
-        if (success && (file != null)) {
-            // Nessuna decodifica/ricompressione: i byte del JPEG scritto dalla fotocamera di
-            // sistema restano intatti (anche verso le API AI) — la rotazione (se il tag EXIF la
-            // richiede) viene applicata solo alle Bitmap mostrate in anteprima, vedi PhotoGallery
-            // e PhotoZoomReview. Lettura comunque fuori dal thread UI per file molto grandi.
-            coroutineScope.launch(Dispatchers.Default) {
-                val bytes = file.readBytes()
-                // Letto prima della delete (§16): approssima l'istante dello scatto per
-                // interrogare il buffer del giroscopio, dato che la fotocamera di sistema non offre
-                // alcun callback nell'istante esatto.
-                val capturedAtEpochMillis = file.lastModified()
+        if (success && file != null) {
+            coroutineScope.launch(Dispatchers.IO) {
+                val readResult = runCatching {
+                    val bytes = file.readBytes()
+                    val capturedAt = file.lastModified()
+                    bytes to capturedAt
+                }
                 file.delete()
-                viewModel.onPhotoCaptured(bytes, capturedAtEpochMillis, measuredAngle)
+                readResult.onSuccess { (bytes, capturedAtEpochMillis) ->
+                    if (bytes.isNotEmpty()) {
+                        viewModel.onPhotoCaptured(bytes, capturedAtEpochMillis, measuredAngle)
+                    }
+                }
             }
         } else {
             file?.delete()
-            // Se l'utente annulla il PRIMO scatto (nessuna foto ancora raccolta) si esce dalla
-            // schermata; se ne annulla uno successivo, resta sulla galleria con le foto già prese.
-            if (uiState.capturedImages.isEmpty()) onCancelled()
         }
     }
 
-    fun launchSystemCamera() {
-        val photosDir = File(context.cacheDir, "photos").apply { mkdirs() }
-        val file = File(photosDir, "capture_${System.currentTimeMillis()}.jpg")
-        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        pendingCapturePath = file.absolutePath
-        takePictureLauncher.launch(uri)
+    val galleryPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(MAX_PHOTOS)
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.onGalleryUrisSelected(uris)
+        }
     }
 
-    // Indice (nella sessione) dello scatto che si sta per fare, per scegliere il target giusto in
-    // PHOTO_ANGLE_TARGETS: cerchiamo il primo target non ancora coperto dalle foto già scattate
-    // (§ bug riportato: "l'app non si ricorda da che angolazioni ho fatto la foto").
     fun getNextTargetIndex(): Int {
         val images = uiState.capturedImages
         val usedLabels = images.asSequence().mapNotNull { it.measuredAngle?.target?.label }.toSet()
         val firstUnused = PHOTO_ANGLE_TARGETS.indexOfFirst { it.label !in usedLabels }
-        
-        // Se non abbiamo dati sugli angoli (es. permesso overlay negato) o se abbiamo già coperto
-        // tutti i target suggeriti, procediamo semplicemente per conteggio.
         return if (firstUnused == -1 || usedLabels.size < images.size) {
             images.size
         } else {
@@ -206,241 +215,555 @@ fun CameraCaptureScreen(
         }
     }
 
-    // Va salvato perché sopravvive alla richiesta permesso camera/overlay, che
-    // apre un'altra Activity e può far ricreare questa in mezzo.
-    var pendingPhotoIndex by rememberSaveable { mutableStateOf<Int?>(null) }
-
     fun launchSystemCameraForIndex(index: Int) {
         val target = PHOTO_ANGLE_TARGETS[index.coerceIn(0, PHOTO_ANGLE_TARGETS.lastIndex)]
-        // L'overlay è solo un aiuto visivo: se il permesso non è (più) concesso si scatta comunque,
-        // senza bloccare la funzione principale della schermata.
-        if (OverlayPermissionHelper.hasOverlayPermission(context)) {
+        if (uiState.angleOverlayEnabled && OverlayPermissionHelper.hasOverlayPermission(context)) {
             context.startService(CameraAngleOverlayService.buildStartIntent(context, target))
         }
-        launchSystemCamera()
+        val photosDir = File(context.cacheDir, "photos").apply { mkdirs() }
+        val file = File(photosDir, "capture_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        pendingCapturePath = file.absolutePath
+        takePictureLauncher.launch(uri)
     }
 
-    // SYSTEM_ALERT_WINDOW è un permesso "speciale": va concesso dalla schermata di sistema aperta
-    // con ACTION_MANAGE_OVERLAY_PERMISSION (vedi OverlayPermissionHelper), non c'è un risultato
-    // affidabile nell'Intent di ritorno — si rilancia comunque lo scatto, con o senza overlay a
-    // seconda di quanto l'utente ha effettivamente concesso.
-    val overlayPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
-        val index = pendingPhotoIndex ?: getNextTargetIndex()
-        pendingPhotoIndex = null
-        launchSystemCameraForIndex(index)
-    }
-
-    // Il manifest dichiara android.permission.CAMERA (§2.2 Impostazioni > Permessi): con questo
-    // permesso dichiarato, l'intent ACTION_IMAGE_CAPTURE verso la fotocamera di sistema richiede
-    // che sia stato concesso a runtime, altrimenti alcune fotocamere di sistema (es. Samsung, stock
-    // Android recenti) lo rifiutano con SecurityException e l'app crasha. Se l'utente non è mai
-    // passato da Impostazioni > Permessi, va richiesto qui, al primo utilizzo effettivo.
     val cameraPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         val index = pendingPhotoIndex ?: getNextTargetIndex()
+        pendingPhotoIndex = null
         if (granted) {
-            if (OverlayPermissionHelper.hasOverlayPermission(context)) {
-                pendingPhotoIndex = null
-                launchSystemCameraForIndex(index)
-            } else {
-                pendingPhotoIndex = index
-                overlayPermissionLauncher.launch(OverlayPermissionHelper.buildRequestOverlayPermissionIntent(context))
-            }
+            cameraPermissionDeniedMessage = null
+            launchSystemCameraForIndex(index)
         } else {
-            pendingPhotoIndex = null
-            // Stesso comportamento di un annullamento del primo scatto: si esce dalla schermata.
-            if (uiState.capturedImages.isEmpty()) onCancelled()
-            // Negato ma foto già raccolte (richiesta partita da "Aggiungi un'altra"): si resta sulla
-            // galleria esistente, nessuna foto persa.
+            cameraPermissionDeniedMessage = "Permesso fotocamera negato: puoi concederlo dalle impostazioni oppure scegliere le foto dalla galleria."
         }
     }
 
-    fun ensureCameraPermissionThenLaunch() {
+    val overlayPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        val granted = OverlayPermissionHelper.hasOverlayPermission(context)
+        hasOverlayPermission = granted
+        viewModel.setAngleOverlayEnabled(granted)
+    }
+
+    fun startCameraCapture() {
+        if (uiState.capturedImages.size >= MAX_PHOTOS || uiState.isAnalyzing) return
         val index = getNextTargetIndex()
-        when {
-            !isCameraPermissionGranted(context) -> {
-                pendingPhotoIndex = index
-                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-            }
-            !OverlayPermissionHelper.hasOverlayPermission(context) -> {
-                pendingPhotoIndex = index
-                overlayPermissionLauncher.launch(OverlayPermissionHelper.buildRequestOverlayPermissionIntent(context))
-            }
-            else -> launchSystemCameraForIndex(index)
+        if (!isCameraPermissionGranted(context)) {
+            pendingPhotoIndex = index
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        } else {
+            cameraPermissionDeniedMessage = null
+            launchSystemCameraForIndex(index)
         }
     }
 
-    // Al primo ingresso in questa schermata (nessuna foto ancora in mano) apre subito la fotocamera
-    // di sistema con la livella overlay attiva (previa richiesta dei permessi se servono), senza
-    // richiedere un tocco aggiuntivo sull'utente.
-    LaunchedEffect(Unit) {
-        if (uiState.capturedImages.isEmpty()) ensureCameraPermissionThenLaunch()
-    }
-
-    var zoomIndex by remember { mutableStateOf<Int?>(null) }
+    val images = uiState.capturedImages
+    val activeZoomIndex = zoomIndex
 
     Box(modifier = Modifier.fillMaxSize()) {
-        val images = uiState.capturedImages
-        if (images.isNotEmpty()) {
-            val currentZoomIndex = zoomIndex
-            if (currentZoomIndex != null && currentZoomIndex < images.size) {
-                PhotoZoomReview(
-                    imageBytes = images[currentZoomIndex].bytes,
-                    onRemove = {
-                        viewModel.removePhoto(currentZoomIndex)
-                        zoomIndex = null
+        if (activeZoomIndex != null && activeZoomIndex in images.indices) {
+            PhotoZoomReview(
+                imageBytes = images[activeZoomIndex].bytes,
+                onRemove = {
+                    viewModel.removePhoto(activeZoomIndex)
+                    zoomIndex = null
+                },
+                onClose = { zoomIndex = null },
+            )
+        } else {
+            Scaffold(
+                topBar = {
+                    TopAppBar(
+                        title = { Text("Foto del piatto") },
+                        navigationIcon = { BackIconButton(onCancelled) },
+                        colors = ugoTopAppBarColors(),
+                    )
+                },
+                bottomBar = {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shadowElevation = 6.dp,
+                        tonalElevation = 2.dp,
+                    ) {
+                        Column(modifier = Modifier.fillMaxWidth()) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                            Button(
+                                onClick = { viewModel.confirmPhotos(selectedModels) },
+                                enabled = images.isNotEmpty() && !uiState.isAnalyzing && !uiState.isLoadingGallery,
+                                shape = RoundedCornerShape(14.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .navigationBarsPadding()
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                                    .height(52.dp),
+                            ) {
+                                val ctaLabel = when (images.size) {
+                                    0 -> "Aggiungi almeno 1 foto"
+                                    1 -> "Analizza (1 foto)"
+                                    else -> "Analizza (${images.size} foto)"
+                                }
+                                Text(
+                                    text = ctaLabel,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                            }
+                        }
                     }
-                ) { zoomIndex = null }
-            } else {
-                PhotoGallery(
-                    images = images.map { it.bytes },
-                    availableCalibrations = uiState.availableCalibrations,
-                    selectedCalibrationIds = uiState.selectedCalibrationIds,
-                    onToggleCalibration = { viewModel.toggleCalibrationSelection(it) },
-                    onAddAnother = ::ensureCameraPermissionThenLaunch,
-                    onSelect = { index -> zoomIndex = index },
-                    onConfirm = { viewModel.confirmPhotos(selectedModels) },
-                )
+                },
+            ) { padding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    // Guida chiara in 2 passi
+                    PhotoGuideCard(photoCount = images.size)
+
+                    // Azioni principali di acquisizione
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Button(
+                            onClick = ::startCameraCapture,
+                            enabled = images.size < MAX_PHOTOS && !uiState.isAnalyzing,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AddAPhoto,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Scatta foto", maxLines = 1)
+                        }
+
+                        OutlinedButton(
+                            onClick = {
+                                galleryPickerLauncher.launch(
+                                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                )
+                            },
+                            enabled = images.size < MAX_PHOTOS && !uiState.isAnalyzing && !uiState.isLoadingGallery,
+                            shape = RoundedCornerShape(14.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(48.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.PhotoLibrary,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Scegli da Galleria", maxLines = 1)
+                        }
+                    }
+
+                    // Toggle opzionale per la livella overlay
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        val overlayActive = uiState.angleOverlayEnabled && hasOverlayPermission
+                        FilterChip(
+                            selected = overlayActive,
+                            onClick = {
+                                if (overlayActive) {
+                                    viewModel.setAngleOverlayEnabled(false)
+                                } else if (OverlayPermissionHelper.hasOverlayPermission(context)) {
+                                    hasOverlayPermission = true
+                                    viewModel.setAngleOverlayEnabled(true)
+                                } else {
+                                    overlayPermissionLauncher.launch(
+                                        OverlayPermissionHelper.buildRequestOverlayPermissionIntent(context)
+                                    )
+                                }
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    imageVector = if (overlayActive) Icons.Filled.Check else Icons.Filled.ScreenRotation,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(FilterChipDefaults.IconSize),
+                                )
+                            },
+                            label = { Text("Livella overlay") },
+                        )
+                        Text(
+                            text = if (overlayActive) {
+                                "Attiva durante lo scatto"
+                            } else {
+                                "Guida inclinazione sopra la camera (opzionale)"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+
+                    if (cameraPermissionDeniedMessage != null) {
+                        StatusBanner(
+                            icon = Icons.Filled.PhotoCamera,
+                            title = "Fotocamera non autorizzata",
+                            subtitle = cameraPermissionDeniedMessage.orEmpty(),
+                            tone = BannerTone.WARNING,
+                            actionLabel = "Chiudi",
+                            onAction = { cameraPermissionDeniedMessage = null },
+                        )
+                    }
+
+                    if (uiState.galleryError != null) {
+                        StatusBanner(
+                            icon = Icons.Filled.Warning,
+                            title = "Avviso galleria",
+                            subtitle = uiState.galleryError.orEmpty(),
+                            tone = BannerTone.WARNING,
+                            actionLabel = "Chiudi",
+                            onAction = viewModel::dismissGalleryError,
+                        )
+                    }
+
+                    if (uiState.analysisError != null) {
+                        StatusBanner(
+                            icon = Icons.Filled.ErrorOutline,
+                            title = "Errore avvio analisi",
+                            subtitle = uiState.analysisError.orEmpty(),
+                            tone = BannerTone.ERROR,
+                            actionLabel = "Chiudi",
+                            onAction = viewModel::dismissAnalysisError,
+                        )
+                    }
+
+                    if (uiState.isLoadingGallery) {
+                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    }
+
+                    if (images.isNotEmpty()) {
+                        UgoSectionHeader(
+                            title = "Foto raccolte (${images.size}/$MAX_PHOTOS)",
+                            subtitle = "Tocca una miniatura per ispezionarla o X per rimuoverla",
+                        )
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            contentPadding = PaddingValues(vertical = 2.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            itemsIndexed(images) { index, photo ->
+                                PhotoThumbnail(
+                                    imageBytes = photo.bytes,
+                                    index = index,
+                                    onSelect = { zoomIndex = index },
+                                    onRemove = { viewModel.removePhoto(index) },
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.availableCalibrations.isNotEmpty()) {
+                        UgoCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            contentPadding = PaddingValues(14.dp),
+                        ) {
+                            Text(
+                                text = "Elementi di calibrazione visibili",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = "Seleziona eventuali oggetti calibrati visibili nelle foto per migliorare la stima dei pesi.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 10.dp),
+                            )
+                            CalibrationSelector(
+                                calibrations = uiState.availableCalibrations,
+                                selectedIds = uiState.selectedCalibrationIds,
+                                onToggle = viewModel::toggleCalibrationSelection,
+                            )
+                        }
+                    }
+                }
             }
         }
 
         if (uiState.isAnalyzing) {
-            LoadingOverlay()
+            LoadingOverlay(statusText = "Analisi fotografica AI in corso...")
         }
 
         val qualityWarning = uiState.qualityWarning
         if (qualityWarning != null) {
             AlertDialog(
                 onDismissRequest = viewModel::dismissQualityWarning,
-                confirmButton = {
-                    Button(onClick = viewModel::dismissQualityWarning) { Text("Rifai le foto") }
+                shape = RoundedCornerShape(24.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                icon = {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = UgoSemanticColors.warning,
+                    )
                 },
-                text = { Text(qualityWarning) },
+                title = {
+                    Text(
+                        text = "Qualità foto da verificare",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Il controllo qualità ha rilevato alcuni problemi che possono ridurre l'accuratezza della stima:",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        qualityWarning.reasons.forEach { reason ->
+                            Text(
+                                text = "• $reason",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.confirmPhotosIgnoringQuality(selectedModels) },
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Analizza comunque")
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = viewModel::dismissQualityWarning,
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Rifai le foto")
+                    }
+                },
             )
         }
     }
 }
 
-/**
- * Galleria degli scatti raccolti in questa sessione (§2.4 punto 2 esteso): l'utente vede le
- * miniature delle foto già prese, può aggiungerne altre (fino a [MAX_PHOTOS]), toccarne una per
- * ispezionarla a schermo intero, o confermare per avviare l'analisi con tutte le foto raccolte.
- */
 @Composable
-private fun PhotoGallery(
-    images: List<ByteArray>,
-    availableCalibrations: List<ScaleCalibrationEntity> = emptyList(),
-    selectedCalibrationIds: Set<Long> = emptySet(),
-    onToggleCalibration: (Long) -> Unit = {},
-    onAddAnother: () -> Unit,
-    onSelect: (Int) -> Unit,
-    onConfirm: () -> Unit,
-) {
-    // statusBarsPadding: lo schermo è a tutto schermo (dietro la status bar), senza questo il
-    // titolo "Foto scattate" finiva disegnato sotto l'orologio/le icone di sistema.
-    Column(modifier = Modifier.fillMaxSize().statusBarsPadding().padding(16.dp)) {
-        Text("Foto scattate (${images.size})", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Scatta il piatto da più angolazioni per aiutare l'AI a stimare meglio gli alimenti e le porzioni.",
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.padding(top = 4.dp, bottom = 12.dp),
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth().height(116.dp),
-        ) {
-            itemsIndexed(images) { index, bytes ->
-                PhotoThumbnail(imageBytes = bytes) { onSelect(index) }
-            }
-            if (images.size < MAX_PHOTOS) {
-                item { AddPhotoTile(onClick = onAddAnother) }
-            }
-        }
-
-        if (availableCalibrations.isNotEmpty()) {
-            Text(
-                "Elementi di calibrazione visibili",
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(top = 16.dp, bottom = 4.dp),
-            )
-            Text(
-                "Seleziona manualmente quali dei tuoi oggetti calibrati sono presenti nelle foto per una scala più precisa.",
-                style = MaterialTheme.typography.bodySmall,
-                color = UgoGrey,
-                modifier = Modifier.padding(bottom = 8.dp),
-            )
-            CalibrationSelector(
-                calibrations = availableCalibrations,
-                selectedIds = selectedCalibrationIds,
-                onToggle = onToggleCalibration,
-            )
-        }
-
+private fun PhotoGuideCard(photoCount: Int) {
+    val complete = photoCount >= RECOMMENDED_MIN_PHOTOS
+    UgoCard(
+        modifier = Modifier.fillMaxWidth(),
+        borderColor = if (complete) {
+            UgoSemanticColors.success.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+        },
+        contentPadding = PaddingValues(14.dp),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            OutlinedButton(onClick = onAddAnother, enabled = images.size < MAX_PHOTOS) {
-                Text("Aggiungi foto")
-            }
-            Button(onClick = onConfirm, enabled = images.isNotEmpty()) {
-                Text("Analizza (${images.size})")
+            Text(
+                text = "Guida rapida allo scatto",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = if (complete) UgoSemanticColors.successContainer else MaterialTheme.colorScheme.surfaceContainerHigh,
+            ) {
+                Text(
+                    text = if (complete) "Pronto ✓" else "$photoCount/$RECOMMENDED_MIN_PHOTOS consigliate",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (complete) UgoSemanticColors.onSuccessContainer else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                )
             }
         }
-    }
-}
 
-@Composable
-private fun PhotoThumbnail(imageBytes: ByteArray, onClick: () -> Unit) {
-    val bitmap = remember(imageBytes) { decodeUprightThumbnail(imageBytes) }
-    Box(
-        modifier = Modifier
-            .size(100.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .clickable(onClick = onClick),
-    ) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Foto scattata, tocca per ingrandire o rimuovere",
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize(),
+        Spacer(Modifier.height(10.dp))
+
+        GuideStepRow(
+            stepNumber = 1,
+            title = "1. Dall'alto (90°)",
+            subtitle = "Inquadra il piatto dall'alto per stimare area e diametro.",
+            completed = photoCount >= 1,
+        )
+        Spacer(Modifier.height(8.dp))
+        GuideStepRow(
+            stepNumber = 2,
+            title = "2. Laterale (45°, opzionale)",
+            subtitle = "Aiuta l'AI a valutare spessore e volume del cibo.",
+            completed = photoCount >= 2,
         )
     }
 }
 
 @Composable
-private fun AddPhotoTile(onClick: () -> Unit) {
+private fun GuideStepRow(
+    stepNumber: Int,
+    title: String,
+    subtitle: String,
+    completed: Boolean,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        if (completed) {
+            Icon(
+                imageVector = Icons.Filled.CheckCircle,
+                contentDescription = "Completato",
+                tint = UgoSemanticColors.success,
+                modifier = Modifier.size(24.dp),
+            )
+        } else {
+            Surface(
+                modifier = Modifier.size(24.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stepNumber.toString(),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PhotoThumbnail(
+    imageBytes: ByteArray,
+    index: Int,
+    onSelect: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    var decodedState by remember(imageBytes) { mutableStateOf<Pair<Boolean, Bitmap?>>(false to null) }
+    LaunchedEffect(imageBytes) {
+        val bmp = withContext(Dispatchers.Default) { decodeUprightThumbnail(imageBytes) }
+        decodedState = true to bmp
+    }
+    val (finished, bmp) = decodedState
+
     Box(
         modifier = Modifier
-            .size(100.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+            .size(108.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+            .clickable(onClick = onSelect),
     ) {
-        Icon(Icons.Filled.AddAPhoto, contentDescription = "Aggiungi un'altra foto")
+        when {
+            bmp != null -> {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = "Foto ${index + 1}, tocca per ingrandire",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+            finished -> {
+                Icon(
+                    imageVector = Icons.Filled.BrokenImage,
+                    contentDescription = "Anteprima non disponibile",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.align(Alignment.Center),
+                )
+            }
+            else -> {
+                CircularProgressIndicator(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .align(Alignment.Center),
+                    strokeWidth = 2.dp,
+                )
+            }
+        }
+
+        // Badge numero foto in basso a sinistra
+        Surface(
+            color = Color.Black.copy(alpha = 0.65f),
+            shape = RoundedCornerShape(6.dp),
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp),
+        ) {
+            Text(
+                text = "#${index + 1}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.White,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+
+        // Badge X diretta per rimuovere la foto
+        Surface(
+            onClick = onRemove,
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.72f),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .size(26.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Rimuovi foto ${index + 1}",
+                    tint = Color.White,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+        }
     }
 }
 
 /**
- * Ispezione a schermo intero di una foto già scattata (§2.4 punto 2): l'utente pizzica per
- * ingrandire e valutare davvero la nitidezza, e può rimuoverla dalla sessione o tornare alla
- * galleria.
- *
- * [imageBytes] è il JPEG originale, mai ricompresso (nemmeno qui): se il tag EXIF indica una
- * rotazione, viene applicata solo alla Bitmap tenuta in memoria per la visualizzazione — i byte
- * inviati poi all'AI restano bit-per-bit quelli scattati.
+ * Ispezione a schermo intero con sfondo nero ad alto contrasto e controlli ben visibili.
  */
 @Composable
-private fun PhotoZoomReview(imageBytes: ByteArray, onRemove: () -> Unit, onClose: () -> Unit) {
-    val bitmap = remember(imageBytes) { decodeUprightBitmapForDisplay(imageBytes) }
-    var scale by remember(imageBytes) { androidx.compose.runtime.mutableFloatStateOf(1f) }
+private fun PhotoZoomReview(
+    imageBytes: ByteArray,
+    onRemove: () -> Unit,
+    onClose: () -> Unit,
+) {
+    var bitmap by remember(imageBytes) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(imageBytes) {
+        bitmap = withContext(Dispatchers.Default) { decodeUprightBitmapForDisplay(imageBytes) }
+    }
+    var scale by remember(imageBytes) { mutableFloatStateOf(1f) }
     var offset by remember(imageBytes) { mutableStateOf(Offset.Zero) }
     var containerSize by remember(imageBytes) { mutableStateOf(IntSize.Zero) }
 
-    // API standard di Compose per pinch-zoom + pan. Senza limiti, la foto poteva essere trascinata
-    // fuori schermo anche a scala 1x (nessuno zoom): il pan ora è vincolato all'area effettivamente
-    // "fuori vista" per via dello zoom corrente, come in un qualunque visualizzatore foto — a 1x non
-    // si sposta affatto.
     val transformState = rememberTransformableState { zoomChange, panChange, _ ->
         val newScale = (scale * zoomChange).coerceIn(1f, 6f)
         val maxOffsetX = (containerSize.width * (newScale - 1) / 2f).coerceAtLeast(0f)
@@ -452,34 +775,82 @@ private fun PhotoZoomReview(imageBytes: ByteArray, onRemove: () -> Unit, onClose
         scale = newScale
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            bitmap = bitmap.asImageBitmap(),
-            contentDescription = "Foto del piatto scattata — pizzica per ingrandire",
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .fillMaxSize()
-                .onSizeChanged { containerSize = it }
-                .graphicsLayer(
-                    scaleX = scale,
-                    scaleY = scale,
-                    translationX = offset.x,
-                    translationY = offset.y,
-                )
-                .transformable(state = transformState),
-        )
-        IconButton(onClick = onClose, modifier = Modifier.align(Alignment.TopStart).padding(8.dp)) {
-            Icon(Icons.Filled.Close, contentDescription = "Chiudi anteprima", tint = MaterialTheme.colorScheme.surface)
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black),
+    ) {
+        val bmp = bitmap
+        if (bmp != null) {
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Foto del piatto — pizzica per ingrandire",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .onSizeChanged { containerSize = it }
+                    .graphicsLayer(
+                        scaleX = scale,
+                        scaleY = scale,
+                        translationX = offset.x,
+                        translationY = offset.y,
+                    )
+                    .transformable(state = transformState),
+            )
+        } else {
+            CircularProgressIndicator(
+                color = Color.White,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
-        Row(
+
+        Surface(
+            shape = CircleShape,
+            color = Color.Black.copy(alpha = 0.65f),
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .statusBarsPadding()
+                .padding(12.dp),
+        ) {
+            IconButton(onClick = onClose) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = "Chiudi anteprima",
+                    tint = Color.White,
+                )
+            }
+        }
+
+        Surface(
+            color = Color.Black.copy(alpha = 0.72f),
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(32.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
+                .fillMaxWidth(),
         ) {
-            OutlinedButton(onClick = onRemove) { Text("Rimuovi foto") }
-            Button(onClick = onClose) { Text("Torna alla galleria") }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onRemove,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.7f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Rimuovi foto")
+                }
+                Button(
+                    onClick = onClose,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("Torna alla galleria")
+                }
+            }
         }
     }
 }
@@ -491,21 +862,25 @@ private fun CalibrationSelector(
     onToggle: (Long) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val count = selectedIds.size
+    val label = when (count) {
+        0 -> "Seleziona calibrazioni..."
+        1 -> "1 calibrazione scelta"
+        else -> "$count calibrazioni scelte"
+    }
 
     Box(modifier = Modifier.fillMaxWidth()) {
         OutlinedButton(
             onClick = { expanded = !expanded },
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    if (selectedIds.isEmpty()) "Seleziona calibrazioni..."
-                    else "${selectedIds.size} calibrazione${if (selectedIds.size != 1) "i" else ""} scelta${if (selectedIds.size != 1) "e" else ""}"
-                )
+                Text(label, color = MaterialTheme.colorScheme.onSurface)
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = null)
             }
         }
@@ -514,6 +889,8 @@ private fun CalibrationSelector(
             expanded = expanded,
             onDismissRequest = { expanded = false },
             modifier = Modifier.fillMaxWidth(0.9f),
+            shape = RoundedCornerShape(12.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
         ) {
             calibrations.forEach { cal ->
                 val selected = cal.id in selectedIds
@@ -524,17 +901,24 @@ private fun CalibrationSelector(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             if (selected) {
-                                Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(20.dp).padding(end = 8.dp))
+                                Icon(
+                                    imageVector = Icons.Filled.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .padding(end = 8.dp),
+                                    tint = MaterialTheme.colorScheme.primary,
+                                )
                             }
                             Column {
-                                Text(cal.name, fontWeight = FontWeight.Medium)
+                                Text(cal.name, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
                                 val dims = mutableListOf("${cal.valueCm}cm")
                                 cal.widthCm?.let { dims.add("$it cm") }
                                 cal.heightCm?.let { dims.add("$it cm") }
                                 Text(
                                     "Dim: ${dims.joinToString(" × ")}",
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = Color.Gray,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -547,7 +931,7 @@ private fun CalibrationSelector(
     }
 }
 
-/** Estrae la rotazione (in gradi) indicata dal tag EXIF "Orientation", che `BitmapFactory` ignora di default. */
+/** Estrae la rotazione (in gradi) indicata dal tag EXIF "Orientation". */
 private fun exifRotationDegrees(imageBytes: ByteArray): Int = try {
     when (ExifInterface(ByteArrayInputStream(imageBytes)).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
         ExifInterface.ORIENTATION_ROTATE_90 -> 90
@@ -559,50 +943,44 @@ private fun exifRotationDegrees(imageBytes: ByteArray): Int = try {
     0
 }
 
-/**
- * Limite di sicurezza per la Bitmap mostrata a schermo intero: fotocamere di sistema moderne
- * scattano anche a 50+ Mp, e decodificare quei byte in una Bitmap ARGB_8888 a piena risoluzione
- * (200+ MB, il doppio durante la rotazione) mandava in crash l'app per OutOfMemoryError o per
- * superamento della dimensione massima di texture supportata da Canvas. 4096px di lato è ben
- * oltre quanto uno schermo di telefono possa mostrare anche con lo zoom a 6x di [PhotoZoomReview],
- * quindi non si perde nitidezza percepita — i byte originali inviati all'AI restano intatti,
- * questa è solo la Bitmap di anteprima.
- */
 private const val MAX_ZOOM_VIEW_DIMENSION_PX = 4096
 
-/**
- * `BitmapFactory` ignora il tag EXIF "Orientation": senza questa correzione, una foto scattata in
- * verticale apparirebbe orizzontale nello step di conferma. La rotazione è applicata solo alla
- * Bitmap decodificata qui (mai riserializzata) — [imageBytes], usato per il resto dell'app, non
- * viene mai toccato.
- */
-private fun decodeUprightBitmapForDisplay(imageBytes: ByteArray): Bitmap =
+private fun decodeUprightBitmapForDisplay(imageBytes: ByteArray): Bitmap? =
     decodeUprightBitmap(imageBytes, MAX_ZOOM_VIEW_DIMENSION_PX)
 
-/**
- * Decodifica una versione ridotta della foto per le miniature della galleria: fino a
- * [MAX_PHOTOS] scatti a piena risoluzione decodificati insieme rischierebbero OOM su molti
- * telefoni, mentre qui basta una Bitmap piccola.
- */
-private fun decodeUprightThumbnail(imageBytes: ByteArray, targetSizePx: Int = 200): Bitmap =
+private fun decodeUprightThumbnail(imageBytes: ByteArray, targetSizePx: Int = 200): Bitmap? =
     decodeUprightBitmap(imageBytes, targetSizePx * 2)
 
-/** Decodifica [imageBytes] raddrizzata secondo l'EXIF, sottocampionata perché il lato più lungo non superi [maxDimensionPx]. */
-private fun decodeUprightBitmap(imageBytes: ByteArray, maxDimensionPx: Int): Bitmap {
-    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
+/** Decodifica [imageBytes] raddrizzata secondo l'EXIF in modo sicuro, restituendo `null` per dati non validi. */
+private fun decodeUprightBitmap(imageBytes: ByteArray, maxDimensionPx: Int): Bitmap? {
+    if (imageBytes.isEmpty()) return null
+    return try {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, boundsOptions)
+        if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) return null
 
-    var sampleSize = 1
-    while ((boundsOptions.outWidth / sampleSize > maxDimensionPx) || (boundsOptions.outHeight / sampleSize > maxDimensionPx)) {
-        sampleSize *= 2
+        var sampleSize = 1
+        while ((boundsOptions.outWidth / sampleSize > maxDimensionPx) || (boundsOptions.outHeight / sampleSize > maxDimensionPx)) {
+            sampleSize *= 2
+        }
+
+        val decoded = BitmapFactory.decodeByteArray(
+            imageBytes,
+            0,
+            imageBytes.size,
+            BitmapFactory.Options().apply { inSampleSize = sampleSize },
+        ) ?: return null
+
+        val rotationDegrees = exifRotationDegrees(imageBytes)
+        if (rotationDegrees == 0) return decoded
+
+        val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
+        val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        if (rotated !== decoded) decoded.recycle()
+        rotated
+    } catch (_: OutOfMemoryError) {
+        null
+    } catch (_: Exception) {
+        null
     }
-
-    val decoded = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size, BitmapFactory.Options().apply { inSampleSize = sampleSize })
-    val rotationDegrees = exifRotationDegrees(imageBytes)
-    if (rotationDegrees == 0) return decoded
-
-    val matrix = Matrix().apply { postRotate(rotationDegrees.toFloat()) }
-    val rotated = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
-    decoded.recycle()
-    return rotated
 }

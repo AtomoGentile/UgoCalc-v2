@@ -47,8 +47,91 @@ class PhysicsEngineTest {
             goodScale,
         )
         val area = PI * 13.5 * 13.5
-        val atteso = 0.4 * area * 1.5 * 0.8 * 0.82 // densità riso cotto = 0.82
+        // riso ha densità BULK (CREA): riempimento non si applica (già incluso nella densità apparente)
+        val atteso = 0.4 * area * 1.5 * 0.82
         assertEquals(atteso, est.pesoG, 1e-6)
+    }
+
+    @Test
+    fun `conical plate volume follows truncated cone formula`() {
+        val conicScale = ScaleContext(
+            plateDiameterCm = 20.5,
+            plateDiameterIsDefault = false,
+            quality = Confidence.ALTO,
+            plateShapeType = "conico",
+            plateBottomDiameterCm = 10.0
+        )
+        val est = engine.estimate(
+            food("pasta maccheroni", RawMeasurements(frazionePiatto = 1.0, altezzaCm = 3.5, riempimento = 0.85)),
+            EstimationStrategy.DISTESA_SUL_PIATTO,
+            conicScale,
+        )
+        // Tronco di cono: V = (h/3) × π × (R² + R×r + r²)
+        // R = 10.25 (top), r = 5.0 (bottom), h = 3.5
+        val R = 10.25
+        val r = 5.0
+        val h = 3.5
+        val volumeTronco = (h / 3.0) * PI * (R * R + R * r + r * r)
+        val atteso = volumeTronco * 0.46 // densità bulk pasta bucata
+        assertEquals(atteso, est.pesoG, 1e-6)
+    }
+
+    @Test
+    fun `conical plate volume scales with frazionePiatto`() {
+        val conicScale = ScaleContext(
+            plateDiameterCm = 20.5,
+            plateDiameterIsDefault = false,
+            quality = Confidence.ALTO,
+            plateShapeType = "conico",
+            plateBottomDiameterCm = 10.0,
+        )
+        val full = engine.estimate(
+            food("pasta maccheroni", RawMeasurements(frazionePiatto = 1.0, altezzaCm = 3.5)),
+            EstimationStrategy.DISTESA_SUL_PIATTO,
+            conicScale,
+        )
+        val half = engine.estimate(
+            food("pasta maccheroni", RawMeasurements(frazionePiatto = 0.5, altezzaCm = 3.5)),
+            EstimationStrategy.DISTESA_SUL_PIATTO,
+            conicScale,
+        )
+        assertEquals(full.pesoG * 0.5, half.pesoG, 1e-6)
+    }
+
+    @Test
+    fun `conical plate interpolates effective top radius when plateHeightCm is known`() {
+        val conicScaleWithHeight = ScaleContext(
+            plateDiameterCm = 22.0, // R = 11.0
+            plateDiameterIsDefault = false,
+            quality = Confidence.ALTO,
+            plateShapeType = "conico",
+            plateBottomDiameterCm = 10.0, // r = 5.0
+            plateHeightCm = 6.0,
+        )
+        val h = 3.0 // metà altezza -> rTopEff = 5.0 + (11.0 - 5.0) * 0.5 = 8.0
+        val frazione = 0.8
+        val est = engine.estimate(
+            food("riso", RawMeasurements(frazionePiatto = frazione, altezzaCm = h)),
+            EstimationStrategy.DISTESA_SUL_PIATTO,
+            conicScaleWithHeight,
+        )
+        val rTopEff = 8.0
+        val rBottom = 5.0
+        val volume = frazione * (h / 3.0) * PI * (rTopEff * rTopEff + rTopEff * rBottom + rBottom * rBottom)
+        assertEquals(volume * 0.82, est.pesoG, 1e-6)
+    }
+
+    @Test
+    fun `spread applies mound profile factor for piatto, cupola, cono and keeps null backwards-compatible`() {
+        val base = RawMeasurements(frazionePiatto = 0.4, altezzaCm = 2.0)
+        val nullProf = engine.estimate(food("riso", base), EstimationStrategy.DISTESA_SUL_PIATTO, goodScale)
+        val piatto = engine.estimate(food("riso", base.copy(profiloCumulo = "piatto")), EstimationStrategy.DISTESA_SUL_PIATTO, goodScale)
+        val cupola = engine.estimate(food("riso", base.copy(profiloCumulo = "cupola")), EstimationStrategy.DISTESA_SUL_PIATTO, goodScale)
+        val cono = engine.estimate(food("riso", base.copy(profiloCumulo = "cono")), EstimationStrategy.DISTESA_SUL_PIATTO, goodScale)
+
+        assertEquals(nullProf.pesoG, piatto.pesoG, 1e-6)
+        assertEquals(nullProf.pesoG * 0.65, cupola.pesoG, 1e-6)
+        assertEquals(nullProf.pesoG * 0.45, cono.pesoG, 1e-6)
     }
 
     @Test
@@ -59,6 +142,32 @@ class PhysicsEngineTest {
             goodScale,
         )
         assertEquals(350.0 * 0.6 * 1.03, est.pesoG, 1e-6) // ciotola 350 ml, yogurt 1.03
+    }
+
+    @Test
+    fun `container uses capacitaContenitoreMl or calibrated capacity before falling back to PhysicalData`() {
+        val fromM1 = engine.estimate(
+            food("latte", RawMeasurements(contenitore = "bicchiere", frazioneRiempimento = 0.5, capacitaContenitoreMl = 330.0)),
+            EstimationStrategy.A_CONTENITORE,
+            goodScale,
+        )
+        assertEquals(330.0 * 0.5 * 1.03, fromM1.pesoG, 1e-6)
+
+        val scaleWithAnchorCap = goodScale.copy(calibratedCapacityMl = 420.0)
+        val fromScaleAnchor = engine.estimate(
+            food("latte", RawMeasurements(contenitore = "tazza", frazioneRiempimento = 0.5)),
+            EstimationStrategy.A_CONTENITORE,
+            scaleWithAnchorCap,
+        )
+        assertEquals(420.0 * 0.5 * 1.03, fromScaleAnchor.pesoG, 1e-6)
+
+        val scaleWithNamedMap = goodScale.copy(calibratedCapacitiesByName = mapOf("tazza blu" to 290.0))
+        val fromNamedMap = engine.estimate(
+            food("latte", RawMeasurements(contenitore = "Tazza blu", frazioneRiempimento = 0.5)),
+            EstimationStrategy.A_CONTENITORE,
+            scaleWithNamedMap,
+        )
+        assertEquals(290.0 * 0.5 * 1.03, fromNamedMap.pesoG, 1e-6)
     }
 
     @Test

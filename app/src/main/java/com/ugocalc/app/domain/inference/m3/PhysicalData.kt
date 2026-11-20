@@ -7,12 +7,9 @@ import com.ugocalc.app.domain.inference.m2.StrategyRouter
  * riferimento (g/pezzo) e capacità dei contenitori (ml).
  */
 open class PhysicalData(
-    customDensities: List<PhysicalValue> = emptyList()
+    customDensities: List<PhysicalValue> = emptyList(),
+    customUnitWeights: List<PhysicalValue> = emptyList(),
 ) {
-
-    private val dynamicDensities = customDensities.map { 
-        Entry(it.valore, it.fonte, listOf(it.fonte)) 
-    }
 
     /** Diametro di riferimento di un piatto piano, usato quando manca un'ancora di piatto (§9). */
     companion object {
@@ -22,13 +19,14 @@ open class PhysicalData(
 
     /** Densità (g/cm³) per gli alimenti a stima geometrica. Fonte primaria: CREA/INRAN. */
     private val densities: List<Entry> = listOf(
-        // Cereali e derivati (Fonte: CREA - densità apparente cotto/pronto)
-        entry(0.68, "pasta lunga cotta (CREA)", "spaghetti", "linguine", "tagliatelle"),
-        entry(0.46, "pasta corta bucata cotta (CREA)", "penne", "rigatoni", "maccheroni", "mezze maniche"),
-        entry(0.52, "pasta corta cotta (CREA)", "pasta", "fusilli", "farfalle", "caserecce"),
-        entry(0.82, "riso cotto (CREA)", "riso", "risotto"),
-        entry(0.88, "cereale cotto (CREA)", "orzo", "farro", "couscous", "cous cous", "quinoa", "polenta"),
-        entry(0.38, "cereali secchi (CREA)", "cereali", "muesli", "corn flakes", "fiocchi"),
+        // Cereali e derivati — densità BULK (apparente): misurata su cumulo cotto, spazi d'aria già inclusi.
+        // NON moltiplicare per "riempimento" in M3, altrimenti si conta la porosità due volte.
+        entry(0.68, "pasta lunga cotta (CREA)", isBulk = true, "spaghetti", "linguine", "tagliatelle"),
+        entry(0.46, "pasta corta bucata cotta (CREA)", isBulk = true, "penne", "rigatoni", "maccheroni", "mezze maniche"),
+        entry(0.52, "pasta corta cotta (CREA)", isBulk = true, "pasta", "fusilli", "farfalle", "caserecce"),
+        entry(0.82, "riso cotto (CREA)", isBulk = true, "riso", "risotto"),
+        entry(0.88, "cereale cotto (CREA)", isBulk = true, "orzo", "farro", "couscous", "cous cous", "quinoa", "polenta"),
+        entry(0.38, "cereali secchi (CREA)", isBulk = true, "cereali", "muesli", "corn flakes", "fiocchi"),
         entry(0.45, "pane (CREA)", "pane", "panino", "rosetta", "michetta", "baguette"),
         entry(0.58, "pizza/focaccia (CREA)", "pizza", "focaccia"),
         entry(0.48, "torta (CREA)", "torta", "crostata", "tiramisu"),
@@ -118,6 +116,16 @@ open class PhysicalData(
             "spinaci", "cavolfiore", "finocchi"),
     )
 
+    private val dynamicDensities: List<Entry> = customDensities.map { custom ->
+        val staticHit = firstTableMatch(StrategyRouter.normalize(custom.fonte), densities)
+        val effectiveIsBulk = custom.isBulkDensity || (staticHit?.isBulk == true)
+        Entry(custom.valore, custom.fonte, effectiveIsBulk, listOf(custom.fonte))
+    }
+
+    private val dynamicUnitWeights: List<Entry> = customUnitWeights.map { custom ->
+        Entry(custom.valore, custom.fonte, isBulk = false, listOf(custom.fonte))
+    }
+
     private val defaultDensity = PhysicalValue(0.90, "densità generica", isDefault = true)
     private val defaultUnitWeight = PhysicalValue(50.0, "peso unitario generico", isDefault = true)
     private val defaultCapacity = PhysicalValue(250.0, "capacità generica", isDefault = true)
@@ -131,17 +139,35 @@ open class PhysicalData(
 
     private fun resolve(nome: String, table: List<Entry>, default: PhysicalValue): PhysicalValue {
         val normalizzato = StrategyRouter.normalize(nome)
-        
-        // Priorità 1: Densità dinamiche (inserite dall'utente per questo specifico alimento)
-        if (table === densities) {
-            val dynamicHit = dynamicDensities.firstOrNull { e -> e.keywords.any { matchesWholeWord(normalizzato, it) } }
-            if (dynamicHit != null) return PhysicalValue(dynamicHit.value, dynamicHit.label, isDefault = false)
+
+        // Priorità 1: Valori dinamici appresi dall'utente per questo specifico alimento
+        val dynamicTable = when {
+            table === densities -> dynamicDensities
+            table === unitWeights -> dynamicUnitWeights
+            else -> emptyList()
+        }
+        if (dynamicTable.isNotEmpty()) {
+            val exactHit = dynamicTable.firstOrNull { e ->
+                e.keywords.any { StrategyRouter.normalize(it) == normalizzato }
+            }
+            val dynamicHit = exactHit ?: firstTableMatch(normalizzato, dynamicTable)
+            if (dynamicHit != null) {
+                return PhysicalValue(
+                    dynamicHit.value,
+                    dynamicHit.label,
+                    isDefault = false,
+                    isBulkDensity = dynamicHit.isBulk,
+                )
+            }
         }
 
         // Priorità 2: Tabelle statiche (CREA/INRAN)
-        val hit = table.firstOrNull { e -> e.keywords.any { matchesWholeWord(normalizzato, it) } }
-        return hit?.let { PhysicalValue(it.value, it.label, isDefault = false) } ?: default
+        val hit = firstTableMatch(normalizzato, table)
+        return hit?.let { PhysicalValue(it.value, it.label, isDefault = false, isBulkDensity = it.isBulk) } ?: default
     }
+
+    private fun firstTableMatch(nomeNormalizzato: String, table: List<Entry>): Entry? =
+        table.firstOrNull { e -> e.keywords.any { matchesWholeWord(nomeNormalizzato, it) } }
 
     private fun matchesWholeWord(nomeNormalizzato: String, keyword: String): Boolean {
         val kw = StrategyRouter.normalize(keyword)
@@ -150,9 +176,12 @@ open class PhysicalData(
     }
 
     private fun entry(value: Double, label: String, vararg keywords: String) =
-        Entry(value = value, label = label, keywords = keywords.toList())
+        Entry(value = value, label = label, isBulk = false, keywords = keywords.toList())
 
-    private data class Entry(val value: Double, val label: String, val keywords: List<String>)
+    private fun entry(value: Double, label: String, isBulk: Boolean, vararg keywords: String) =
+        Entry(value = value, label = label, isBulk = isBulk, keywords = keywords.toList())
+
+    private data class Entry(val value: Double, val label: String, val isBulk: Boolean, val keywords: List<String>)
 }
 
 /** Un valore fisico risolto da una tabella, con la sua provenienza per la catena di calcolo. */
@@ -160,4 +189,10 @@ data class PhysicalValue(
     val valore: Double,
     val fonte: String,
     val isDefault: Boolean,
+    /**
+     * True quando la densità CREA è "apparente bulk" — misurata su un cumulo di cibo (pasta cotta,
+     * riso cotto, cereali) includendo già gli spazi d'aria tra i pezzi. In quel caso il fattore
+     * "riempimento" di M1 non va applicato: sarebbe un doppio-sconto sulla stessa porosità.
+     */
+    val isBulkDensity: Boolean = false,
 )

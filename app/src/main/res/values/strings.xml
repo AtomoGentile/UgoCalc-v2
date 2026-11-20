@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">UgoCalc</string>
-    <string name="overlay_pitch_format">Inclinazione: %.0f° (target %.0f°)</string>
-    <string name="overlay_turn_format">Rotazione: %.0f° (target %.0f°)</string>
+    <string name="overlay_pitch_format">Inclinazione: %1$.0f° (target %2$.0f°)</string>
+    <string name="overlay_turn_format">Rotazione: %1$.0f° (target %2$.0f°)</string>
     <string name="overlay_motion_format">Movimento: %.1f rad/s</string>
     <string name="overlay_motion_too_much">MOVIMENTO: %.1f rad/s (FERMO!)</string>
 </resources>

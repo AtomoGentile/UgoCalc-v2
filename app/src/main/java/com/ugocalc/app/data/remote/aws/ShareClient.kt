@@ -1,5 +1,6 @@
 package com.ugocalc.app.data.remote.aws
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
@@ -8,6 +9,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.IOException
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Named
 import javax.inject.Singleton
@@ -45,18 +47,29 @@ class ShareClient @Inject constructor(
     @Named("aws_base_url") private val baseUrl: String,
 ) {
     private val json = "application/json; charset=utf-8".toMediaType()
+    private val shareClient: OkHttpClient by lazy {
+        okHttpClient.newBuilder()
+            .connectTimeout(5, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .writeTimeout(10, TimeUnit.SECONDS)
+            .callTimeout(15, TimeUnit.SECONDS)
+            .build()
+    }
 
     // ─── legacy: invito diretto per email ───────────────────────────────────
     suspend fun invite(inviteeEmail: String): ShareResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext ShareResult.Error(UNAVAILABLE_MESSAGE)
+
         val body = JSONObject().apply { put("inviteeEmail", inviteeEmail) }
             .toString().toRequestBody(json)
         val request = Request.Builder()
-            .url("$baseUrl/share")
+            .url("$normalizedBase/share")
             .header("Accept", "application/json")
             .post(body)
             .build()
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            shareClient.newCall(request).execute().use { response ->
                 if (response.isSuccessful) {
                     val accountId = runCatching {
                         JSONObject(response.body?.string() ?: "{}").getString("accountId")
@@ -69,119 +82,150 @@ class ShareClient @Inject constructor(
                     ShareResult.Error(msg)
                 }
             }
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: IOException) {
             ShareResult.Error("Errore di rete: ${e.message}")
+        } catch (e: Exception) {
+            ShareResult.Error("Errore: ${e.message}")
         }
     }
 
     // ─── Owner: genera un token + deep link ─────────────────────────────────
     suspend fun generateInvite(): GenerateInviteResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext GenerateInviteResult.Error(UNAVAILABLE_MESSAGE)
+
         val request = Request.Builder()
-            .url("$baseUrl/share/generate")
+            .url("$normalizedBase/share/generate")
             .header("Accept", "application/json")
             .post("{}".toRequestBody(json))
             .build()
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            shareClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: "{}"
                 if (response.isSuccessful) {
-                    val obj = JSONObject(response.body?.string() ?: "{}")
-                    GenerateInviteResult.Success(
-                        token = obj.getString("token"),
-                        deepLink = obj.getString("deepLink"),
-                    )
+                    val res = runCatching {
+                        val obj = JSONObject(bodyStr)
+                        GenerateInviteResult.Success(
+                            token = obj.getString("token"),
+                            deepLink = obj.getString("deepLink"),
+                        )
+                    }.getOrElse { GenerateInviteResult.Error("Risposta non valida: $bodyStr") }
+                    res
                 } else {
-                    val msg = runCatching {
-                        JSONObject(response.body?.string() ?: "{}").getString("error")
-                    }.getOrDefault("HTTP ${response.code}")
+                    val msg = runCatching { JSONObject(bodyStr).getString("error") }
+                        .getOrDefault("HTTP ${response.code}")
                     GenerateInviteResult.Error(msg)
                 }
             }
-        } catch (e: IOException) {
-            GenerateInviteResult.Error("Errore di rete: ${e.message}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            GenerateInviteResult.Error("Errore: ${e.message}")
         }
     }
 
     // ─── Guest: attiva il token e mette la richiesta in coda ────────────────
     suspend fun requestAccess(token: String): RequestAccessResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext RequestAccessResult.Error(UNAVAILABLE_MESSAGE)
+
         val body = JSONObject().apply { put("token", token) }.toString().toRequestBody(json)
         val request = Request.Builder()
-            .url("$baseUrl/share/request")
+            .url("$normalizedBase/share/request")
             .header("Accept", "application/json")
             .post(body)
             .build()
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            shareClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: "{}"
                 if (response.isSuccessful) {
                     RequestAccessResult.WaitingApproval
                 } else {
-                    val msg = runCatching {
-                        JSONObject(response.body?.string() ?: "{}").getString("error")
-                    }.getOrDefault("HTTP ${response.code}")
+                    val msg = runCatching { JSONObject(bodyStr).getString("error") }
+                        .getOrDefault("HTTP ${response.code}")
                     RequestAccessResult.Error(msg)
                 }
             }
-        } catch (e: IOException) {
-            RequestAccessResult.Error("Errore di rete: ${e.message}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            RequestAccessResult.Error("Errore: ${e.message}")
         }
     }
 
     // ─── Guest: polling dello stato ──────────────────────────────────────────
     suspend fun pollStatus(token: String): InviteStatusResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext InviteStatusResult.Error(UNAVAILABLE_MESSAGE)
+
         val request = Request.Builder()
-            .url("$baseUrl/share/status?token=$token")
+            .url("$normalizedBase/share/status?token=$token")
             .header("Accept", "application/json")
             .get()
             .build()
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            shareClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: "{}"
                 if (response.isSuccessful) {
-                    val statusStr = runCatching {
-                        JSONObject(response.body?.string() ?: "{}").getString("status")
-                    }.getOrDefault("unknown")
-                    val status = when (statusStr) {
-                        "pending"          -> InviteStatus.PENDING
-                        "waiting_approval" -> InviteStatus.WAITING_APPROVAL
-                        "approved"         -> InviteStatus.APPROVED
-                        "denied"           -> InviteStatus.DENIED
-                        else               -> InviteStatus.UNKNOWN
-                    }
+                    val status = runCatching {
+                        val statusStr = JSONObject(bodyStr).getString("status")
+                        when (statusStr) {
+                            "pending"          -> InviteStatus.PENDING
+                            "waiting_approval" -> InviteStatus.WAITING_APPROVAL
+                            "approved"         -> InviteStatus.APPROVED
+                            "denied"           -> InviteStatus.DENIED
+                            else               -> InviteStatus.UNKNOWN
+                        }
+                    }.getOrDefault(InviteStatus.UNKNOWN)
                     InviteStatusResult.Success(status)
                 } else {
-                    val msg = runCatching {
-                        JSONObject(response.body?.string() ?: "{}").getString("error")
-                    }.getOrDefault("HTTP ${response.code}")
+                    val msg = runCatching { JSONObject(bodyStr).getString("error") }
+                        .getOrDefault("HTTP ${response.code}")
                     InviteStatusResult.Error(msg)
                 }
             }
-        } catch (e: IOException) {
-            InviteStatusResult.Error("Errore di rete: ${e.message}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            InviteStatusResult.Error("Errore: ${e.message}")
         }
     }
 
     // ─── Owner: approva o nega ───────────────────────────────────────────────
     suspend fun approve(token: String, approved: Boolean): ApproveResult = withContext(Dispatchers.IO) {
+        val normalizedBase = normalizeAwsBaseUrl(baseUrl)
+            ?: return@withContext ApproveResult.Error(UNAVAILABLE_MESSAGE)
+
         val body = JSONObject().apply {
             put("token", token)
             put("approved", approved)
         }.toString().toRequestBody(json)
         val request = Request.Builder()
-            .url("$baseUrl/share/approve")
+            .url("$normalizedBase/share/approve")
             .header("Accept", "application/json")
             .post(body)
             .build()
         try {
-            okHttpClient.newCall(request).execute().use { response ->
+            shareClient.newCall(request).execute().use { response ->
+                val bodyStr = response.body?.string() ?: "{}"
                 if (response.isSuccessful) {
                     ApproveResult.Ok
                 } else {
-                    val msg = runCatching {
-                        JSONObject(response.body?.string() ?: "{}").getString("error")
-                    }.getOrDefault("HTTP ${response.code}")
+                    val msg = runCatching { JSONObject(bodyStr).getString("error") }
+                        .getOrDefault("HTTP ${response.code}")
                     ApproveResult.Error(msg)
                 }
             }
-        } catch (e: IOException) {
-            ApproveResult.Error("Errore di rete: ${e.message}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            ApproveResult.Error("Errore: ${e.message}")
         }
+    }
+
+    companion object {
+        private const val UNAVAILABLE_MESSAGE = "Condivisione cloud non disponibile: backend AWS non configurato"
     }
 }

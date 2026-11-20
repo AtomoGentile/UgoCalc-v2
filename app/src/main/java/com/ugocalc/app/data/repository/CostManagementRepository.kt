@@ -8,10 +8,16 @@ import java.util.Calendar
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class ModelCostBreakdown(
+    val modelId: String,
+    val totalCost: Double,
+    val costByStage: Map<String, Double>
+)
+
 data class CostSummary(
     val totalCostUsd: Double,
     val costByStage: Map<String, Double>,
-    val costByModel: Map<String, Double>,
+    val costByModel: Map<String, ModelCostBreakdown>,
     val transactionCount: Int,
     val recentTransactions: List<CostTransactionEntity>,
 )
@@ -59,12 +65,25 @@ class CostManagementRepository @Inject constructor(
         val costByStage = all.groupBy { it.stage }
             .mapValues { (_, trans) -> trans.sumOf { it.costUsd } }
 
-        val costByModel = all.groupBy { it.modelId }
-            .mapValues { (_, trans) -> trans.sumOf { it.costUsd } }
+        // Mappiamo i costi per modello, includendo tutti i modelli noti (§13 punto 5).
+        // Questo permette di selezionare un modello anche se ha costo 0.
+        val allModels = com.ugocalc.app.domain.model.AiModelCatalog.ALL.map { it.id }.toSet()
+        val transactionModels = all.map { it.modelId }.toSet()
+        val combinedIds = (allModels + transactionModels).sorted()
+
+        val costByModel = combinedIds.associateWith { modelId ->
+            val modelTransactions = all.filter { it.modelId == modelId }
+            ModelCostBreakdown(
+                modelId = modelId,
+                totalCost = modelTransactions.sumOf { it.costUsd },
+                costByStage = modelTransactions.groupBy { it.stage }
+                    .mapValues { (_, trans) -> trans.sumOf { it.costUsd } }
+            )
+        }
 
         val recent = dao.getRecentTransactions(
             startMillis = System.currentTimeMillis() - 30 * 24 * 60 * 60 * 1000, // ultimi 30 giorni
-            limit = 100
+            limit = 20
         )
 
         return CostSummary(

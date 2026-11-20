@@ -6,14 +6,8 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
-import com.google.mlkit.vision.text.chinese.SimplifiedChinese
-import com.google.mlkit.vision.text.chinese.TraditionalChinese
-import com.google.mlkit.vision.text.devanagari.Devanagari
-import com.google.mlkit.vision.text.japanese.Japanese
-import com.google.mlkit.vision.text.korean.Korean
-import com.google.mlkit.vision.text.latin.Latin
+import com.google.mlkit.vision.text.latin.TextRecognizerOptions
 import kotlinx.coroutines.tasks.await
-import java.util.Locale
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.text.PDFTextStripper
 import com.ugocalc.app.domain.model.DiscardedRow
@@ -74,10 +68,44 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
     private fun extractPdf(input: java.io.InputStream): String {
         PDDocument.load(input).use { document ->
             val text = PDFTextStripper().getText(document)
-            if (text.isBlank()) {
-                throw DocumentExtractionException("Il PDF non contiene testo estraibile. È un PDF scansionato? Occorre convertirlo con OCR. Riprova con l'app — verrà processato automaticamente.")
+            if (text.isNotBlank()) return text
+            // PDF scansionato: nessun testo incorporato — prova OCR pagina per pagina
+            val renderer = com.tom_roush.pdfbox.rendering.PDFRenderer(document)
+            val pageCount = document.numberOfPages
+            if (pageCount == 0) throw DocumentExtractionException("Il PDF non contiene pagine")
+            val builder = StringBuilder()
+            for (i in 0 until pageCount) {
+                val bitmap = renderer.renderImageWithDPI(i, 200f)
+                try {
+                    val pageText = recognizeTextBlocking(bitmap)
+                    if (pageText.isNotBlank()) builder.appendLine(pageText)
+                } finally {
+                    bitmap.recycle()
+                }
             }
-            return text
+            val result = builder.toString().trim()
+            if (result.isBlank()) throw DocumentExtractionException("Il PDF è scansionato ma OCR non ha trovato testo leggibile. Verifica che la qualità della scansione sia sufficiente.")
+            return result
+        }
+    }
+
+    /**
+     * Versione bloccante di recognizeTextFromBitmap per uso dentro lambda non-suspend (es. InputStream.use).
+     * Chiamata sempre su Dispatchers.IO tramite extract(), quindi Tasks.await() non blocca il main thread.
+     */
+    private fun recognizeTextBlocking(bitmap: Bitmap): String {
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+        return try {
+            val visionText = com.google.android.gms.tasks.Tasks.await(recognizer.process(image))
+            visionText.text
+        } catch (e: java.util.concurrent.ExecutionException) {
+            throw DocumentExtractionException("OCR fallito su una pagina: ${e.cause?.message}", e)
+        } catch (e: InterruptedException) {
+            Thread.currentThread().interrupt()
+            throw DocumentExtractionException("OCR interrotto", e)
+        } finally {
+            recognizer.close()
         }
     }
 
@@ -215,33 +243,30 @@ class DocumentTextExtractor @Inject constructor(@param:ApplicationContext privat
     }
 
     private suspend fun recognizeTextFromBitmap(bitmap: Bitmap): String = withContext(Dispatchers.Default) {
-        val image = InputImage.fromBitmap(bitmap)
+        val image = InputImage.fromBitmap(bitmap, 0)
+        val recognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
         try {
-            // Prova prima con modelli multi-lingue (Latin copre italiano/inglese/francese/tedesco ecc)
-            val recognizer = TextRecognition.getClient(Latin())
             val visionText = recognizer.process(image).await()
             if (visionText.text.isBlank()) {
                 throw DocumentExtractionException("OCR non ha estratto alcun testo dall'immagine")
             }
             visionText.text
         } finally {
-            image.close()
+            recognizer.close()
         }
     }
 
     companion object {
         /**
          * Dimensione massima di testo per singola chiamata AI (§4 "Nota implementativa": può essere
-         * necessario il chunking per estrazioni disordinate o voluminose). Su una tabella di
-         * centinaia di pagine, un valore troppo piccolo moltiplica il numero di chiamate AI
-         * sequenziali necessarie — e ogni chiamata in più è un'occasione in più per finire in un
-         * limite di quota (es. 429 su GitHub Models) o in un sovraccarico temporaneo del provider.
-         * Ancora ben al di sotto del contesto di tutti e 3 i provider (centinaia di migliaia di
-         * token), ma il doppio del valore precedente per dimezzare il numero di chiamate su
-         * documenti grandi. Se un chunk troppo grande producesse JSON troncato in output, andrebbe
-         * abbassato di nuovo verso il valore originale.
+         * necessario il chunking per estrazioni disordinate o voluminose). 
+         * Ridotta da 24.000 a 10.000 caratteri: un chunk troppo grande genera una risposta JSON 
+         * che supera spesso il limite di output token del modello (es. 4096 o 8192 token), 
+         * causando risposte troncate e quindi "JSON malformato" durante la normalizzazione.
+         * Dimezzare la dimensione del chunk aumenta il numero di chiamate ma garantisce che 
+         * ciascuna rimanga entro i limiti di emissione dei provider.
          */
-        const val MAX_CHARS_PER_CHUNK = 24_000
+        const val MAX_CHARS_PER_CHUNK = 10_000
 
         fun chunkText(text: String, maxChars: Int = MAX_CHARS_PER_CHUNK): List<String> {
             if (text.length <= maxChars) return listOf(text)

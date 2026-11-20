@@ -2,6 +2,7 @@ package com.ugocalc.app.data.repository
 
 import android.content.Context
 import android.net.Uri
+import com.ugocalc.app.data.local.data.StarterFoodDatabase
 import com.ugocalc.app.data.local.db.dao.NormalizedFoodEntryDao
 import com.ugocalc.app.data.local.db.dao.OfficialTableDao
 import com.ugocalc.app.data.local.db.dao.SearchFrequencyDao
@@ -23,8 +24,11 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -59,6 +63,106 @@ class TableRepository @Inject constructor(
      */
     private val _normalizationProgress = MutableStateFlow<Map<Long, String>>(emptyMap())
     val normalizationProgress: StateFlow<Map<Long, String>> = _normalizationProgress.asStateFlow()
+
+    private val starterSeedMutex = Mutex()
+
+    /**
+     * Popola una tantum la tabella nutrizionale italiana base (CREA) se l'utente non ha ancora
+     * alcuna tabella nel database. Se l'utente possiede già tabelle importate, imposta comunque il
+     * flag `hasSeededStarterTable = true` senza sovrascrivere né aggiungere tabelle indesiderate.
+     */
+    suspend fun ensureStarterTableSeeded(settingsRepository: SettingsRepository) = starterSeedMutex.withLock {
+        val currentSettings = settingsRepository.settings.first()
+        if (currentSettings.hasSeededStarterTable) return@withLock
+        val existingTables = tableDao.getAllOrderedByPriority()
+        if (existingTables.isEmpty()) {
+            insertStarterTable(priorityOrder = 0)
+        }
+        settingsRepository.setHasSeededStarterTable(true)
+    }
+
+    /**
+     * Ripristina o reintegra la tabella base italiana (CREA): se assente la crea e la popola con
+     * tutte le voci; se già presente ma con voci mancanti, aggiunge quelle mancanti senza rimuovere
+     * eventuali personalizzazioni dell'utente. Restituisce l'ID della tabella.
+     */
+    suspend fun restoreStarterTable(): Long = starterSeedMutex.withLock {
+        val existing = tableDao.getAllOrderedByPriority()
+            .firstOrNull { it.displayName == StarterFoodDatabase.STARTER_TABLE_DISPLAY_NAME }
+        if (existing == null) {
+            val nextPriority = (tableDao.maxPriorityOrder() ?: -1) + 1
+            return@withLock insertStarterTable(priorityOrder = nextPriority)
+        }
+        val currentEntries = entryDao.getForTable(existing.id)
+        val existingNames = currentEntries.map { it.nome.trim().lowercase() }.toSet()
+        val missing = StarterFoodDatabase.ENTRIES.filter { it.nome.trim().lowercase() !in existingNames }
+        if (missing.isNotEmpty()) {
+            val startOrder = (entryDao.maxRowOrder(existing.id) ?: -1) + 1
+            entryDao.insertAll(
+                missing.mapIndexed { index, entry ->
+                    NormalizedFoodEntryEntity(
+                        tableId = existing.id,
+                        nome = entry.nome,
+                        choPer100g = entry.choPer100g,
+                        grassiPer100g = entry.grassiPer100g,
+                        rowOrder = startOrder + index,
+                    )
+                }
+            )
+        }
+        existing.id
+    }
+
+    private suspend fun insertStarterTable(priorityOrder: Int): Long {
+        val tableId = tableDao.insert(
+            OfficialTableEntity(
+                displayName = StarterFoodDatabase.STARTER_TABLE_DISPLAY_NAME,
+                fileType = OfficialFileType.MANUAL_ENTRY,
+                storedFilePath = "",
+                uploadedAtEpochMillis = System.currentTimeMillis(),
+                priorityOrder = priorityOrder,
+                rawExtractedText = "",
+                normalizationStatus = NormalizationStatus.DONE,
+            )
+        )
+        entryDao.insertAll(
+            StarterFoodDatabase.ENTRIES.mapIndexed { index, entry ->
+                NormalizedFoodEntryEntity(
+                    tableId = tableId,
+                    nome = entry.nome,
+                    choPer100g = entry.choPer100g,
+                    grassiPer100g = entry.grassiPer100g,
+                    rowOrder = index,
+                )
+            }
+        )
+        return tableId
+    }
+
+    /**
+     * Restituisce fino a [limit] voci sfogliabili dalle tabelle normalizzate, in ordine di priorità,
+     * così la ricerca mostra subito alimenti consultabili anche a campo di ricerca vuoto.
+     */
+    suspend fun getBrowseEntries(limit: Int = 50): List<FoodSearchResult> {
+        if (limit <= 0) return emptyList()
+        val tables = tableDao.getAllOrderedByPriority()
+            .filter { it.normalizationStatus == NormalizationStatus.DONE }
+        if (tables.isEmpty()) return emptyList()
+        val results = ArrayList<FoodSearchResult>(limit)
+        for (table in tables) {
+            if (results.size >= limit) break
+            val entries = entryDao.getForTable(table.id)
+            for (entry in entries) {
+                if (results.size >= limit) break
+                results += FoodSearchResult(
+                    entryId = entry.id,
+                    entry = mapEntryToDomain(entry),
+                    tableDisplayName = table.displayName,
+                )
+            }
+        }
+        return results
+    }
 
     fun observeTables(): Flow<List<OfficialTableEntity>> = tableDao.observeAll()
 
@@ -132,14 +236,15 @@ class TableRepository @Inject constructor(
      * dell'app per prevenire la perdita di dati"), crea la riga in tabella con priorità più bassa
      * (in fondo alla lista) e avvia subito la normalizzazione (Passaggio 2).
      */
-    suspend fun importAndNormalize(uri: Uri, displayName: String, fileType: OfficialFileType, model: AiModel): Long {
-        val storedFile = copyToInternalStorage(uri, fileType)
+    suspend fun importAndNormalize(uris: List<Uri>, displayName: String, fileType: OfficialFileType, model: AiModel): Long {
+        // Copia tutti i file; usa il primo come file "principale" (storedFilePath).
+        val storedFiles = uris.map { copyToInternalStorage(it, fileType) }
         val nextPriority = (tableDao.maxPriorityOrder() ?: -1) + 1
 
         var entity = OfficialTableEntity(
             displayName = displayName,
             fileType = fileType,
-            storedFilePath = storedFile.absolutePath,
+            storedFilePath = storedFiles.first().absolutePath,
             uploadedAtEpochMillis = System.currentTimeMillis(),
             priorityOrder = nextPriority,
             rawExtractedText = "",
@@ -148,9 +253,12 @@ class TableRepository @Inject constructor(
         val tableId = tableDao.insert(entity)
         entity = entity.copy(id = tableId)
 
-        runNormalization(entity, Uri.fromFile(storedFile), model)
+        runNormalization(entity, storedFiles.map { Uri.fromFile(it) }, model)
         return tableId
     }
+
+    suspend fun importAndNormalize(uri: Uri, displayName: String, fileType: OfficialFileType, model: AiModel): Long =
+        importAndNormalize(listOf(uri), displayName, fileType, model)
 
     /**
      * Import "già pronto" (§ richiesta utente: niente AI, il file è già nel formato giusto): un
@@ -186,7 +294,7 @@ class TableRepository @Inject constructor(
     /** Permette di ri-eseguire il Passaggio 2 (es. dopo un fallimento, o cambiando modello AI). */
     suspend fun retryNormalization(tableId: Long, model: AiModel) {
         val table = tableDao.getById(tableId) ?: return
-        runNormalization(table, Uri.fromFile(File(table.storedFilePath)), model)
+        runNormalization(table, listOf(Uri.fromFile(File(table.storedFilePath))), model)
     }
 
     /**
@@ -196,12 +304,14 @@ class TableRepository @Inject constructor(
      * strada — es. rate limit del provider gratuito — non fa perdere il lavoro già fatto. Un retry
      * riprende da `normalizedChunkCount` invece di rifare da capo i chunk già andati a buon fine.
      */
-    private suspend fun runNormalization(table: OfficialTableEntity, fileUri: Uri, model: AiModel) {
+    private suspend fun runNormalization(table: OfficialTableEntity, fileUris: List<Uri>, model: AiModel) {
         var currentTable = table.copy(normalizationStatus = NormalizationStatus.PROCESSING, normalizationErrorMessage = null)
         tableDao.update(currentTable)
         try {
             val useOcr = table.fileType in listOf(OfficialFileType.JPG, OfficialFileType.PNG)
-            val extractedText = if (useOcr) extractor.extractWithOcr(fileUri, table.fileType) else extractor.extract(fileUri, table.fileType)
+            val extractedText = fileUris.map { uri ->
+                if (useOcr) extractor.extractWithOcr(uri, table.fileType) else extractor.extract(uri, table.fileType)
+            }.joinToString("\n\n")
             if (extractedText.isBlank()) {
                 throw DocumentExtractionException("Il file non contiene testo leggibile. Se è un PDF scansionato, riprova con OCR.")
             }
@@ -342,7 +452,8 @@ class TableRepository @Inject constructor(
     }
 
     private suspend fun getOrCreateSpecialTable(displayName: String, fileType: OfficialFileType): OfficialTableEntity {
-        val existing = tableDao.getAllOrderedByPriority().firstOrNull { it.fileType == fileType }
+        val existing = tableDao.getAllOrderedByPriority()
+            .firstOrNull { it.fileType == fileType && it.displayName == displayName }
         if (existing != null) return existing
         val nextPriority = (tableDao.maxPriorityOrder() ?: -1) + 1
         val entity = OfficialTableEntity(
@@ -361,16 +472,29 @@ class TableRepository @Inject constructor(
     /** "Aggiungi al database" (§Pezzo E): persiste un alimento trovato con la ricerca online. */
     suspend fun addOnlineResearchEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
         val table = getOrCreateOnlineResearchTable()
-        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g)
+        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g).second
     }
 
     /** Crea una nuova voce manuale nel database (§ richiesta utente). */
     suspend fun addManualEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
-        val table = getOrCreateManualEntriesTable()
-        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g)
+        return addManualEntryWithResult(nome, choPer100g, grassiPer100g).entry
     }
 
-    private suspend fun addEntryToTable(tableId: Long, nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
+    /**
+     * Crea una nuova voce manuale nel database e restituisce un [FoodSearchResult] contenente
+     * l'`entryId` reale generato da Room (utile nei picker in modalità selezione multipla).
+     */
+    suspend fun addManualEntryWithResult(nome: String, choPer100g: Double, grassiPer100g: Double): FoodSearchResult {
+        val table = getOrCreateManualEntriesTable()
+        val (entryId, entry) = addEntryToTable(table.id, nome.trim(), choPer100g, grassiPer100g)
+        return FoodSearchResult(
+            entryId = entryId,
+            entry = entry,
+            tableDisplayName = table.displayName,
+        )
+    }
+
+    private suspend fun addEntryToTable(tableId: Long, nome: String, choPer100g: Double, grassiPer100g: Double): Pair<Long, NormalizedFoodEntry> {
         val nextOrder = (entryDao.maxRowOrder(tableId) ?: -1) + 1
         val entity = NormalizedFoodEntryEntity(
             tableId = tableId,
@@ -380,8 +504,8 @@ class TableRepository @Inject constructor(
             rowOrder = nextOrder,
             isManuallyEdited = true,
         )
-        entryDao.insert(entity)
-        return mapEntryToDomain(entity)
+        val id = entryDao.insert(entity)
+        return id to mapEntryToDomain(entity)
     }
 
     private fun copyToInternalStorage(uri: Uri, fileType: OfficialFileType): File {

@@ -36,15 +36,36 @@ class V2AnalysisPipelineFactory @Inject constructor(
      */
     suspend fun create(sessionId: String? = null): V2AnalysisPipeline {
         val customDensities = physicalDataRepository.getCustomDensities().map {
-            com.ugocalc.app.domain.inference.m3.PhysicalValue(it.value, it.label, isDefault = false)
+            com.ugocalc.app.domain.inference.m3.PhysicalValue(
+                valore = it.value,
+                fonte = it.label,
+                isDefault = false,
+                isBulkDensity = com.ugocalc.app.domain.inference.m3.PhysicalData.INSTANCE.density(it.label).isBulkDensity,
+            )
         }
-        val physicalData = com.ugocalc.app.domain.inference.m3.PhysicalData(customDensities)
+        val customUnitWeights = physicalDataRepository.getCustomUnitWeights().map {
+            com.ugocalc.app.domain.inference.m3.PhysicalValue(
+                valore = it.value,
+                fonte = it.label,
+                isDefault = false,
+            )
+        }
+        val physicalData = com.ugocalc.app.domain.inference.m3.PhysicalData(
+            customDensities = customDensities,
+            customUnitWeights = customUnitWeights,
+        )
 
         return V2AnalysisPipeline(
-            perceive = perceptionEngine::perceive,
+            perceive = { model, images, imageMimeType, sessionMode, angleDescriptions, cameraMetadatas, calibrations ->
+                perceptionEngine.perceive(model, images, imageMimeType, sessionMode, angleDescriptions, cameraMetadatas, calibrations, sessionId)
+            },
             physicsEngine = com.ugocalc.app.domain.inference.m3.PhysicsEngine(physicalData),
-            arbitrate = arbitrationEngine::arbitrate,
-            matchNutrition = nutritionMatchStepAdapter::match,
+            arbitrate = { model, images, imageMimeType, scene, flaggati ->
+                arbitrationEngine.arbitrate(model, images, imageMimeType, scene, flaggati, sessionId)
+            },
+            matchNutrition = { model, stime, sessionMode, sid ->
+                nutritionMatchStepAdapter.match(model, stime, sessionMode, sid)
+            },
             recordTelemetry = { outcome, model, sessionMode -> telemetryRepository.record(outcome, model, sessionMode, sessionId) },
             biasFactor = { strategy, aiModelId, foodCategory ->
                 val consentGiven = settingsRepository.settings.first().biasDataConsentGiven

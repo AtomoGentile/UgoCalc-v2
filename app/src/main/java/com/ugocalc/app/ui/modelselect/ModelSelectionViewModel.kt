@@ -13,8 +13,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -28,6 +30,7 @@ data class ModelSelectionUiState(
     val availableModels: List<AiModel> = emptyList(),
     val selectedModelUids: Set<String> = emptySet(),
     val isOffline: Boolean = false,
+    val isRefreshing: Boolean = false,
 )
 
 @HiltViewModel
@@ -41,79 +44,118 @@ class ModelSelectionViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ModelSelectionUiState())
     val uiState: StateFlow<ModelSelectionUiState> = _uiState
 
+    val isSavingCredentials: StateFlow<Boolean> = sessionStore.isSavingCredentials
+
+    private var hasInitializedSelection = false
+
     init {
-        viewModelScope.launch {
-            settingsRepository.settings
-                .onEach { userSettings ->
-                    val isOffline = !connectivityObserver.isOnlineNow()
-                    val hasMantle = settingsRepository.hasBedrockCredentials()
-                    val hasIam = settingsRepository.hasBedrockIamCredentials()
-                    val enabledIds = userSettings.enabledAnalysisModelIds
-
-                    val models = AiModelCatalog.ALL.filter { model ->
-                        if (isOffline) return@filter false
-                        val isEnabled = enabledIds.isEmpty() || model.id in enabledIds
-                        if (!isEnabled) return@filter false
-                        when (model.provider) {
-                            AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT -> hasMantle
-                            AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT -> hasIam
-                            else -> settingsRepository.getApiKey(model.provider) != null
-                        }
-                    }
-                    _uiState.value = _uiState.value.copy(
-                        availableModels = models,
-                        isOffline = isOffline,
-                        selectedModelUids = if (_uiState.value.selectedModelUids.isEmpty()) {
-                            models.map { it.uid }.toSet()
-                        } else {
-                            _uiState.value.selectedModelUids
-                        },
-                    )
-                }
-                .launchIn(viewModelScope)
-        }
-    }
-
-    fun refresh() {
-        viewModelScope.launch {
-            // Re-hydrate catalog from storage; if empty, fetch from AWS
-            var mantleIds = settingsRepository.getBedrockAvailableModels()
-            if (mantleIds.isEmpty() && settingsRepository.hasBedrockCredentials()) {
-                mantleIds = fetchModelsMantle() ?: emptyList()
-            }
-            if (mantleIds.isNotEmpty()) AiModelCatalog.setBedrockModels(mantleIds)
-
-            var iamIds = settingsRepository.getBedrockIamAvailableModels()
-            if (iamIds.isEmpty() && settingsRepository.hasBedrockIamCredentials()) {
-                iamIds = fetchModelsIam() ?: emptyList()
-            }
-            if (iamIds.isNotEmpty()) AiModelCatalog.setBedrockIamModels(iamIds)
-
-            val isOffline = !connectivityObserver.isOnlineNow()
+        combine(
+            settingsRepository.settings,
+            connectivityObserver.observe(),
+            AiModelCatalog.catalogVersion,
+        ) { userSettings, isOnline, _ ->
+            val isOffline = !isOnline
             val hasMantle = settingsRepository.hasBedrockCredentials()
             val hasIam = settingsRepository.hasBedrockIamCredentials()
+            val hasVertex = settingsRepository.hasVertexAiCredentials()
+            val enabledIds = userSettings.enabledAnalysisModelIds
 
-            settingsRepository.settings.collect { userSettings ->
-                val enabledIds = userSettings.enabledAnalysisModelIds
-                val models = AiModelCatalog.ALL.filter { model ->
-                    if (isOffline) return@filter false
-                    val isEnabled = enabledIds.isEmpty() || model.id in enabledIds
+            val models = if (isOffline) {
+                emptyList()
+            } else {
+                AiModelCatalog.ALL.filter { model ->
+                    val isEnabled = enabledIds.isEmpty() || model.uid in enabledIds || model.id in enabledIds
                     if (!isEnabled) return@filter false
                     when (model.provider) {
                         AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_GPT -> hasMantle
-                        AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT -> hasIam
-                        else -> settingsRepository.getApiKey(model.provider) != null
+                        AiProviderType.BEDROCK_IAM_CLAUDE, AiProviderType.BEDROCK_IAM_GPT, AiProviderType.BEDROCK_IAM_AMAZON -> hasIam
+                        AiProviderType.VERTEX_AI -> hasVertex
+                        else -> !settingsRepository.getApiKey(model.provider).isNullOrBlank()
                     }
                 }
-                _uiState.value = _uiState.value.copy(
-                    availableModels = models,
-                    isOffline = isOffline,
-                    selectedModelUids = if (_uiState.value.selectedModelUids.isEmpty()) {
-                        models.map { it.uid }.toSet()
-                    } else {
-                        _uiState.value.selectedModelUids
-                    },
-                )
+            }
+            models to isOffline
+        }
+            .onEach { (models, isOffline) ->
+                val availableUids = models.map { it.uid }.toSet()
+                _uiState.update { state ->
+                    val nextSelection = when {
+                        isOffline -> state.selectedModelUids
+                        models.isEmpty() -> emptySet()
+                        !hasInitializedSelection -> {
+                            hasInitializedSelection = true
+                            availableUids
+                        }
+                        else -> state.selectedModelUids.intersect(availableUids)
+                    }
+                    state.copy(
+                        availableModels = models,
+                        selectedModelUids = nextSelection,
+                        isOffline = isOffline,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+    }
+
+    /**
+     * Esegue un refresh one-shot delle liste modelli dai provider configurati (solo se mancanti in
+     * memoria/cache), senza aprire nuovi collettori di Flow.
+     */
+    fun refresh() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isRefreshing = true) }
+            try {
+                var mantleIds = settingsRepository.getBedrockAvailableModels()
+                if (mantleIds.isEmpty() && settingsRepository.hasBedrockCredentials()) {
+                    mantleIds = fetchModelsMantle() ?: emptyList()
+                }
+                if (mantleIds.isNotEmpty() && AiModelCatalog.BEDROCK_MANTLE_OPTIONS.isEmpty()) {
+                    AiModelCatalog.setBedrockModels(mantleIds)
+                }
+
+                var iamIds = settingsRepository.getBedrockIamAvailableModels()
+                if (iamIds.isEmpty() && settingsRepository.hasBedrockIamCredentials()) {
+                    iamIds = fetchModelsIam() ?: emptyList()
+                }
+                if (iamIds.isNotEmpty() && AiModelCatalog.BEDROCK_IAM_OPTIONS.isEmpty()) {
+                    AiModelCatalog.setBedrockIamModels(iamIds)
+                }
+
+                val geminiIds = settingsRepository.getGeminiAvailableModels()
+                if (geminiIds.isNotEmpty()) {
+                    val current = AiModelCatalog.ALL
+                        .filter { it.provider == AiProviderType.GEMINI }
+                        .map { it.id }
+                        .toSet()
+                    if (current != geminiIds.toSet()) {
+                        AiModelCatalog.setGeminiModels(geminiIds)
+                    }
+                }
+
+                val openAiIds = settingsRepository.getOpenAiAvailableModels()
+                if (openAiIds.isNotEmpty()) {
+                    val current = AiModelCatalog.ALL
+                        .filter { it.provider == AiProviderType.OPENAI_API }
+                        .map { it.id }
+                        .toSet()
+                    if (current != openAiIds.toSet()) {
+                        AiModelCatalog.setOpenAiModels(openAiIds)
+                    }
+                }
+
+                val anthropicIds = settingsRepository.getAnthropicAvailableModels()
+                if (anthropicIds.isNotEmpty()) {
+                    val current = AiModelCatalog.ALL
+                        .filter { it.provider == AiProviderType.ANTHROPIC }
+                        .map { it.id }
+                        .toSet()
+                    if (current != anthropicIds.toSet()) {
+                        AiModelCatalog.setAnthropicModels(anthropicIds)
+                    }
+                }
+            } finally {
+                _uiState.update { it.copy(isRefreshing = false) }
             }
         }
     }
@@ -137,7 +179,9 @@ class ModelSelectionViewModel @Inject constructor(
                     } else null
                 } else null
             }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private suspend fun fetchModelsIam(): List<String>? = withContext(Dispatchers.IO) {
@@ -158,26 +202,64 @@ class ModelSelectionViewModel @Inject constructor(
                     } else null
                 } else null
             }
-        } catch (_: Exception) { null }
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private fun parseModelIds(json: String): List<String> {
         return try {
-            val arr = JSONObject(json).getJSONArray("modelSummaries")
-            (0 until arr.length()).map { arr.getJSONObject(it).getString("modelId") }
-        } catch (_: Exception) { emptyList() }
+            val root = JSONObject(json)
+            val models = mutableListOf<String>()
+            if (root.has("inferenceProfileSummaries")) {
+                val arr = root.getJSONArray("inferenceProfileSummaries")
+                for (i in 0 until arr.length()) {
+                    val item = arr.getJSONObject(i)
+                    if (item.optString("status", "ACTIVE") != "INACTIVE") {
+                        models.add(item.getString("inferenceProfileId"))
+                    }
+                }
+            }
+            if (root.has("modelSummaries")) {
+                val arr = root.getJSONArray("modelSummaries")
+                for (i in 0 until arr.length()) {
+                    models.add(arr.getJSONObject(i).getString("modelId"))
+                }
+            }
+            models.distinct()
+        } catch (_: Exception) {
+            emptyList()
+        }
     }
 
     fun toggleModel(uid: String) {
-        _uiState.value = _uiState.value.let { state ->
-            val newSelection = if (uid in state.selectedModelUids) state.selectedModelUids - uid else state.selectedModelUids + uid
+        _uiState.update { state ->
+            val newSelection = if (uid in state.selectedModelUids) {
+                state.selectedModelUids - uid
+            } else {
+                state.selectedModelUids + uid
+            }
             state.copy(selectedModelUids = newSelection)
+        }
+    }
+
+    fun selectAll() {
+        _uiState.update { state ->
+            state.copy(selectedModelUids = state.availableModels.map { it.uid }.toSet())
+        }
+    }
+
+    fun selectOnlyOne() {
+        _uiState.update { state ->
+            val preferred = state.availableModels.firstOrNull { it.uid in state.selectedModelUids }
+                ?: state.availableModels.firstOrNull()
+            state.copy(selectedModelUids = if (preferred != null) setOf(preferred.uid) else emptySet())
         }
     }
 
     fun confirmSelectionAndProceed(): List<String> {
         val selected = _uiState.value.availableModels.filter { it.uid in _uiState.value.selectedModelUids }
         sessionStore.setSelectedModels(selected)
-        return selected.map { it.id }
+        return selected.map { it.uid }
     }
 }

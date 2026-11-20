@@ -40,6 +40,27 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.0.0",
+            categories = listOf("Nuova UI/UX", "Database CREA", "Affidabilità", "CI/CD"),
+            highlights = listOf(
+                "Nuovo Design UI/UX: rinnovamento completo dell'interfaccia con tema moderno, schede ridisegnate, badge nutrizionali, stati vuoti curati e navigazione più fluida.",
+                "Onboarding Local-First e Tabella Base Italiana (CREA): nuova guida iniziale e database integrato con ~180 alimenti comuni italiani subito pronti all'uso senza configurazioni manuali.",
+                "Affidabilità AI e Matching Ibrido: migliorato il parsing delle risposte per tutti i provider AI (Gemini, Vertex AI, OpenAI, Anthropic), la gestione dei numeri con virgola/punto e il matching nutrizionale ibrido, oltre al recupero automatico di eventuali preferenze cifrate corrotte.",
+                "Pipeline CI/CD: introdotta integrazione continua su GitHub Actions con test automatici, lint e verifica build Debug e Release.",
+            ),
+        ),
+        ChangelogEntry(
+            version = "3.0.4",
+            categories = listOf("Bug fix"),
+            highlights = listOf(
+                "Bug fix: risolto un problema critico nell'autenticazione che impediva la generazione e l'accettazione degli inviti per la condivisione dell'account (Errore 401 Unauthorized).",
+                "Bug fix: corretta l'inizializzazione dei processi in background (WorkManager) che poteva causare instabilità all'avvio su alcuni dispositivi.",
+                "Performance: ottimizzato il caricamento del logo dell'app per eliminare micro-stuttering durante lo scrolling e l'apertura del menu.",
+                "Gestione Costi: aggiunto il dettaglio dell'attività svolta e l'identificativo sessione in ogni transazione per un monitoraggio più preciso.",
+                "Sincronizzazione: migliorata la reattività del recupero dati dopo l'approvazione di una richiesta di condivisione.",
+            ),
+        ),
+        ChangelogEntry(
             version = "3.0.2",
             categories = listOf("Miglioramenti UI", "Performance", "Bug fix"),
             highlights = listOf(

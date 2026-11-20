@@ -58,6 +58,7 @@ typealias NutritionMatchStep = suspend (
     model: AiModel,
     stime: List<WeightEstimate>,
     sessionMode: SessionMode,
+    sessionId: String?,
 ) -> Map<String, NormalizedFoodEntry>
 
 /**
@@ -124,7 +125,7 @@ class V2AnalysisPipeline(
         private val physicsEngine: PhysicsEngine = PhysicsEngine(),
         private val consistencyVerifier: ConsistencyVerifier = ConsistencyVerifier(),
         private val arbitrate: ArbitrationStep = { _, _, _, _, _ -> ArbitrationOutcome.NonDisponibile("arbitrato non configurato") },
-        private val matchNutrition: NutritionMatchStep = { _, _, _ -> emptyMap() },
+        private val matchNutrition: NutritionMatchStep = { _, _, _, _ -> emptyMap() },
         private val recordTelemetry: TelemetryStep = { _, _, _ -> -1L },
         private val biasFactor: BiasFactorStep = { _, _, _ -> null },
         private val getCalibrations: CalibrationsStep = { emptyList() },
@@ -137,6 +138,7 @@ class V2AnalysisPipeline(
         sessionMode: SessionMode,
         model: AiModel,
         calibrations: List<ScaleCalibrationEntity>? = null,
+        sessionId: String? = null,
     ): PipelineOutcome {
         val ingestion = qualityGate.assess(photos.map { it.quality })
         if (ingestion.tutteScadenti) return PipelineOutcome.NessunaFotoValida(ingestion.scartate)
@@ -162,22 +164,22 @@ class V2AnalysisPipeline(
             is SceneRoutingResult.Ok -> routing.assegnazioni
         }
 
-        val scale = ScaleResolver.resolve(sceneGraph.ancore)
+        val scale = ScaleResolver.resolve(sceneGraph.ancore, activeCalibrations)
         val stime = stimaTutti(sceneGraph, assegnazioni, scale, sessionMode, model)
         val verifica = consistencyVerifier.verify(sceneGraph, stime, scale)
 
         if (!verifica.richiedeArbitrato) {
-            return finalizza(sceneGraph, stime, verifica, model, sessionMode)
+            return finalizza(sceneGraph, stime, verifica, model, sessionMode, sessionId = sessionId)
         }
 
         // M5, al massimo una volta per analisi (§5 M5): qualunque sia l'esito, M4 non lo richiama
         // una seconda volta sullo stesso flag.
         return when (val esito = arbitrate(model, immaginiValide, imageMimeType, sceneGraph, verifica.flaggati)) {
             is ArbitrationOutcome.NonDisponibile ->
-                finalizza(sceneGraph, stime, verifica, model, sessionMode, arbitratoMotivoMancato = esito.motivo)
+                finalizza(sceneGraph, stime, verifica, model, sessionMode, sessionId = sessionId, arbitratoMotivoMancato = esito.motivo)
             is ArbitrationOutcome.Riuscita -> {
                 if (esito.revisioni.isEmpty()) {
-                    finalizza(sceneGraph, stime, verifica, model, sessionMode)
+                    finalizza(sceneGraph, stime, verifica, model, sessionMode, sessionId = sessionId)
                 } else {
                     val scenaRivista = applicaRevisioni(sceneGraph, esito.revisioni)
                     val assegnazioniRiviste = when (val routing = strategyRouter.route(scenaRivista)) {
@@ -187,7 +189,7 @@ class V2AnalysisPipeline(
                     }
                     val stimeRiviste = stimaTutti(scenaRivista, assegnazioniRiviste, scale, sessionMode, model)
                     val verificaFinale = consistencyVerifier.verify(scenaRivista, stimeRiviste, scale)
-                    finalizza(scenaRivista, stimeRiviste, verificaFinale, model, sessionMode)
+                    finalizza(scenaRivista, stimeRiviste, verificaFinale, model, sessionMode, sessionId = sessionId)
                 }
             }
         }
@@ -204,12 +206,13 @@ class V2AnalysisPipeline(
         verifica: VerificationReport,
         model: AiModel,
         sessionMode: SessionMode,
+        sessionId: String? = null,
         arbitratoMotivoMancato: String? = null,
     ): PipelineOutcome.Verificato {
         val (sceneFinale, stimeFinali, risoluzioni) = risolviAmbiguitaResidua(scene, stime)
         val stimeGarantite = applicaGuardrailBuonSenso(sceneFinale, stimeFinali, verifica)
         val verificaFinale = if (risoluzioni.isEmpty()) verifica else verifica.copy(ambiguitaRisolta = risoluzioni)
-        val abbinamenti = matchNutrition(model, stimeGarantite, sessionMode)
+        val abbinamenti = matchNutrition(model, stimeGarantite, sessionMode, sessionId)
         val nutrizione = NutritionCalculator.calculate(stimeGarantite, abbinamenti)
         val outcome = PipelineOutcome.Verificato(sceneFinale, stimeGarantite, verificaFinale, nutrizione, arbitratoMotivoMancato, abbinamenti = abbinamenti)
         val telemetryId = recordTelemetry(outcome, model, sessionMode)
@@ -238,38 +241,42 @@ class V2AnalysisPipeline(
             val food = scene.alimenti.find { it.nome == stima.nome } ?: return@map stima
             val limiti = food.limitiBuonSenso ?: return@map stima
 
-            // I limiti di buon senso di M1 sono in grammi cotti (l'AI vede cibo cotto):
-            // il confronto avviene su pesoG (cotto). Il rapporto crudo/cotto resta invariato.
-            val ratioCreCotto = if (stima.pesoG > 0.0) stima.pesoCrudoG / stima.pesoG else 1.0
+            // I limiti di buon senso di M1 sono espressi in grammi CRUDI (come pesato prima della
+            // cottura): il confronto avviene su pesoCrudoG. Il rapporto cotto/crudo resta invariato.
+            val ratioCottoCrudo = if (stima.pesoCrudoG > 0.0) stima.pesoG / stima.pesoCrudoG else 1.0
 
-            if (stima.pesoG > limiti.pesoMaxG) {
-                val u = stima.intervallo.ampiezzaRelativa // Mantiene la stessa incertezza relativa
-                val nuovoCotto = limiti.pesoMaxG
-                val nuovoCrudo = nuovoCotto * ratioCreCotto
+            if (stima.pesoCrudoG > limiti.pesoMaxG) {
+                val u = stima.intervallo.ampiezzaRelativa
+                val nuovoCrudo = limiti.pesoMaxG
+                val nuovoCotto = nuovoCrudo * ratioCottoCrudo
+                // pesoCrudoGrezzoG resta invariato (peso geometrico pre-guardrail per M8).
                 stima.copy(
                     pesoG = nuovoCotto,
                     pesoCrudoG = nuovoCrudo,
+                    pesoCrudoGrezzoG = stima.pesoCrudoGrezzoG,
                     intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
                         minG = (nuovoCrudo * (1 - u)).coerceAtLeast(0.0),
                         maxG = nuovoCrudo * (1 + u)
                     ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
-                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoG.toInt()}g cotto), limitato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo implausibile (${stima.pesoCrudoG.toInt()}g crudo), limitato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
                     )
                 )
-            } else if (stima.pesoG < limiti.pesoMinG) {
+            } else if (stima.pesoCrudoG < limiti.pesoMinG) {
                 val u = stima.intervallo.ampiezzaRelativa
-                val nuovoCotto = limiti.pesoMinG
-                val nuovoCrudo = nuovoCotto * ratioCreCotto
+                val nuovoCrudo = limiti.pesoMinG
+                val nuovoCotto = nuovoCrudo * ratioCottoCrudo
+                // pesoCrudoGrezzoG resta invariato (peso geometrico pre-guardrail per M8).
                 stima.copy(
                     pesoG = nuovoCotto,
                     pesoCrudoG = nuovoCrudo,
+                    pesoCrudoGrezzoG = stima.pesoCrudoGrezzoG,
                     intervallo = com.ugocalc.app.domain.inference.model.ConfidenceInterval(
                         minG = (nuovoCrudo * (1 - u)).coerceAtLeast(0.0),
                         maxG = nuovoCrudo * (1 + u)
                     ),
                     catenaCalcolo = stima.catenaCalcolo.copy(
-                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoG.toInt()}g cotto), portato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
+                        sintesi = stima.catenaCalcolo.sintesi + " — [CORRETTO: calcolo troppo basso (${stima.pesoCrudoG.toInt()}g crudo), portato a ${nuovoCotto.toInt()}g cotto / ${nuovoCrudo.toInt()}g crudo]"
                     )
                 )
             } else {
@@ -337,7 +344,14 @@ class V2AnalysisPipeline(
             val categoria = FoodCategoryRouter.categorize(food.nome)
             val fattore = biasFactor(assegnazione.strategia, model.id, categoria)
             val baseEstimate = physicsEngine.estimate(food, assegnazione.strategia, scale, fattore)
-            results.add(baseEstimate)
+            // Conserva il peso crudo geometrico puro (pre-bias) per il ricalcolo M8, così il bias
+            // non si auto-cancella sui pasti già corretti.
+            val estimate = if (fattore != null && fattore != 0.0) {
+                baseEstimate.copy(pesoCrudoGrezzoG = baseEstimate.pesoCrudoG / fattore)
+            } else {
+                baseEstimate
+            }
+            results.add(estimate)
         }
         return results
     }

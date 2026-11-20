@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -38,24 +39,24 @@ class CostManagementViewModel @Inject constructor(
             try {
                 val summary = costManagementRepository.getCostSummary()
                 val monthCost = costManagementRepository.getCurrentMonthCost()
-                _uiState.value = CostManagementUiState(
+                _uiState.update { it.copy(
                     loading = false,
                     summary = summary,
                     totalCostUsd = summary.totalCostUsd,
                     monthCostUsd = monthCost,
-                )
+                ) }
             } catch (e: Exception) {
-                _uiState.value = _uiState.value.copy(loading = false)
+                _uiState.update { it.copy(loading = false) }
             }
         }
     }
 
     fun selectStage(stage: String?) {
-        _uiState.value = _uiState.value.copy(selectedStage = stage)
+        _uiState.update { it.copy(selectedStage = stage) }
     }
 
     fun selectModel(modelId: String?) {
-        _uiState.value = _uiState.value.copy(selectedModel = modelId)
+        _uiState.update { it.copy(selectedModel = modelId) }
     }
 
     fun clearHistory() {

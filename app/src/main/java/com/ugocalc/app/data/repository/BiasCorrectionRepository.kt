@@ -57,92 +57,50 @@ class BiasCorrectionRepository @Inject constructor(
             biasCorrectionDao.getAllFlow(),
             analysisDao.getWithGroundTruthAllFlow()
         ) { existingList, allGroundTruthRecords ->
-            val existingCorrections = existingList.associateBy {
-                "${it.aiModelId}|${it.strategy}|${it.foodCategory}"
-            }
-
-            // Raggruppa le osservazioni per segmento in un unico passaggio O(N_record * N_stime)
-            val observationsBySegment = mutableMapOf<String, MutableList<BiasObservation>>()
-
-            for (record in allGroundTruthRecords) {
-                val estimates = try {
-                    json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
-                } catch (e: Exception) {
-                    emptyList()
-                }
-                val groundTruth = try {
-                    record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-                } catch (e: Exception) {
-                    emptyMap()
-                }
-
-                for (est in estimates) {
-                    val category = FoodCategoryRouter.categorize(est.nome).name
-                    val pesoVero = groundTruth[est.nome]
-                    if (pesoVero != null) {
-                        val key = "${record.aiModelId}|${est.strategia.name}|$category"
-                        // Il ground truth è a crudo: confronto con pesoCrudoG (§ piano crudo/cotto).
-                        val pesoCrudo = est.pesoCrudoG
-                        observationsBySegment.getOrPut(key) { mutableListOf() }.add(BiasObservation(pesoCrudo, pesoVero))
-                    }
-                }
-            }
-
-            observationsBySegment.map { (key, observations) ->
-                val parts = key.split("|")
-                val modelId = parts[0]
-                val strategy = parts[1]
-                val category = parts[2]
-
-                val existing = existingCorrections[key]
-                val result = BiasCorrectionCalculator.calculate(observations)
-
-                BiasCorrectionWithUsageStats(
-                    correction = existing ?: BiasCorrectionEntity(
-                        aiModelId = modelId,
-                        strategy = strategy,
-                        foodCategory = category,
-                        factor = 1.0,
-                        sampleCount = observations.size,
-                        updatedAtEpochMillis = 0
-                    ),
-                    usageStats = computeUsageStats(observations, existing?.factor ?: 1.0),
-                    calculationResult = result
-                )
-            }.sortedByDescending { it.usageStats?.observationCount ?: 0 }
+            buildUsageStatsList(existingList, allGroundTruthRecords)
         }
 
     suspend fun getAllCorrectionsWithUsageStats(): List<BiasCorrectionWithUsageStats> {
         val existingList = biasCorrectionDao.getAll()
         val allGroundTruthRecords = analysisDao.getWithGroundTruthAll()
+        return buildUsageStatsList(existingList, allGroundTruthRecords)
+    }
+
+    private fun buildUsageStatsList(
+        existingList: List<BiasCorrectionEntity>,
+        allGroundTruthRecords: List<com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity>,
+    ): List<BiasCorrectionWithUsageStats> {
         val existingCorrections = existingList.associateBy {
             "${it.aiModelId}|${it.strategy}|${it.foodCategory}"
         }
 
-        val observationsBySegment = mutableMapOf<String, MutableList<BiasObservation>>()
+        // Raggruppa le coppie (stima, pesoVero) per segmento, applica il filtro qualità e poi
+        // costruisce le BiasObservation su pesoCrudoGrezzoG (pre-bias e pre-guardrail).
+        val rawBySegment = mutableMapOf<String, MutableList<Pair<WeightEstimate, Double>>>()
         for (record in allGroundTruthRecords) {
             val estimates = try {
                 json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
             val groundTruth = try {
                 record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyMap()
             }
 
             for (est in estimates) {
+                val pesoVero = groundTruth[est.nome] ?: continue
                 val category = FoodCategoryRouter.categorize(est.nome).name
-                val pesoVero = groundTruth[est.nome]
-                if (pesoVero != null) {
-                    val key = "${record.aiModelId}|${est.strategia.name}|$category"
-                    observationsBySegment.getOrPut(key) { mutableListOf() }.add(BiasObservation(est.pesoCrudoG, pesoVero))
-                }
+                val key = "${record.aiModelId}|${est.strategia.name}|$category"
+                rawBySegment.getOrPut(key) { mutableListOf() }.add(est to pesoVero)
             }
         }
 
-        return observationsBySegment.map { (key, observations) ->
+        return rawBySegment.mapNotNull { (key, candidates) ->
+            val observations = filterSegmentObservations(candidates)
+            if (observations.isEmpty()) return@mapNotNull null
+
             val parts = key.split("|")
             val modelId = parts[0]
             val strategy = parts[1]
@@ -193,10 +151,31 @@ class BiasCorrectionRepository @Inject constructor(
         )
     }
 
-    /** Fattore corrente per il segmento, se esiste (§8: consumato da M3 nella catena di calcolo). Null se il consenso non è dato, dati insufficienti o bias instabile. */
+    /**
+     * Fattore corrente per il segmento, se esiste (§8: consumato da M3 nella catena di calcolo).
+     * Null se il consenso non è dato, dati insufficienti o bias instabile.
+     *
+     * Fallback gerarchico: se non esiste ancora un fattore salvato per la specifica [foodCategory],
+     * usa la mediana smorzata al 50% verso 1.0 dei fattori già appresi per la stessa
+     * `(strategy, aiModelId)` sulle altre categorie alimentari.
+     */
     suspend fun currentFactor(strategy: EstimationStrategy, aiModelId: String, foodCategory: FoodCategory, consentGiven: Boolean): Double? {
         if (!consentGiven) return null
-        return biasCorrectionDao.get(strategy.name, aiModelId, foodCategory.name)?.factor
+        biasCorrectionDao.get(strategy.name, aiModelId, foodCategory.name)?.let { return it.factor }
+
+        val otherCategoryFactors = biasCorrectionDao.getAll()
+            .filter {
+                it.strategy == strategy.name &&
+                    it.aiModelId == aiModelId &&
+                    it.foodCategory != foodCategory.name
+            }
+            .map { it.factor }
+        if (otherCategoryFactors.isEmpty()) return null
+
+        val sorted = otherCategoryFactors.sorted()
+        val mid = sorted.size / 2
+        val median = if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2.0 else sorted[mid]
+        return 1.0 + (median - 1.0) * HIERARCHICAL_FALLBACK_WEIGHT
     }
 
     /** Ricalcola il fattore per (strategy, aiModelId, foodCategory) dalle correzioni accumulate in M8, aggregando casa+ristorante. Va chiamato a ogni nuova correzione o come job periodico (§8); no-op se il consenso non è dato. */
@@ -277,13 +256,35 @@ class BiasCorrectionRepository @Inject constructor(
 
     private suspend fun observationsFor(strategy: String, aiModelId: String, foodCategory: FoodCategory): List<BiasObservation> {
         val records = analysisDao.getWithGroundTruthByModel(aiModelId)
-        return records.flatMap { record ->
+        val candidates = records.flatMap { record ->
             val estimates = json.decodeFromString<List<WeightEstimate>>(record.weightEstimatesJson)
             val groundTruth = record.groundTruthPesiJson?.let { json.decodeFromString<Map<String, Double>>(it) } ?: emptyMap()
             estimates.filter { (it.strategia.name == strategy) && (FoodCategoryRouter.categorize(it.nome) == foodCategory) }.mapNotNull { estimate ->
-                groundTruth[estimate.nome]?.let { pesoVero -> BiasObservation(estimate.pesoCrudoG, pesoVero) }
+                groundTruth[estimate.nome]?.let { pesoVero -> estimate to pesoVero }
             }
         }
+        return filterSegmentObservations(candidates)
+    }
+
+    /**
+     * Scarta stime a confidenza bassissima (< 45%) sempre, e stime con `usoDefaultFisico && confidenza < 50%`
+     * quando esistono altre osservazioni più affidabili nello stesso segmento.
+     */
+    private fun filterSegmentObservations(candidates: List<Pair<WeightEstimate, Double>>): List<BiasObservation> {
+        val aboveHardCutoff = candidates.filter { (est, _) -> est.confidenza.percent >= MIN_CONFIDENCE_HARD_CUTOFF }
+        val hasHigherQuality = aboveHardCutoff.any { (est, _) -> !(est.usoDefaultFisico && est.confidenza.percent < MIN_CONFIDENCE_WITH_DEFAULT) }
+        val filtered = if (hasHigherQuality) {
+            aboveHardCutoff.filter { (est, _) -> !(est.usoDefaultFisico && est.confidenza.percent < MIN_CONFIDENCE_WITH_DEFAULT) }
+        } else {
+            aboveHardCutoff
+        }
+        return filtered.map { (est, pesoVero) -> BiasObservation(est.pesoCrudoGrezzoG, pesoVero) }
+    }
+
+    private companion object {
+        const val HIERARCHICAL_FALLBACK_WEIGHT = 0.5
+        const val MIN_CONFIDENCE_HARD_CUTOFF = 45
+        const val MIN_CONFIDENCE_WITH_DEFAULT = 50
     }
 }
 

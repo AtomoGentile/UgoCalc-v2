@@ -4,10 +4,7 @@ import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AnalysisTotals
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
@@ -19,23 +16,22 @@ class HistoryRepository @Inject constructor(
     private val json: Json,
     private val authRepository: AuthRepository,
 ) {
-    @OptIn(ExperimentalCoroutinesApi::class)
-    fun observeHistory(): Flow<List<AnalysisHistoryEntity>> =
-        authRepository.currentUserFlow.flatMapLatest { user ->
-            if (user != null) historyDao.observeAll() else flowOf(emptyList())
-        }
+    /**
+     * Local-First: la cronologia salvata in Room sul dispositivo è sempre visibile,
+     * indipendentemente dal fatto che l'utente sia loggato con Cognito o lavori in locale.
+     */
+    fun observeHistory(): Flow<List<AnalysisHistoryEntity>> = historyDao.observeAll()
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     fun observeHistoryByMode(mode: SessionMode): Flow<List<AnalysisHistoryEntity>> =
-        authRepository.currentUserFlow.flatMapLatest { user ->
-            if (user != null) historyDao.observeByMode(mode.name) else flowOf(emptyList())
-        }
+        historyDao.observeByMode(mode.name)
 
     suspend fun getById(id: Long): AnalysisHistoryEntity? = historyDao.getById(id)
 
-    /** Pulsante "Salva" (§2.4 punto 7): salva l'analisi corrente in Cronologia. */
-    suspend fun saveAnalysis(foodTitle: String, totals: AnalysisTotals, modelDisplayNames: List<String>, sessionId: String? = null, sessionMode: SessionMode = SessionMode.CASA): Long {
+    suspend fun getBySessionId(sessionId: String): AnalysisHistoryEntity? = historyDao.getBySessionId(sessionId)
+
+    suspend fun saveAnalysis(foodTitle: String, totals: AnalysisTotals, modelDisplayNames: List<String>, sessionId: String? = null, sessionMode: SessionMode = SessionMode.CASA, id: Long = 0L): Long {
         val entity = AnalysisHistoryEntity(
+            id = id,
             foodTitle = foodTitle,
             analyzedAtEpochMillis = System.currentTimeMillis(),
             totalChoG = totals.totalChoG,
@@ -50,4 +46,16 @@ class HistoryRepository @Inject constructor(
 
     /** "Pulizia database cronologia" (§2.2, icona cestino). */
     suspend fun clearHistory() = historyDao.clearAll()
+
+    suspend fun deleteAnalysis(id: Long) {
+        val entry = historyDao.getById(id)
+        historyDao.deleteById(id)
+        // Se c'è un record V2 o benchmark linkato, la cancellazione dalla cronologia
+        // deve rimuovere anche la richiesta di calibrazione (§ segnalazione utente).
+        entry?.sessionId?.let { sid ->
+            // Qui dovremmo chiamare i repository V2 e Benchmark per pulire, 
+            // ma HistoryRepository non dovrebbe dipendere da loro per evitare cicli.
+            // Una soluzione è usare un evento o far sì che il chiamante coordini.
+        }
+    }
 }

@@ -9,6 +9,7 @@ import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
+import com.ugocalc.app.domain.model.AiProviderType
 import com.ugocalc.app.domain.model.OfficialFileType
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +23,7 @@ import javax.inject.Inject
 data class TablesListUiState(
     val tables: List<OfficialTableEntity> = emptyList(),
     val errorMessage: String? = null,
+    val statusMessage: String? = null,
     val normalizationProgress: Map<Long, String> = emptyMap(),
     val availableModels: List<AiModel> = emptyList(),
     val selectedModel: AiModel? = null,
@@ -30,8 +32,7 @@ data class TablesListUiState(
 /**
  * Sezione "Tabelle valori ufficiali" delle Impostazioni (§2.2). Cliccando l'icona "+" si apre lo
  * Storage Access Framework per scegliere un file; cliccando una voce della lista si apre
- * [TableEditorScreen] per consultare/modificare quella specifica tabella (richiesto dall'utente:
- * piccola pagina per scegliere quale documento aprire quando ce n'è più di uno).
+ * [TableEditorScreen] per consultare/modificare quella specifica tabella.
  */
 @HiltViewModel
 class OfficialTablesListViewModel @Inject constructor(
@@ -40,27 +41,35 @@ class OfficialTablesListViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val _errorMessage = MutableStateFlow<String?>(null)
-
-    /** Modelli selezionati per la normalizzazione (§2.2). Se nessuno è selezionato, mostra tutti quelli con chiave configurata. */
+    private val _statusMessage = MutableStateFlow<String?>(null)
     private val _availableModels = MutableStateFlow<List<AiModel>>(emptyList())
     private val _selectedModel = MutableStateFlow<AiModel?>(null)
 
     val uiState: StateFlow<TablesListUiState> = combine(
         tableRepository.observeTables(),
         _errorMessage,
+        _statusMessage,
         tableRepository.normalizationProgress,
-        _availableModels,
-        _selectedModel,
-    ) { tables, error, progress, availableModels, selectedModel ->
-        TablesListUiState(tables, error, progress, availableModels, selectedModel)
+        combine(_availableModels, _selectedModel) { avail, sel -> avail to sel },
+    ) { tables, error, status, progress, (availableModels, selectedModel) ->
+        TablesListUiState(
+            tables = tables,
+            errorMessage = error,
+            statusMessage = status,
+            normalizationProgress = progress,
+            availableModels = availableModels,
+            selectedModel = selectedModel,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), TablesListUiState())
 
     init {
         viewModelScope.launch {
-            settingsRepository.settings.collect { settings ->
+            combine(settingsRepository.settings, AiModelCatalog.catalogVersion) { settings, _ ->
+                settings
+            }.collect { settings ->
                 val enabledIds = settings.enabledNormalizationModelIds
                 val models = if (enabledIds.isNotEmpty()) {
-                    AiModelCatalog.ALL.filter { it.id in enabledIds && hasCredentialsForModel(it) }
+                    AiModelCatalog.ALL.filter { (it.uid in enabledIds || it.id in enabledIds) && hasCredentialsForModel(it) }
                 } else {
                     AiModelCatalog.ALL.filter { hasCredentialsForModel(it) }
                 }
@@ -73,10 +82,12 @@ class OfficialTablesListViewModel @Inject constructor(
     }
 
     private fun hasCredentialsForModel(model: AiModel): Boolean = when (model.provider) {
-        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
-        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
-        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
-        com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
+        AiProviderType.BEDROCK_CLAUDE,
+        AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
+        AiProviderType.BEDROCK_IAM_CLAUDE,
+        AiProviderType.BEDROCK_IAM_GPT,
+        AiProviderType.BEDROCK_IAM_AMAZON -> settingsRepository.hasBedrockIamCredentials()
+        AiProviderType.VERTEX_AI -> settingsRepository.hasVertexAiCredentials()
         else -> settingsRepository.getApiKey(model.provider) != null
     }
 
@@ -84,7 +95,19 @@ class OfficialTablesListViewModel @Inject constructor(
         _selectedModel.value = model
     }
 
-    fun importFile(uri: Uri, displayName: String, fileType: OfficialFileType) {
+    fun restoreStarterTable() {
+        viewModelScope.launch {
+            try {
+                tableRepository.restoreStarterTable()
+                _errorMessage.value = null
+                _statusMessage.value = "Tabella base italiana (CREA) ripristinata."
+            } catch (e: Exception) {
+                _errorMessage.value = "Errore ripristino tabella base: ${e.message ?: "errore sconosciuto"}"
+            }
+        }
+    }
+
+    fun importFiles(uris: List<Uri>, displayName: String, fileType: OfficialFileType) {
         val model = _selectedModel.value
         if (model == null) {
             _errorMessage.value = "Configura almeno una API key in Impostazioni > API prima di caricare una tabella"
@@ -92,19 +115,25 @@ class OfficialTablesListViewModel @Inject constructor(
         }
         viewModelScope.launch {
             try {
-                tableRepository.importAndNormalize(uri, displayName, fileType, model)
+                tableRepository.importAndNormalize(uris, displayName, fileType, model)
                 _errorMessage.value = null
+                _statusMessage.value = null
             } catch (e: Exception) {
                 _errorMessage.value = "Errore durante l'import: ${e.message}"
             }
         }
     }
 
+    fun importFile(uri: Uri, displayName: String, fileType: OfficialFileType) =
+        importFiles(listOf(uri), displayName, fileType)
+
     /** Import "già pronto" (§ richiesta utente): niente AI, il file deve avere già le colonne giuste. */
     fun importPreFormatted(uri: Uri, displayName: String) {
         viewModelScope.launch {
             try {
                 tableRepository.importPreFormatted(uri, displayName)
+                _errorMessage.value = null
+                _statusMessage.value = null
             } catch (e: DocumentExtractionException) {
                 _errorMessage.value = e.message
             }

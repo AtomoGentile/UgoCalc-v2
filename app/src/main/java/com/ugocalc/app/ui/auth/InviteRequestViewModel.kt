@@ -2,16 +2,24 @@ package com.ugocalc.app.ui.auth
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.BackoffPolicy
+import androidx.work.Constraints
+import androidx.work.ExistingWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import com.ugocalc.app.data.remote.aws.InviteStatus
 import com.ugocalc.app.data.remote.aws.InviteStatusResult
 import com.ugocalc.app.data.remote.aws.RequestAccessResult
 import com.ugocalc.app.data.remote.aws.ShareClient
+import com.ugocalc.app.workers.InferencePullWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 
 sealed class InviteRequestState {
@@ -26,6 +34,7 @@ sealed class InviteRequestState {
 @HiltViewModel
 class InviteRequestViewModel @Inject constructor(
     private val shareClient: ShareClient,
+    private val workManager: WorkManager,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow<InviteRequestState>(InviteRequestState.Idle)
@@ -58,6 +67,7 @@ class InviteRequestViewModel @Inject constructor(
                     is InviteStatusResult.Success -> when (result.status) {
                         InviteStatus.APPROVED -> {
                             _state.value = InviteRequestState.Approved
+                            triggerInferencePull()
                             return@launch
                         }
                         InviteStatus.DENIED -> {
@@ -74,6 +84,14 @@ class InviteRequestViewModel @Inject constructor(
                 _state.value = InviteRequestState.Error("Timeout: nessuna risposta ricevuta")
             }
         }
+    }
+
+    private fun triggerInferencePull() {
+        val request = OneTimeWorkRequestBuilder<InferencePullWorker>()
+            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .build()
+        workManager.enqueueUniqueWork("inference_pull_after_invite", ExistingWorkPolicy.REPLACE, request)
     }
 
     fun reset() {

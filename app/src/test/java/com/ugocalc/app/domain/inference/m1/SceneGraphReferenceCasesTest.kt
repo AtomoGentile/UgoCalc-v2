@@ -91,8 +91,39 @@ class SceneGraphReferenceCasesTest {
         assertEquals(2, mela.conteggio)
         assertNull(mela.frazionePiatto)
         assertNull(mela.altezzaCm)
+        assertNull(mela.profiloCumulo)
         assertNull(mela.contenitore)
+        assertNull(mela.capacitaContenitoreMl)
         assertNull(mela.diametroCm)
+    }
+
+    @Test
+    fun `optional profilo_cumulo and capacita_contenitore_ml decode when provided`() {
+        val raw = """
+            {
+              "schema_version": 4,
+              "ancore": [],
+              "alimenti": [
+                {
+                  "nome": "pasta penne",
+                  "occlusione": "nessuna",
+                  "misure_grezze": { "frazione_piatto": 0.5, "altezza_cm": 3.0, "profilo_cumulo": "cupola" },
+                  "confidenza": "alto"
+                },
+                {
+                  "nome": "latte",
+                  "occlusione": "nessuna",
+                  "misure_grezze": { "contenitore": "tazza", "frazione_riempimento": 0.8, "capacita_contenitore_ml": 300.0 },
+                  "confidenza": "alto"
+                }
+              ],
+              "sovrapposizioni": []
+            }
+        """.trimIndent()
+
+        val scene = json.decodeFromString<SceneGraph>(raw)
+        assertEquals("cupola", scene.alimenti[0].misureGrezze.profiloCumulo)
+        assertEquals(300.0, scene.alimenti[1].misureGrezze.capacitaContenitoreMl!!, 1e-9)
     }
 
     @Test

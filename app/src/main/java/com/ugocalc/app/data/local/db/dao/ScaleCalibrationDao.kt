@@ -21,8 +21,14 @@ interface ScaleCalibrationDao {
     @Query("SELECT * FROM scale_calibrations WHERE id = :id")
     suspend fun getById(id: Long): ScaleCalibrationEntity?
 
+    @Query("SELECT * FROM scale_calibrations WHERE clientId = :clientId")
+    suspend fun getByClientId(clientId: String): ScaleCalibrationEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(calibration: ScaleCalibrationEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertIfAbsent(calibration: ScaleCalibrationEntity): Long
 
     @Query("DELETE FROM scale_calibrations WHERE id = :id")
     suspend fun deleteById(id: Long)

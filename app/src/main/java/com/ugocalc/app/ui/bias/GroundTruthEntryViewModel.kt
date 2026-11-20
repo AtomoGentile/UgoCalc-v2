@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.data.repository.BiasCorrectionRepository
 import com.ugocalc.app.data.repository.GroundTruthLevel
+import com.ugocalc.app.data.repository.PhysicalDataRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
@@ -40,6 +41,7 @@ data class GroundTruthEntryUiState(
 class GroundTruthEntryViewModel @Inject constructor(
     private val telemetryRepository: V2TelemetryRepository,
     private val biasCorrectionRepository: BiasCorrectionRepository,
+    private val physicalDataRepository: PhysicalDataRepository,
     private val settingsRepository: SettingsRepository,
     private val json: Json,
 ) : ViewModel() {
@@ -70,6 +72,11 @@ class GroundTruthEntryViewModel @Inject constructor(
             if (pesiG.isEmpty()) return@launch
 
             telemetryRepository.recordGroundTruth(recordId, pesiG, livello)
+            try {
+                physicalDataRepository.learnFromGroundTruth(entry.stime, pesiG)
+            } catch (_: Exception) {
+                // Physical constant learning should never block ground-truth saving
+            }
 
             val consentGiven = settingsRepository.settings.first().biasDataConsentGiven
             entry.stime.filter { it.nome in pesiG.keys }.forEach { stima ->

@@ -74,7 +74,7 @@ class UpdateRepository @Inject constructor(
     }
 
     companion object {
-        private const val GITHUB_OWNER = "AtomoGentile"
-        private const val GITHUB_REPO = "UgoCalc-v2"
+        private const val GITHUB_OWNER = GitHubReleaseClient.DEFAULT_OWNER
+        private const val GITHUB_REPO = GitHubReleaseClient.DEFAULT_REPO
     }
 }

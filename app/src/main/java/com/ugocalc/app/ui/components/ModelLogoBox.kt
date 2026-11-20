@@ -4,7 +4,6 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -21,8 +20,8 @@ import androidx.compose.ui.unit.sp
 
 /**
  * Logo area per le model card.
- * - Se logoRes != null: mostra il drawable
- * - Altrimenti: placeholder colorato con le iniziali del provider (estratte dal subtitle)
+ * - Se logoRes != null: mostra il drawable con angoli arrotondati
+ * - Altrimenti: badge colorato con le iniziali del provider
  */
 @Composable
 fun ModelLogoBox(
@@ -31,12 +30,12 @@ fun ModelLogoBox(
     subtitle: String,
     modifier: Modifier = Modifier,
 ) {
+    val shape = remember { RoundedCornerShape(10.dp) }
     if (logoRes != null) {
-        val painter = painterResource(id = logoRes)
         Image(
-            painter = painter,
+            painter = painterResource(id = logoRes),
             contentDescription = displayName,
-            modifier = modifier,
+            modifier = modifier.clip(shape),
             contentScale = ContentScale.Inside,
         )
     } else {
@@ -52,7 +51,6 @@ fun ModelLogoBox(
                 .ifBlank { "?" }
         }
         val bgColor = remember(providerName) { providerColor(providerName) }
-        val shape = remember(8.dp) { RoundedCornerShape(8.dp) }
         Box(
             modifier = modifier
                 .clip(shape)
@@ -63,7 +61,7 @@ fun ModelLogoBox(
                 text = initials,
                 color = Color.White,
                 fontWeight = FontWeight.Bold,
-                fontSize = 20.sp,
+                fontSize = 18.sp,
                 textAlign = TextAlign.Center,
             )
         }
@@ -73,14 +71,15 @@ fun ModelLogoBox(
 private fun providerColor(provider: String): Color = when {
     provider.contains("Anthropic", ignoreCase = true) || provider.contains("Claude", ignoreCase = true) -> Color(0xFF1F2937)
     provider.contains("OpenAI", ignoreCase = true) || provider.contains("GPT", ignoreCase = true) -> Color(0xFF10A37F)
+    provider.contains("Google", ignoreCase = true) || provider.contains("Gemini", ignoreCase = true) || provider.contains("Vertex", ignoreCase = true) -> Color(0xFF1A73E8)
     provider.contains("Meta", ignoreCase = true) -> Color(0xFF0064E0)
-    provider.contains("Amazon", ignoreCase = true) -> Color(0xFFFF9900)
-    provider.contains("Mistral", ignoreCase = true) -> Color(0xFFFF6F00)
-    provider.contains("Cohere", ignoreCase = true) -> Color(0xFF39A7FF)
+    provider.contains("Amazon", ignoreCase = true) -> Color(0xFFD97706)
+    provider.contains("Mistral", ignoreCase = true) -> Color(0xFFEA580C)
+    provider.contains("Cohere", ignoreCase = true) -> Color(0xFF0284C7)
     provider.contains("Stability", ignoreCase = true) -> Color(0xFF6B2FFF)
     provider.contains("AI21", ignoreCase = true) -> Color(0xFF1A73E8)
     provider.contains("DeepSeek", ignoreCase = true) -> Color(0xFF2E3440)
-    provider.contains("Qwen", ignoreCase = true) -> Color(0xFF73ABFF)
-    provider.contains("Bedrock", ignoreCase = true) -> Color(0xFFFF9900)
+    provider.contains("Qwen", ignoreCase = true) -> Color(0xFF4F46E5)
+    provider.contains("Bedrock", ignoreCase = true) -> Color(0xFFD97706)
     else -> Color(0xFF5C6BC0)
 }

@@ -1,7 +1,9 @@
 package com.ugocalc.app.data.repository
 
+import com.ugocalc.app.data.local.db.dao.BenchmarkMealDao
 import com.ugocalc.app.data.local.db.dao.SessionModeAiModelPair
 import com.ugocalc.app.data.local.db.dao.V2AnalysisRecordDao
+import com.ugocalc.app.data.local.db.entity.BenchmarkMealEntity
 import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
 import com.ugocalc.app.data.remote.aws.CloudSyncClient
 import com.ugocalc.app.data.remote.aws.SyncResult
@@ -89,6 +91,22 @@ private class TelemetryFakeV2AnalysisRecordDao : V2AnalysisRecordDao {
 
     override suspend fun getByClientId(clientId: String): V2AnalysisRecordEntity? =
         rows.values.firstOrNull { it.clientId == clientId }
+
+    override suspend fun deleteBySessionId(sessionId: String) {
+        rows.values.removeAll { it.sessionId == sessionId }
+    }
+}
+
+private class TelemetryFakeBenchmarkMealDao : BenchmarkMealDao {
+    private val rows = mutableMapOf<String, BenchmarkMealEntity>()
+    override suspend fun insert(meal: BenchmarkMealEntity) { rows[meal.sessionId] = meal }
+    override suspend fun update(meal: BenchmarkMealEntity) { rows[meal.sessionId] = meal }
+    override suspend fun getById(sessionId: String): BenchmarkMealEntity? = rows[sessionId]
+    override suspend fun getAll(): List<BenchmarkMealEntity> = rows.values.toList()
+    override suspend fun getAllWithoutGroundTruth(): List<BenchmarkMealEntity> = rows.values.filter { it.groundTruthPesiJson == null }
+    override suspend fun getAllWithGroundTruth(): List<BenchmarkMealEntity> = rows.values.filter { it.groundTruthPesiJson != null }
+    override suspend fun deleteById(sessionId: String) { rows.remove(sessionId) }
+    override suspend fun deleteAll() { rows.clear() }
 }
 
 private class TelemetryFakeCloudSyncManager : CloudSyncManager {
@@ -97,6 +115,7 @@ private class TelemetryFakeCloudSyncManager : CloudSyncManager {
 
 private class TelemetryFakeCloudSyncClient : CloudSyncClient {
     override suspend fun fetchInferenceRecords(): List<String> = emptyList()
+    override suspend fun fetchCalibrationRecords(): List<String> = emptyList()
     override suspend fun sendEvent(endpoint: String, eventId: String, userId: String, payloadJson: String): SyncResult = SyncResult.Success
 }
 
@@ -120,7 +139,7 @@ class V2TelemetryRepositoryTest {
     private val outcome = PipelineOutcome.Verificato(scena, listOf(stima), verifica, nutrizione)
 
     private fun repository(dao: V2AnalysisRecordDao = TelemetryFakeV2AnalysisRecordDao()) =
-        V2TelemetryRepository(dao, json, TelemetryFakeCloudSyncManager(), TelemetryFakeCloudSyncClient())
+        V2TelemetryRepository(dao, TelemetryFakeBenchmarkMealDao(), json, TelemetryFakeCloudSyncManager(), TelemetryFakeCloudSyncClient())
 
     @Test
     fun `record serializes the pipeline outcome and leaves ground truth absent`() = runBlocking {

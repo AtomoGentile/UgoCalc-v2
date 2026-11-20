@@ -2,31 +2,35 @@ package com.ugocalc.app.ui.home
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
-import com.ugocalc.app.domain.model.CalculatedFoodLine
+import com.ugocalc.app.domain.model.AiProviderType
 import com.ugocalc.app.domain.model.AnalysisTotals
+import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
-import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.Calendar
 import javax.inject.Inject
 
 enum class AnalyzeButtonState { ENABLED_ONLINE, ENABLED_OFFLINE, DISABLED_NO_TABLE }
@@ -49,6 +53,14 @@ data class FavoriteDisplay(
 
 data class HomeUiState(
     val analyzeButtonState: AnalyzeButtonState = AnalyzeButtonState.DISABLED_NO_TABLE,
+    val todayMealsCount: Int = 0,
+    val todayChoG: Double = 0.0,
+    val todayGrassiG: Double = 0.0,
+    val recentMeals: List<AnalysisHistoryEntity> = emptyList(),
+    val hasAnyAiKey: Boolean = false,
+    val totalFoodCount: Int = 0,
+    val tableCount: Int = 0,
+    val isOnline: Boolean = true,
     val favoritesEnabled: Boolean = true,
     val favorites: List<FavoriteDisplay> = emptyList(),
     /** Modelli preferiti (§2.2) pronti all'uso (chiave configurata): se non vuoto, "Analizza" salta la scelta modello. */
@@ -71,21 +83,56 @@ class HomeViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState
 
+    private val refreshTrigger = MutableStateFlow(0)
+
     init {
-        // §2.4 precondizione: il pulsante "Analizza" è disabilitato finché non c'è almeno una tabella.
-        combine(tableRepository.observeTableCount(), connectivityObserver.observe()) { tableCount, isOnline ->
-            when {
+        combine(
+            tableRepository.observeTables(),
+            connectivityObserver.observe(),
+            refreshTrigger,
+        ) { tables, isOnline, _ ->
+            val tableCount = tables.size
+            val totalFoods = tables.sumOf { table ->
+                tableRepository.getEntriesForTable(table.id).size
+            }
+            val buttonState = when {
                 tableCount == 0 -> AnalyzeButtonState.DISABLED_NO_TABLE
                 isOnline -> AnalyzeButtonState.ENABLED_ONLINE
                 else -> AnalyzeButtonState.ENABLED_OFFLINE
             }
+            Triple(tableCount to totalFoods, isOnline, buttonState)
         }
-        .flowOn(Dispatchers.Default)
-        .onEach { state -> _uiState.value = _uiState.value.copy(analyzeButtonState = state) }
-        .launchIn(viewModelScope)
+            .flowOn(Dispatchers.IO)
+            .onEach { (counts, isOnline, buttonState) ->
+                val (tableCount, totalFoods) = counts
+                _uiState.update {
+                    it.copy(
+                        tableCount = tableCount,
+                        totalFoodCount = totalFoods,
+                        isOnline = isOnline,
+                        analyzeButtonState = buttonState,
+                    )
+                }
+            }
+            .launchIn(viewModelScope)
+
+        historyRepository.observeHistory()
+            .onEach { history ->
+                val todayStart = startOfTodayMillis()
+                val todayMeals = history.filter { it.analyzedAtEpochMillis >= todayStart }
+                _uiState.update {
+                    it.copy(
+                        todayMealsCount = todayMeals.size,
+                        todayChoG = todayMeals.sumOf { meal -> meal.totalChoG },
+                        todayGrassiG = todayMeals.sumOf { meal -> meal.totalGrassiG },
+                        recentMeals = history.take(3),
+                    )
+                }
+            }
+            .flowOn(Dispatchers.Default)
+            .launchIn(viewModelScope)
 
         favoritesRepository.observeFavorites()
-            .flowOn(Dispatchers.Default)
             .onEach { favorites ->
                 val resolved = favorites.mapNotNull { favorite ->
                     val historyEntryId = favorite.historyEntryId
@@ -95,7 +142,13 @@ class HomeViewModel @Inject constructor(
                     when {
                         historyEntryId != null -> {
                             val history = historyRepository.getById(historyEntryId) ?: return@mapNotNull null
-                            FavoriteDisplay(favorite.id, favorite.label, history.totalChoG, history.totalGrassiG, history.id)
+                            FavoriteDisplay(
+                                id = favorite.id,
+                                label = favorite.label,
+                                choG = history.totalChoG,
+                                grassiG = history.totalGrassiG,
+                                historyEntryId = history.id,
+                            )
                         }
                         comboCho != null && comboGrassi != null && comboGrams != null -> FavoriteDisplay(
                             id = favorite.id,
@@ -116,38 +169,73 @@ class HomeViewModel @Inject constructor(
                         else -> null
                     }
                 }
-                _uiState.value = _uiState.value.copy(favorites = resolved)
-            }.launchIn(viewModelScope)
+                _uiState.update { it.copy(favorites = resolved) }
+            }
+            .flowOn(Dispatchers.IO)
+            .launchIn(viewModelScope)
 
-        // Offline, o senza API key configurata, un modello preferito non è comunque utilizzabile:
-        // in quel caso non si salta la scelta modello, si lascia il flusso normale (che mostra
-        // l'avviso "offline"/"nessun modello disponibile").
-        combine(settingsRepository.settings, connectivityObserver.observe()) { settings, isOnline ->
-            settings to if (!isOnline) emptyList()
-            else AiModelCatalog.ALL.filter { model ->
-                model.id in settings.preferredModelIds && when (model.provider) {
-                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_CLAUDE,
-                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
-                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_CLAUDE,
-                    com.ugocalc.app.domain.model.AiProviderType.BEDROCK_IAM_GPT -> settingsRepository.hasBedrockIamCredentials()
-                    else -> settingsRepository.getApiKey(model.provider) != null
+        // Osserva anche AiModelCatalog.catalogVersion e refreshTrigger così i modelli preferiti
+        // e lo stato chiave AI si aggiornano immediatamente dopo modifiche in Impostazioni > API.
+        combine(
+            settingsRepository.settings,
+            connectivityObserver.observe(),
+            AiModelCatalog.catalogVersion,
+            refreshTrigger,
+        ) { settings, isOnline, _, _ ->
+            val hasKey = settingsRepository.hasAnyApiKeyConfigured()
+            val preferred = if (!isOnline) {
+                emptyList()
+            } else {
+                AiModelCatalog.ALL
+                    .filter { model ->
+                        (model.id in settings.preferredModelIds || model.uid in settings.preferredModelIds) &&
+                            isProviderConfigured(model.provider)
+                    }
+                    .distinctBy { it.uid }
+            }
+            Triple(settings, hasKey, preferred)
+        }
+            .flowOn(Dispatchers.IO)
+            .onEach { (settings, hasKey, models) ->
+                _uiState.update {
+                    it.copy(
+                        hasAnyAiKey = hasKey,
+                        preferredModels = models,
+                        favoritesEnabled = settings.favoritesEnabled,
+                        sessionMode = settings.activeSessionMode,
+                    )
                 }
             }
-        }.onEach { (settings, models) ->
-            _uiState.value = _uiState.value.copy(
-                preferredModels = models,
-                favoritesEnabled = settings.favoritesEnabled,
-                sessionMode = settings.activeSessionMode,
-            )
-        }.launchIn(viewModelScope)
+            .launchIn(viewModelScope)
     }
 
+    /** Forza il riallineamento di chiavi API, modelli preferiti e conteggi al ritorno su Home. */
+    fun refresh() {
+        refreshTrigger.update { it + 1 }
+    }
+
+    private fun isProviderConfigured(provider: AiProviderType): Boolean = when (provider) {
+        AiProviderType.BEDROCK_CLAUDE,
+        AiProviderType.BEDROCK_GPT -> settingsRepository.hasBedrockCredentials()
+        AiProviderType.BEDROCK_IAM_CLAUDE,
+        AiProviderType.BEDROCK_IAM_GPT,
+        AiProviderType.BEDROCK_IAM_AMAZON -> settingsRepository.hasBedrockIamCredentials()
+        AiProviderType.VERTEX_AI -> settingsRepository.hasVertexAiCredentials()
+        else -> settingsRepository.getApiKey(provider) != null
+    }
+
+    private fun startOfTodayMillis(): Long = Calendar.getInstance().apply {
+        set(Calendar.HOUR_OF_DAY, 0)
+        set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+    }.timeInMillis
+
     /**
-     * Icona Casa/Ristorante in topAppBar (§ richiesta utente): persistita subito, non solo al
-     * momento di "Analizza", perché pilota anche i colori dell'intera app (vedi MainActivity).
+     * Selettore Casa/Ristorante: persistito subito perché pilota anche i colori dell'intera app.
      */
     fun setSessionMode(mode: SessionMode) {
-        _uiState.value = _uiState.value.copy(sessionMode = mode)
+        _uiState.update { it.copy(sessionMode = mode) }
         viewModelScope.launch { settingsRepository.setActiveSessionMode(mode) }
     }
 
@@ -164,7 +252,7 @@ class HomeViewModel @Inject constructor(
         sessionStore.setSelectedModels(_uiState.value.preferredModels)
     }
 
-    /** "+" in Homepage (§ richiesta utente): aggiunge un preferito da database senza passare da Impostazioni. */
+    /** "+" in Homepage: aggiunge un preferito da database senza passare da Impostazioni. */
     fun addComboFavorite(foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double) {
         viewModelScope.launch {
             val nextOrder = _uiState.value.favorites.size
@@ -174,9 +262,8 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * Preferito "combo" con peso già noto (§ richiesta utente "i preferiti, se toccati, aggiungono
-     * direttamente al totale"): calcola subito il totale e lo pubblica in sessione, senza passare
-     * da nessuna schermata intermedia — il chiamante naviga poi dritto al risultato finale.
+     * Preferito "combo" con peso già noto: calcola subito il totale e lo pubblica in sessione,
+     * senza passare da nessuna schermata intermedia — il chiamante naviga dritto al risultato finale.
      */
     fun useComboFavoriteDirectly(favorite: FavoriteDisplay) {
         val grams = favorite.comboGrams ?: return
@@ -189,21 +276,17 @@ class HomeViewModel @Inject constructor(
             tableEntry = entry,
         )
         sessionStore.reset()
+        sessionStore.setSessionMode(_uiState.value.sessionMode)
         sessionStore.setTotals(AnalysisTotals(listOf(line)))
     }
 
     /**
-     * Preferito legato a una voce di cronologia, o combo senza peso fissato (§ richiesta utente "i
-     * preferiti portano alla sezione per inserire la quantità"): pubblica le righe già note in
-     * sessione, il chiamante naviga poi alla composizione manuale che le carica direttamente nel
-     * passo Quantità, pronte da modificare.
-     *
-     * `suspend` invece di un `viewModelScope.launch` interno: il chiamante deve aspettare che la
-     * sessione sia popolata prima di navigare, altrimenti ManualFoodEntryViewModel potrebbe
-     * inizializzarsi prima che [AnalysisSessionStore.setPendingManualRows] sia stato chiamato.
+     * Preferito legato a una voce di cronologia, o combo senza peso fissato: pubblica le righe
+     * già note in sessione e il chiamante naviga alla composizione manuale nel passo Quantità.
      */
     suspend fun openFavoriteForQuantityEntry(favorite: FavoriteDisplay) {
         sessionStore.reset()
+        sessionStore.setSessionMode(_uiState.value.sessionMode)
         val historyEntryId = favorite.historyEntryId
         if (historyEntryId != null) {
             val history = historyRepository.getById(historyEntryId) ?: return

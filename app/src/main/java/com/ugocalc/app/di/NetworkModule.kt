@@ -15,8 +15,17 @@ import javax.inject.Singleton
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
 
-    // URL base del backend AWS. Sostituire con l'URL reale al momento del deploy.
-    private const val AWS_BASE_URL = "https://ceii722srf.execute-api.us-east-1.amazonaws.com/prod"
+    // URL base del backend opzionale (compatibile 1:1 con Cloudflare Workers Free
+    // `https://ugocalc-api.<subdomain>.workers.dev` oppure AWS API Gateway).
+    // Impostare a "" per disabilitare completamente il backend e far funzionare l'app
+    // al 100% in modalità Local-First senza errori né retry.
+    private const val AWS_BASE_URL = "https://ugocalc-api.circolareclass.workers.dev"
+
+    // Override opzionali per JSON statici (es. GitHub Raw): lasciandole vuote (""), `/version` e
+    // `/config` usano direttamente il Worker Cloudflare (`https://ugocalc-api.circolareclass.workers.dev`),
+    // mentre gli aggiornamenti APK principali continuano a passare da GitHub Releases (`GitHubReleaseClient`).
+    private const val STATIC_VERSION_URL = ""
+    private const val STATIC_CONFIG_URL = ""
 
     @Provides
     @Singleton
@@ -53,7 +62,7 @@ object NetworkModule {
     @Named("no_auth")
     fun provideOkHttpClientNoAuth(): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
-            level = HttpLoggingInterceptor.Level.BODY
+            level = HttpLoggingInterceptor.Level.BASIC
         }
         return OkHttpClient.Builder()
             .addInterceptor(logging)
@@ -66,4 +75,12 @@ object NetworkModule {
     @Provides
     @Named("aws_base_url")
     fun provideAwsBaseUrl(): String = AWS_BASE_URL
+
+    @Provides
+    @Named("static_version_url")
+    fun provideStaticVersionUrl(): String = STATIC_VERSION_URL
+
+    @Provides
+    @Named("static_config_url")
+    fun provideStaticConfigUrl(): String = STATIC_CONFIG_URL
 }

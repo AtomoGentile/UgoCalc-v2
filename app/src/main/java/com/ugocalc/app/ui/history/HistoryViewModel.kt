@@ -3,25 +3,30 @@ package com.ugocalc.app.ui.history
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.data.repository.BenchmarkRepository
 import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.data.repository.V2TelemetryRepository
 import com.ugocalc.app.domain.inference.model.SessionMode
+import com.ugocalc.app.domain.model.CalculatedFoodLine
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.flowOn
+import kotlinx.serialization.json.Json
 import java.util.Calendar
 import javax.inject.Inject
 
@@ -62,19 +67,35 @@ class HistoryViewModel @Inject constructor(
     private val historyRepository: HistoryRepository,
     private val favoritesRepository: FavoritesRepository,
     private val settingsRepository: SettingsRepository,
+    private val benchmarkRepository: BenchmarkRepository,
+    private val telemetryRepository: V2TelemetryRepository,
+    private val json: Json,
 ) : ViewModel() {
 
-    private val _selectedMode = MutableStateFlow(SessionMode.CASA)
-    val selectedMode: StateFlow<SessionMode> = _selectedMode
+    private val _selectedMode = MutableStateFlow<SessionMode?>(null)
+    val selectedMode: StateFlow<SessionMode?> = _selectedMode.asStateFlow()
 
-    fun setSelectedMode(mode: SessionMode) {
+    fun setSelectedMode(mode: SessionMode?) {
         _selectedMode.value = mode
         resetFilters()
     }
 
-    /** Cronologia del modo selezionato, dalla più recente alla più antica. */
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    /** Cronologia del modo selezionato (o tutti se null), dalla più recente alla più antica. */
     val history: StateFlow<List<AnalysisHistoryEntity>> = _selectedMode
-        .flatMapLatest { mode -> historyRepository.observeHistoryByMode(mode) }
+        .flatMapLatest { mode ->
+            if (mode == null) {
+                historyRepository.observeHistory()
+            } else {
+                historyRepository.observeHistoryByMode(mode)
+            }
+        }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     /** Id delle voci di cronologia già tra i preferiti, per mostrare la stellina piena o vuota. */
@@ -88,10 +109,10 @@ class HistoryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
 
     private val _chartInterval = MutableStateFlow(HistoryChartInterval.WEEK)
-    val chartInterval: StateFlow<HistoryChartInterval> = _chartInterval
+    val chartInterval: StateFlow<HistoryChartInterval> = _chartInterval.asStateFlow()
 
     private val _chartType = MutableStateFlow(HistoryChartType.COLUMNS)
-    val chartType: StateFlow<HistoryChartType> = _chartType
+    val chartType: StateFlow<HistoryChartType> = _chartType.asStateFlow()
 
     fun setChartType(type: HistoryChartType) {
         _chartType.value = type
@@ -102,45 +123,89 @@ class HistoryViewModel @Inject constructor(
         val cutoff = interval.days?.let { System.currentTimeMillis() - it * 24L * 60 * 60 * 1000 }
         entries.filter { cutoff == null || it.analyzedAtEpochMillis >= cutoff }.sortedBy { it.analyzedAtEpochMillis }
     }
-    .flowOn(Dispatchers.Default)
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setChartInterval(interval: HistoryChartInterval) {
         _chartInterval.value = interval
     }
 
     private val _filters = MutableStateFlow(HistoryFilters())
-    val filters: StateFlow<HistoryFilters> = _filters
+    val filters: StateFlow<HistoryFilters> = _filters.asStateFlow()
 
-    /** Cronologia filtrata (§ richiesta utente): quella mostrata nell'elenco, indipendente dall'intervallo del grafico. */
-    val filteredHistory: StateFlow<List<AnalysisHistoryEntity>> = combine(history, _filters) { entries, filters ->
+    /** Cronologia filtrata per filtri avanzati e ricerca testuale. */
+    val filteredHistory: StateFlow<List<AnalysisHistoryEntity>> = combine(
+        history,
+        _filters,
+        _searchQuery,
+    ) { entries, filters, rawQuery ->
+        val query = rawQuery.trim()
         val calendar = Calendar.getInstance()
         entries.filter { entry ->
             val afterFrom = filters.dateFromMillis?.let { entry.analyzedAtEpochMillis >= it } ?: true
             val beforeTo = filters.dateToMillis?.let { entry.analyzedAtEpochMillis <= it } ?: true
             val inChoRange = entry.totalChoG.toFloat() in filters.choRange
-            
+
             val hour = if (filters.hourRange != 0f..24f) {
                 calendar.timeInMillis = entry.analyzedAtEpochMillis
                 calendar.get(Calendar.HOUR_OF_DAY).toFloat()
             } else 12f
-            
             val inHourRange = hour in filters.hourRange
-            afterFrom && beforeTo && inChoRange && inHourRange
+
+            val matchesQuery = if (query.isEmpty()) {
+                true
+            } else {
+                matchesSearchQuery(entry, query)
+            }
+
+            afterFrom && beforeTo && inChoRange && inHourRange && matchesQuery
         }
     }
-    .flowOn(Dispatchers.Default)
-    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private fun matchesSearchQuery(entry: AnalysisHistoryEntity, query: String): Boolean {
+        if (entry.foodTitle.contains(query, ignoreCase = true)) return true
+        val lines = runCatching { json.decodeFromString<List<CalculatedFoodLine>>(entry.detailsJson) }.getOrNull()
+        return if (lines != null) {
+            lines.any { line ->
+                line.recognizedFood.nome.contains(query, ignoreCase = true) ||
+                    (line.tableEntry?.nome?.contains(query, ignoreCase = true) == true)
+            }
+        } else {
+            entry.detailsJson.contains(query, ignoreCase = true)
+        }
+    }
 
     fun setDateFrom(millis: Long?) = _filters.update { it.copy(dateFromMillis = millis) }
     fun setDateTo(millis: Long?) = _filters.update { it.copy(dateToMillis = millis) }
     fun setChoRange(range: ClosedFloatingPointRange<Float>) = _filters.update { it.copy(choRange = range) }
     fun setHourRange(range: ClosedFloatingPointRange<Float>) = _filters.update { it.copy(hourRange = range) }
-    fun resetFilters() { _filters.value = HistoryFilters() }
+    fun resetFilters() {
+        _filters.value = HistoryFilters()
+    }
+
+    fun clearAllFiltersAndSearch() {
+        _filters.value = HistoryFilters()
+        _searchQuery.value = ""
+    }
+
+    /** Elimina una singola voce dalla cronologia insieme ai dati V2/benchmark collegati. */
+    fun deleteHistoryEntry(id: Long) {
+        viewModelScope.launch {
+            val entry = historyRepository.getById(id)
+            historyRepository.deleteAnalysis(id)
+            entry?.sessionId?.let { telemetryRepository.deleteBySessionId(it) }
+        }
+    }
 
     /** "Pulizia database cronologia" (§2.2, icona cestino). */
     fun clearHistory() {
-        viewModelScope.launch { historyRepository.clearHistory() }
+        viewModelScope.launch {
+            historyRepository.clearHistory()
+            benchmarkRepository.clearAll()
+            telemetryRepository.deleteAll()
+        }
     }
 
     /** Stellina in Cronologia (§ richiesta utente): aggiunge/rimuove dai preferiti senza passare da Impostazioni. */

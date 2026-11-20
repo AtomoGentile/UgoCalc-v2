@@ -32,6 +32,8 @@ private class FakeBenchmarkMealDao : BenchmarkMealDao {
     override suspend fun getAll(): List<BenchmarkMealEntity> = rows.values.sortedByDescending { it.capturedAtEpochMillis }
     override suspend fun getAllWithoutGroundTruth(): List<BenchmarkMealEntity> = rows.values.filter { it.groundTruthPesiJson == null }
     override suspend fun getAllWithGroundTruth(): List<BenchmarkMealEntity> = rows.values.filter { it.groundTruthPesiJson != null }
+    override suspend fun deleteById(sessionId: String) { rows.remove(sessionId) }
+    override suspend fun deleteAll() { rows.clear() }
 }
 
 /** Fake in-memoria del DAO di telemetria V2, con l'intera interfaccia (a differenza del fake più datato in V2TelemetryRepositoryTest). */
@@ -59,6 +61,9 @@ private class FakeV2Dao : V2AnalysisRecordDao {
         rows.values.filter { it.groundTruthPesiJson != null }.map { SessionModeAiModelPair(it.sessionMode, it.aiModelId) }.distinct()
     override suspend fun deleteAll() { rows.clear() }
     override suspend fun deleteById(id: Long) { rows.remove(id) }
+    override suspend fun deleteBySessionId(sessionId: String) {
+        rows.values.removeAll { it.sessionId == sessionId }
+    }
 
     override suspend fun getAiModelIdsWithGroundTruth(): List<String> =
         rows.values.filter { it.groundTruthPesiJson != null }.map { it.aiModelId }.distinct()
@@ -208,5 +213,52 @@ class BenchmarkRepositoryTest {
         val nomi = repo.foodNamesFor(entity)
 
         assertEquals(setOf("riso in bianco", "riso basmati"), nomi.toSet())
+    }
+
+    @Test
+    fun `evaluatePromotion defaults to 5 weighted meals instead of 30`() = runBlocking {
+        val (repo, benchmarkDao, v2Dao) = repository()
+
+        suspend fun addMeal(idx: Int, v1Weight: Double, v2Weight: Double, trueWeight: Double) {
+            val sid = "s$idx"
+            val v2Id = v2Dao.insert(
+                V2AnalysisRecordEntity(
+                    analyzedAtEpochMillis = 1000L + idx,
+                    sessionMode = "CASA",
+                    aiModelId = model.id,
+                    schemaVersion = 1,
+                    sceneGraphJson = "{}",
+                    weightEstimatesJson = """[{"nome":"riso","strategia":"distesa","peso_g":$v2Weight,"peso_crudo_g":$v2Weight,"intervallo":{"min_g":${v2Weight * 0.8},"max_g":${v2Weight * 1.2}},"catena_calcolo":{"formula":"f","valori":{},"fonti":[],"sintesi":"s"},"confidenza":"alto"}]""",
+                    verificationReportJson = "{}",
+                    nutritionReportJson = """{"righe":[],"choTotaleG":0.0,"grassiTotaleG":0.0}""",
+                ),
+            )
+            benchmarkDao.insert(
+                BenchmarkMealEntity(
+                    sessionId = sid,
+                    capturedAtEpochMillis = 1000L + idx,
+                    sessionMode = "CASA",
+                    aiModelId = model.id,
+                    v1PesiPerAlimentoJson = """{"riso":$v1Weight}""",
+                    v1NutrizionePerAlimentoJson = """{"riso":{"choPer100g":80.0,"grassiPer100g":0.5}}""",
+                    v2RecordId = v2Id,
+                    groundTruthPesiJson = """{"riso":$trueWeight}""",
+                    groundTruthLivello = "gold",
+                ),
+            )
+        }
+
+        // Con 4 pasti non promuove ancora (sotto la nuova soglia di 5)
+        repeat(4) { addMeal(it, v1Weight = 150.0, v2Weight = 100.0, trueWeight = 100.0) }
+        val underThreshold = repo.evaluatePromotion()
+        assertEquals(5, underThreshold.recommendedMinMeals)
+        assertEquals(4, underThreshold.mealCount)
+        assertTrue(!underThreshold.promoteV2)
+
+        // Al 5° pasto promuove subito V2
+        addMeal(4, v1Weight = 150.0, v2Weight = 100.0, trueWeight = 100.0)
+        val atThreshold = repo.evaluatePromotion()
+        assertEquals(5, atThreshold.mealCount)
+        assertTrue(atThreshold.promoteV2)
     }
 }

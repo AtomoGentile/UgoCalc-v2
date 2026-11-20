@@ -34,6 +34,10 @@ object PromptTemplates {
         2. STIMA PORZIONI: per ciascun alimento identificato, stima il peso
         approssimativo in grammi, basandoti su riferimenti visivi nell'immagine
         (dimensione del piatto, posate, confronto tra gli ingredienti).
+        IMPORTANTE: per pasta, riso, cereali e legumi secchi (alimenti che assorbono
+        acqua in cottura), esprimi sempre `peso_stimato_g` come peso equivalente A CRUDO
+        (come si pesa prima della cottura, perché le tabelle nutrizionali a valle sono
+        su base cruda).
 
         3. COMMENTO: per ciascun alimento, scrivi una breve nota visiva che spieghi
         su cosa si basa la stima (es. "porzione media, confrontata con il diametro

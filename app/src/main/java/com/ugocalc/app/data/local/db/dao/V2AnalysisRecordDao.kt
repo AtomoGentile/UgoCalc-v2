@@ -74,6 +74,9 @@ interface V2AnalysisRecordDao {
 
     @Query("DELETE FROM v2_analysis_records WHERE id = :id")
     suspend fun deleteById(id: Long)
+
+    @Query("DELETE FROM v2_analysis_records WHERE sessionId = :sessionId")
+    suspend fun deleteBySessionId(sessionId: String)
 }
 
 /** Proiezione minima per [V2AnalysisRecordDao.getSessionModeAiModelPairsWithGroundTruth]. */

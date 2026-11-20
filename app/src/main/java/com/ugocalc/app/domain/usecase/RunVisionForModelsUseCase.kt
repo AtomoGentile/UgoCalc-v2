@@ -4,6 +4,7 @@ import com.ugocalc.app.data.remote.ai.AiOrchestrator
 import com.ugocalc.app.data.remote.ai.client.AiCallException
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.ModelVisionOutcome
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import javax.inject.Inject
@@ -21,16 +22,23 @@ class RunVisionForModelsUseCase @Inject constructor(
         models: List<AiModel>,
         images: List<ByteArray>,
         imageMimeType: String,
+        sessionId: String? = null,
     ): List<ModelVisionOutcome> = coroutineScope {
         models.map { model ->
             async {
                 try {
-                    val result = aiOrchestrator.runVisionAnalysis(model, images, imageMimeType)
+                    val result = aiOrchestrator.runVisionAnalysis(model, images, imageMimeType, sessionId)
                     ModelVisionOutcome.Success(model, result)
+                } catch (e: CancellationException) {
+                    throw e
                 } catch (e: AiCallException) {
-                    ModelVisionOutcome.Failure(model, e.message ?: "Analisi non riuscita")
+                    ModelVisionOutcome.Failure(model, e.message?.takeIf { it.isNotBlank() } ?: "Analisi non riuscita")
                 } catch (e: Exception) {
-                    ModelVisionOutcome.Failure(model, "Analisi non riuscita")
+                    val detail = e.message?.takeIf { it.isNotBlank() }
+                    ModelVisionOutcome.Failure(
+                        model,
+                        if (detail != null) "Analisi non riuscita: $detail" else "Analisi non riuscita",
+                    )
                 }
             }
         }.map { it.await() }

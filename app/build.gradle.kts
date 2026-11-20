@@ -17,8 +17,8 @@ android {
         applicationId = "com.ugocalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "3.0.2"
+        versionCode = 5
+        versionName = "4.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -46,6 +46,9 @@ android {
 
     lint {
         disable += "RemoveWorkManagerInitializer"
+        // Avoid AGP 8.7.3 + Kotlin 2.0.21 K2-UAST FIR crash in lintAnalyzeDebugUnitTest
+        // while keeping full Android Lint checks on main sources.
+        ignoreTestSources = true
     }
 
     packaging {
@@ -56,6 +59,12 @@ android {
             excludes += "META-INF/LICENSE.txt"
             excludes += "META-INF/NOTICE"
             excludes += "META-INF/NOTICE.txt"
+        }
+        // Required for 16KB page-size alignment on Android 15+ devices.
+        // Without this, the linker packs .so files with 4KB alignment inside the APK,
+        // causing installation failure on kernels with 16KB pages.
+        jniLibs {
+            useLegacyPackaging = false
         }
     }
 }
@@ -150,12 +159,14 @@ dependencies {
     // scatto foto di delegare alla fotocamera di sistema invece di una preview custom.
     implementation("com.google.android.gms:play-services-code-scanner:16.1.0")
 
-    // ML Kit Text Recognition for OCR (PDF scansionati e immagini) + multi-lingue
-    implementation("com.google.mlkit:text-recognition:16.0.0")
-    implementation("com.google.mlkit:text-recognition-chinese:16.0.0")
-    implementation("com.google.mlkit:text-recognition-devanagari:16.0.0")
-    implementation("com.google.mlkit:text-recognition-japanese:16.0.0")
-    implementation("com.google.mlkit:text-recognition-korean:16.0.0")
+    // ML Kit Text Recognition — variante Play Services (unbundled): nessuna .so nell'APK,
+    // risolve la non-compatibilità 16KB di libmlkit_google_ocr_pipeline.so presente nella
+    // variante bundled (com.google.mlkit:text-recognition). Il codice nativo vive in GMS.
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition:19.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-chinese:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-devanagari:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-japanese:16.0.1")
+    implementation("com.google.android.gms:play-services-mlkit-text-recognition-korean:16.0.1")
 
     // Coroutines integration with Google Play Services Tasks
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

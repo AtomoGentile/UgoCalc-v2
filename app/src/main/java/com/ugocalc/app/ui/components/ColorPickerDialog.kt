@@ -3,13 +3,19 @@ package com.ugocalc.app.ui.components
 import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -24,14 +30,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Selettore di colore libero (§ richiesta utente: "l'utente dovrebbe poter scegliere il colore che
- * preferisce, non una tavolozza"): tonalità/saturazione/luminosità coprono l'intero spettro, non
- * solo un set di colori predefiniti. [defaultColor] è il colore che il tema userebbe senza
- * personalizzazione (per seminare i cursori quando non c'è ancora un colore custom, e per il
- * pulsante "Predefinito").
+ * Selettore di colore libero HSV.
  */
 @Composable
 fun ColorPickerDialog(
@@ -51,36 +54,94 @@ fun ColorPickerDialog(
     var brightness by remember { mutableFloatStateOf(seedHsv[2]) }
 
     val previewColor = Color(AndroidColor.HSVToColor(floatArrayOf(hue, saturation, brightness)))
+    val hexString = remember(previewColor) {
+        "#%06X".format(0xFFFFFF and previewColor.toArgb())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title) },
+        shape = RoundedCornerShape(24.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        title = {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+            )
+        },
         text = {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .size(64.dp)
-                        .clip(CircleShape)
-                        .background(previewColor)
-                        .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
-                        .align(Alignment.CenterHorizontally),
-                )
-                Text("Tonalità", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 16.dp))
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(64.dp)
+                            .clip(CircleShape)
+                            .background(previewColor)
+                            .border(2.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+                    )
+                    Column {
+                        Text(
+                            text = "Anteprima",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Text(
+                            text = hexString,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                SliderLabel("Tonalità", "${hue.toInt()}°")
                 Slider(value = hue, onValueChange = { hue = it }, valueRange = 0f..360f)
-                Text("Saturazione", style = MaterialTheme.typography.bodySmall)
+
+                SliderLabel("Saturazione", "${(saturation * 100).toInt()}%")
                 Slider(value = saturation, onValueChange = { saturation = it }, valueRange = 0f..1f)
-                Text("Luminosità", style = MaterialTheme.typography.bodySmall)
+
+                SliderLabel("Luminosità", "${(brightness * 100).toInt()}%")
                 Slider(value = brightness, onValueChange = { brightness = it }, valueRange = 0f..1f)
             }
         },
         confirmButton = {
-            TextButton(onClick = { onColorSelected(previewColor) }) { Text("Applica") }
+            Button(
+                onClick = { onColorSelected(previewColor) },
+                shape = RoundedCornerShape(12.dp),
+            ) {
+                Text("Applica")
+            }
         },
         dismissButton = {
-            Row {
+            Row(modifier = Modifier.padding(end = 4.dp)) {
                 TextButton(onClick = { onColorSelected(null) }) { Text("Predefinito") }
                 TextButton(onClick = onDismiss) { Text("Chiudi") }
             }
         },
     )
+}
+
+@Composable
+private fun SliderLabel(label: String, valueText: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = valueText,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
 }

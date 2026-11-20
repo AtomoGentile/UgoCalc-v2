@@ -1,17 +1,15 @@
 package com.ugocalc.app.data.remote.aws
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.booleanOrNull
-import kotlinx.serialization.json.int
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import java.io.IOException
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Named
@@ -28,17 +26,28 @@ class RemoteConfigClient @Inject constructor(
     private val okHttpClient: OkHttpClient,
     private val json: Json,
     @Named("aws_base_url") private val baseUrl: String,
+    @Named("static_config_url") private val staticConfigUrl: String,
 ) {
+    constructor(
+        okHttpClient: OkHttpClient,
+        json: Json,
+        baseUrl: String,
+    ) : this(okHttpClient, json, baseUrl, "")
+
     suspend fun fetch(): RemoteConfigResult = withContext(Dispatchers.IO) {
+        val targetUrl = resolveEndpointUrl(baseUrl, "config", staticConfigUrl)
+            ?: return@withContext RemoteConfigResult.NetworkError
+
         val request = Request.Builder()
-            .url("$baseUrl/config")
+            .url(targetUrl)
             .header("Accept", "application/json")
             .header("User-Agent", "UgoCalc-Android")
             .build()
 
         val configOkHttp = okHttpClient.newBuilder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(10, TimeUnit.SECONDS)
+            .connectTimeout(3, TimeUnit.SECONDS)
+            .readTimeout(5, TimeUnit.SECONDS)
+            .callTimeout(5, TimeUnit.SECONDS)
             .build()
 
         try {
@@ -53,7 +62,9 @@ class RemoteConfigClient @Inject constructor(
                 }
                 RemoteConfigResult.Success(parsed)
             }
-        } catch (_: IOException) {
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
             RemoteConfigResult.NetworkError
         }
     }

@@ -1,5 +1,6 @@
 ﻿package com.ugocalc.app.domain.inference
 
+import com.ugocalc.app.data.local.db.entity.ScaleCalibrationEntity
 import com.ugocalc.app.domain.inference.m0.PhotoQuality
 import com.ugocalc.app.domain.inference.m0.QualityGate
 import com.ugocalc.app.domain.inference.m1.PerceptionOutcome
@@ -7,8 +8,11 @@ import com.ugocalc.app.domain.inference.m5.ArbitrationOutcome
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.OcclusionDegree
 import com.ugocalc.app.domain.inference.model.PerceivedFood
+import com.ugocalc.app.domain.inference.model.PlausibilityLimits
 import com.ugocalc.app.domain.inference.model.RawMeasurements
 import com.ugocalc.app.domain.inference.model.RevisedFood
+import com.ugocalc.app.domain.inference.model.ScaleAnchor
+import com.ugocalc.app.domain.inference.model.ScaleAnchorType
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
@@ -297,5 +301,147 @@ class V2AnalysisPipelineTest {
         assertEquals(1, recordCalls)
         assertTrue(outcome is PipelineOutcome.Verificato)
         assertEquals(42L, (outcome as PipelineOutcome.Verificato).telemetryId)
+    }
+
+    @Test
+    fun `pesoCrudoGrezzoG preserves pre-bias and pre-guardrail raw geometric weight`() = runBlocking {
+        // Caso 1: biasFactor = 1.25 -> pesoCrudoG è scalato ×1.25, pesoCrudoGrezzoG resta il grezzo pre-bias.
+        val scenaSenzaGuardrail = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = emptyList(),
+            alimenti = listOf(
+                PerceivedFood(
+                    nome = "riso in bianco",
+                    occlusione = OcclusionDegree.NESSUNA,
+                    misureGrezze = RawMeasurements(frazionePiatto = 0.45, altezzaCm = 2.1, riempimento = 0.8),
+                    confidenza = Confidence.ALTO,
+                ),
+            ),
+        )
+        val pipelineConBias = V2AnalysisPipeline(
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaSenzaGuardrail) },
+            biasFactor = { _, _, _ -> 1.25 },
+        )
+        val outcomeConBias = pipelineConBias.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        ) as PipelineOutcome.Verificato
+
+        val stimaConBias = outcomeConBias.stime.single()
+        assertEquals(stimaConBias.pesoCrudoG / 1.25, stimaConBias.pesoCrudoGrezzoG, 1e-9)
+
+        // Caso 2: guardrail di buon senso taglia pesoCrudoG al limite max (60g), ma pesoCrudoGrezzoG
+        // conserva comunque il peso geometrico puro pre-bias e pre-taglio!
+        val scenaConGuardrail = scenaSenzaGuardrail.copy(
+            alimenti = listOf(
+                scenaSenzaGuardrail.alimenti.single().copy(
+                    limitiBuonSenso = PlausibilityLimits(pesoMinG = 40.0, pesoMaxG = 60.0),
+                ),
+            ),
+        )
+        val pipelineConGuardrail = V2AnalysisPipeline(
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scenaConGuardrail) },
+            biasFactor = { _, _, _ -> 1.25 },
+        )
+        val outcomeConGuardrail = pipelineConGuardrail.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        ) as PipelineOutcome.Verificato
+
+        val stimaTagliata = outcomeConGuardrail.stime.single()
+        assertEquals(60.0, stimaTagliata.pesoCrudoG, 1e-9)
+        assertEquals(stimaConBias.pesoCrudoGrezzoG, stimaTagliata.pesoCrudoGrezzoG, 1e-9)
+    }
+
+    @Test
+    fun `activeCalibrations are forwarded to ScaleResolver and shape conical plate volume`() = runBlocking {
+        val scena = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = listOf(
+                ScaleAnchor(
+                    tipo = ScaleAnchorType.STOVIGLIA_CALIBRATA,
+                    descrizione = "piatto fondo casa",
+                    dimensioneRealeCm = 24.0,
+                    confidenza = Confidence.ALTO,
+                ),
+            ),
+            alimenti = listOf(
+                PerceivedFood(
+                    nome = "riso in bianco",
+                    occlusione = OcclusionDegree.NESSUNA,
+                    misureGrezze = RawMeasurements(frazionePiatto = 0.5, altezzaCm = 2.0, riempimento = 0.8),
+                    confidenza = Confidence.ALTO,
+                ),
+            ),
+        )
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
+        )
+
+        val outcomeCilindro = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+            calibrations = emptyList(),
+        ) as PipelineOutcome.Verificato
+
+        val calibrazioneConica = ScaleCalibrationEntity(
+            type = ScaleAnchorType.STOVIGLIA_CALIBRATA.name,
+            name = "piatto fondo casa",
+            valueCm = 24.0,
+            plateShapeType = "conico",
+            plateBottomDiameterCm = 14.0,
+        )
+        val outcomeConico = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+            calibrations = listOf(calibrazioneConica),
+        ) as PipelineOutcome.Verificato
+
+        assertTrue(outcomeConico.stime.single().pesoG < outcomeCilindro.stime.single().pesoG)
+        assertTrue(outcomeConico.stime.single().catenaCalcolo.formula.contains("volume_tronco_cono"))
+    }
+
+    @Test
+    fun `cooked pasta whose raw pesoCrudoG fits limitiBuonSenso does not trigger M5 arbitration`() = runBlocking {
+        // Riso/pasta cotta: pesoG sarà > 120g cotto, ma pesoCrudoG rientra nei limiti a crudo [40, 120]g.
+        var arbitrationCalls = 0
+        val scena = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = emptyList(),
+            alimenti = listOf(
+                PerceivedFood(
+                    nome = "pasta penne",
+                    occlusione = OcclusionDegree.NESSUNA,
+                    misureGrezze = RawMeasurements(frazionePiatto = 0.35, altezzaCm = 2.2, riempimento = 0.8),
+                    limitiBuonSenso = PlausibilityLimits(pesoMinG = 40.0, pesoMaxG = 120.0),
+                    confidenza = Confidence.ALTO,
+                ),
+            ),
+        )
+        val pipeline = V2AnalysisPipeline(
+            perceive = { _, _, _, _, _, _, _ -> PerceptionOutcome.Riuscita(scena) },
+            arbitrate = { _, _, _, _, _ -> arbitrationCalls++; ArbitrationOutcome.NonDisponibile("non deve partire") },
+        )
+
+        val outcome = pipeline.run(
+            photos = listOf(SessionPhoto(goodPhoto, ByteArray(10))),
+            imageMimeType = "image/jpeg",
+            sessionMode = SessionMode.CASA,
+            model = model,
+        ) as PipelineOutcome.Verificato
+
+        val stima = outcome.stime.single()
+        assertTrue("peso cotto > 120g per verificare il caso reale", stima.pesoG > 120.0)
+        assertTrue("peso crudo <= 120g", stima.pesoCrudoG in 40.0..120.0)
+        assertEquals(0, arbitrationCalls)
+        assertTrue(outcome.verifica.flaggati.none { it.motivo.contains("intuizione AI") })
     }
 }

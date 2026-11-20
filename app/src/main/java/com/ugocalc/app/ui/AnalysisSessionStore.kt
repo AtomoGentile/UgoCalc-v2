@@ -38,18 +38,27 @@ class AnalysisSessionStore @Inject constructor() {
         val totals: AnalysisTotals? = null,
         /** Vero quando [visionOutcomes]/[totals] vengono dalla pipeline V2 promossa a flusso visibile (piano V2 §13 punto 1). */
         val usingV2Engine: Boolean = false,
-        /** Pesi finali calcolati da M3 (V2), inclusa la catena di calcolo completa per la trasparenza (§13 punto 1). */
+        /** Pesi finali calcolati da M3 (V2) per il modello di riferimento, inclusa la catena di calcolo completa per la trasparenza (§13 punto 1). */
         val v2Stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate> = emptyList(),
         /** Calibrazioni selezionate manualmente dall'utente per questa sessione (§ richiesta utente). */
         val selectedCalibrationIds: Set<Long> = emptySet(),
-        /** Risoluzioni di ambiguità effettuate da M4 (§13 punto 2). */
+        /** Risoluzioni di ambiguità effettuate da M4 (§13 punto 2) per il modello di riferimento. */
         val v2AmbiguitaRisolte: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
+        /** Risultati completi della pipeline V2 per ciascun modello analizzato in modalità visibile. */
+        val v2VisibleResults: Map<String, V2VisibleResult> = emptyMap(),
         /** Risultati V2 della shadow mode per testing (uno per modello testato): vuoto se la shadow è ancora in esecuzione o disabilitata. */
         val shadowV2Results: Map<String, V2ShadowResult> = emptyMap(),
         /** Alimento trovato dallo scanner codici a barre (§ richiesta utente), in attesa che ManualFoodEntryScreen lo raccolga. */
         val pendingManualEntry: NormalizedFoodEntry? = null,
         /** Righe già quantificate, in attesa che ManualFoodEntryScreen le carichi direttamente nel passo Quantità (§ richiesta utente: preferiti che riaprono la modifica quantità). */
         val pendingManualRows: List<PendingManualRow>? = null,
+    )
+
+    data class V2VisibleResult(
+        val outcome: ModelVisionOutcome.Success,
+        val totals: AnalysisTotals,
+        val stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
+        val ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution>,
     )
 
     data class V2ShadowResult(
@@ -70,6 +79,11 @@ class AnalysisSessionStore @Inject constructor() {
     private val _session = MutableStateFlow(Session())
     val session: StateFlow<Session> = _session
 
+    private val _isSavingCredentials = MutableStateFlow(false)
+    val isSavingCredentials: StateFlow<Boolean> = _isSavingCredentials
+
+    fun setIsSavingCredentials(saving: Boolean) { _isSavingCredentials.value = saving }
+
     fun setSelectedModels(models: List<AiModel>) = _session.update { it.copy(selectedModels = models) }
 
     fun setSessionMode(mode: SessionMode) = _session.update { it.copy(sessionMode = mode) }
@@ -79,40 +93,65 @@ class AnalysisSessionStore @Inject constructor() {
         _session.update { it.copy(capturedImages = images, imageMimeType = mimeType) }
 
     fun setVisionOutcomes(outcomes: List<ModelVisionOutcome>) =
-        _session.update { it.copy(visionOutcomes = outcomes, referenceModelId = it.referenceModelId ?: outcomes.firstOrNull { o -> o is ModelVisionOutcome.Success }?.model?.id) }
+        _session.update { it.copy(visionOutcomes = outcomes, referenceModelId = it.referenceModelId ?: outcomes.firstOrNull { o -> o is ModelVisionOutcome.Success }?.model?.uid) }
 
-    fun setReferenceModelId(modelId: String) = _session.update { it.copy(referenceModelId = modelId) }
+    fun setReferenceModelId(modelId: String) = _session.update { current ->
+        val updated = current.copy(referenceModelId = modelId)
+        // Se siamo in modalità V2, aggiorniamo anche i totali e le stime attive basandoci sul nuovo modello di riferimento (§13 punto 1).
+        if (current.usingV2Engine) {
+            val res = current.v2VisibleResults[modelId]
+                ?: current.v2VisibleResults.values.firstOrNull {
+                    it.outcome.model.uid == modelId || it.outcome.model.id == modelId
+                }
+            if (res != null) {
+                updated.copy(
+                    totals = res.totals,
+                    v2Stime = res.stime,
+                    v2AmbiguitaRisolte = res.ambiguita
+                )
+            } else updated
+        } else updated
+    }
 
     fun setSelectedCalibrationIds(ids: Set<Long>) = _session.update { it.copy(selectedCalibrationIds = ids) }
 
     fun setTotals(totals: AnalysisTotals) = _session.update { it.copy(totals = totals) }
 
     /**
-     * Esito completo della pipeline V2 (piano V2 §13 punto 1): a differenza di [setVisionOutcomes]
-     * seguito da "Ricevi i CHO", M6/M7 hanno già calcolato l'abbinamento nutrizionale dentro la
-     * pipeline, quindi peso e totali si impostano nello stesso aggiornamento e il flag
-     * `usingV2Engine` in `Session` segnala a [com.ugocalc.app.ui.results.VisionResultsViewModel.receiveCho] di non rifare il
-     * matching.
+     * Esiti completi della pipeline V2 (piano V2 §13 punto 1): supporta più modelli visibili
+     * contemporaneamente (§ richiesta utente "tutto per tutti i modelli").
      */
+    fun setV2Results(results: List<V2VisibleResult>) = _session.update { current ->
+        val firstSuccess = results.firstOrNull() ?: return@update current
+        val outcomes = results.map { it.outcome }
+        val resultsMap = results.associateBy { it.outcome.model.uid }
+        val referenceId = current.referenceModelId ?: firstSuccess.outcome.model.uid
+        val activeRes = resultsMap[referenceId]
+            ?: results.firstOrNull { it.outcome.model.id == referenceId }
+            ?: firstSuccess
+
+        current.copy(
+            visionOutcomes = outcomes,
+            referenceModelId = referenceId,
+            totals = activeRes.totals,
+            usingV2Engine = true,
+            v2Stime = activeRes.stime,
+            v2AmbiguitaRisolte = activeRes.ambiguita,
+            v2VisibleResults = resultsMap
+        )
+    }
+
+    /** Deprecato: usare setV2Results per supportare più modelli. */
     fun setV2Result(
         outcome: ModelVisionOutcome.Success, 
         totals: AnalysisTotals, 
         stime: List<com.ugocalc.app.domain.inference.model.WeightEstimate>,
         ambiguita: List<com.ugocalc.app.domain.inference.model.AmbiguityResolution> = emptyList(),
-    ) = _session.update { current ->
-        current.copy(
-            visionOutcomes = listOf(outcome),
-            referenceModelId = outcome.model.id,
-            totals = totals,
-            usingV2Engine = true,
-            v2Stime = stime,
-            v2AmbiguitaRisolte = ambiguita,
-        )
-    }
+    ) = setV2Results(listOf(V2VisibleResult(outcome, totals, stime, ambiguita)))
 
     fun setShadowV2Result(model: AiModel, result: PipelineOutcomeForShadow) {
         _session.update { current ->
-            current.copy(shadowV2Results = current.shadowV2Results + (model.id to V2ShadowResult(model, result)))
+            current.copy(shadowV2Results = current.shadowV2Results + (model.uid to V2ShadowResult(model, result)))
         }
     }
 
@@ -138,6 +177,6 @@ class AnalysisSessionStore @Inject constructor() {
 
     /** Riprova l'analisi (§2.4 punto 4) mantenendo gli stessi modelli selezionati, per ri-scattare le foto. */
     fun resetForRetry() = _session.update {
-        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList(), shadowV2Results = emptyMap())
+        it.copy(capturedImages = emptyList(), visionOutcomes = emptyList(), referenceModelId = null, totals = null, usingV2Engine = false, v2Stime = emptyList(), v2AmbiguitaRisolte = emptyList(), v2VisibleResults = emptyMap(), shadowV2Results = emptyMap())
     }
 }

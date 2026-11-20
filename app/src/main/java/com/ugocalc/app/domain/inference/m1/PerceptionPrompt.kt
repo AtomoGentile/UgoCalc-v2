@@ -35,19 +35,20 @@ object PerceptionPrompt {
         modello come te non è affidabile nell'aritmetica né nella coerenza numerica tra più stime:
         il tuo compito è percepire e descrivere, non calcolare.
 
-        Ti vengono fornite ${if (pastoImageCount > 0) "$pastoImageCount foto" else "una o più foto"} dello STESSO pasto, scattate seguendo SEMPRE questo
-        protocollo fisso (non casuale, puoi contarci): la PRIMA foto è ripresa dall'alto, con il
-        telefono pressoché parallelo al piatto (inclinazione ~90°) — usala come riferimento
-        principale per la forma del piatto e per "frazione_piatto", perché da questa angolazione la
-        superficie non è distorta da prospettiva. Le foto SUCCESSIVE (se presenti, fino a 4) sono
-        scattate a ~45° di inclinazione, ciascuna ruotata di circa 90° intorno al piatto rispetto
-        alla precedente: usale soprattutto per "altezza_cm", "riempimento" e la forma dei BLOCCHI
-        misurabili, perché da un'angolazione più bassa il profilo laterale del cibo è visibile,
-        cosa che la foto dall'alto non mostra. Il giro di 90° tra una foto e l'altra serve anche a
-        ridurre le occlusioni: se un alimento è nascosto in una vista, cerca prima nelle foto
-        successive (vista da un lato diverso del piatto) prima di dichiararlo non misurabile.
-        Considerale insieme come un'unica scena da analizzare: non trattarle come pasti distinti né
-        duplicare gli alimenti già contati.
+        Ti vengono fornite ${if (pastoImageCount > 0) "$pastoImageCount foto" else "una o più foto"} dello STESSO pasto, scattate seguendo questo
+        protocollo rapido (2 scatti base ottimali: 1 dall'alto a 90° + 1 laterale a 45°; eventuali
+        ulteriori scatti laterali fino a 3 sono opzionali solo per piatti con forti occlusioni):
+        la PRIMA foto è ripresa dall'alto, con il telefono pressoché parallelo al piatto
+        (inclinazione ~90°) — usala come riferimento principale per diametro e forma del piatto e
+        per "frazione_piatto", perché da questa angolazione la superficie non è distorta da
+        prospettiva. La SECONDA foto (e le eventuali viste laterali opzionali successive, ciascuna
+        ruotata di ~90° intorno al piatto) è scattata a ~45° di inclinazione: usala soprattutto per
+        "altezza_cm", "profilo_cumulo", "riempimento" e la forma dei BLOCCHI misurabili, perché da
+        un'angolazione più bassa il profilo laterale del cibo è visibile, cosa che la foto dall'alto
+        non mostra. Se sono presenti viste laterali opzionali aggiuntive, usale anche per ridurre
+        eventuali occlusioni prima di dichiarare un alimento non misurabile. Considerale insieme
+        come un'unica scena da analizzare: non trattarle come pasti distinti né duplicare gli
+        alimenti già contati.
         ${angleReadingsBlock(angleDescriptions, cameraMetadatas)}
         ${calibrationsBlock(calibrations, pastoImageCount)}
 
@@ -80,6 +81,11 @@ object PerceptionPrompt {
         dell'oggetto usato per dedurlo — anche quando parti da un riferimento corporeo o universale
         (es. un dito, una moneta), il numero che riporti è quello dedotto per il piatto stesso: è
         l'unico modo per cui chi userà questa misura possa calcolarne l'area reale.
+        ATTENZIONE AL BORDO DEL PIATTO: molti piatti hanno un bordo o una tesa larga esterna dove
+        non poggia cibo. Quando deduci il diametro da un'ancora visiva non calibrata, riporta il
+        diametro utile interno dove poggia effettivamente il cibo (escludendo la tesa larga); se
+        invece usi una stoviglia calibrata il cui diametro noto è quello esterno, mantieni quel
+        valore ma valuta "frazione_piatto" in modo conservativo rispetto all'area utile interna.
 
         2. INVENTARIO ALIMENTI: elenca ogni alimento visibile, con nome canonico specifico e
         standardizzato (es. "pasta penne" non "pasta", "petto di pollo" non "carne"). In
@@ -98,17 +104,36 @@ object PerceptionPrompt {
         occlusione (nessuna, parziale, elevata) e una confidenza onesta sull'identificazione.
 
         3. MISURE GREZZE (MAI GRAMMI): per ciascun alimento, in base a come si presenta, fornisci
-        SOLO le misure osservabili pertinenti, lasciando gli altri campi assenti:
+        SOLO le misure osservabili pertinenti, lasciando gli altri campi assenti.
+        PROPORZIONE VISIVA OBBLIGATORIA PER TUTTE LE DIMENSIONI IN CM: NON indovinare mai
+        "altezza_cm", "lunghezza_cm", "larghezza_cm" o "diametro_cm" in valore assoluto a occhio.
+        Calcola ogni dimensione in centimetri per proporzione visiva diretta rispetto all'ancora di
+        scala scelta (piatto, posata standard, riferimento corporeo o oggetto calibrato): confronta
+        prima il rapporto visivo nella foto (es. "il trancio è lungo 0.45 volte il diametro del
+        piatto da 26 cm → lunghezza_cm = 11.7"; "il cumulo è alto quanto 2 volte la larghezza del
+        manico della forchetta da 1.5 cm → altezza_cm = 3.0").
            - CONTABILE (pezzi distinti: frutta intera, polpette, biscotti, fette): "conteggio"
              (numero di pezzi contati). Sii molto preciso: se vedi dei pezzi, contali tutti.
            - DISTESO sul piatto (pasta, riso, insalate, contorni): "frazione_piatto" (0..1, frazione
-             di superficie del piatto coperta), "altezza_cm" (spessore del cumulo), "riempimento"
-             (0..1, quanto è compatto/pieno il cumulo, distinto dalla superficie coperta).
+             di superficie del piatto coperta), "altezza_cm" (spessore/altezza massima del cumulo),
+             "riempimento" (0..1, quanto è compatto/pieno il cumulo, distinto dalla superficie
+             coperta), e "profilo_cumulo" ("piatto" | "cupola" | "cono": usa "piatto" per strati
+             uniformi e bassi come lasagne o carpaccio, "cupola" per cumuli arrotondati tipici di
+             pasta/riso/insalata, "cono" per cumuli appuntiti a piramide).
+             IMPORTANTE: valuta "frazione_piatto" rispetto al fondo utile interno del piatto dove
+             poggia il cibo (escludendo eventuale bordo/tesa larga esterna priva di cibo). Se il
+             diametro dichiarato nell'ancora è quello esterno del piatto, riduci "frazione_piatto"
+             in proporzione all'area del fondo utile effettivamente occupata, includendo invece le
+             parti di cibo coperte da altri ingredienti (es. pasta sotto il sugo). Il "riempimento"
+             rappresenta quanto il cumulo è compatto/denso.
            - IN UN CONTENITORE (latte, minestre, yogurt, succhi): "contenitore" (tipo riconosciuto:
-             bicchiere, tazza, ciotola, scodella...), "frazione_riempimento" (0..1).
+             bicchiere, tazza, ciotola, scodella...), "frazione_riempimento" (0..1) e, se nota o
+             chiaramente deducibile (es. calibrazione utente, lattina 330 ml, vasetto 125 ml),
+             "capacita_contenitore_ml".
            - BLOCCO misurabile (carne, pesce, torte, formaggio, pane a fetta): "conteggio"
              (opzionale, se sono più pezzi identici), "forma" (parallelepipedo, cilindro, cuneo...)
-             e le dimensioni di un singolo pezzo tra "lunghezza_cm", "larghezza_cm", "diametro_cm".
+             e le dimensioni di un singolo pezzo tra "lunghezza_cm", "larghezza_cm", "diametro_cm"
+             e "altezza_cm", tutte derivate in proporzione visiva rispetto all'ancora di scala.
              ATTENZIONE: Se scegli la forma 'cilindro', il 'diametro_cm' deve essere quello del
              cibo, NON quello del piatto. Non confondere mai la dimensione del contenitore con
              quella del contenuto.
@@ -122,6 +147,10 @@ object PerceptionPrompt {
         geometriche fornite al punto 3. Sii onesto ma NON eccessivamente restrittivo: se la scena
         suggerisce una porzione fuori standard o molto abbondante, lascia che i limiti lo
         riflettano invece di forzare valori medi.
+        IMPORTANTE: esprimi i limiti sempre in grammi A CRUDO (come si pesa l'ingrediente prima
+        della cottura). Per la pasta: una porzione tipica è 70–120 g crudo; per il riso 70–100 g
+        crudo. Per alimenti che non si cuociono (frutta, pane, formaggi) grammi crudi e cotti
+        coincidono.
 
         Segnala infine, se presenti, le SOVRAPPOSIZIONI tra alimenti (es. "sugo sopra la pasta"):
         utili a valutare le porzioni occluse.
@@ -151,8 +180,10 @@ object PerceptionPrompt {
                 "frazione_piatto": number (opzionale),
                 "altezza_cm": number (opzionale),
                 "riempimento": number (opzionale),
+                "profilo_cumulo": "piatto" | "cupola" | "cono" (opzionale, per cibi distesi),
                 "contenitore": "string" (opzionale),
                 "frazione_riempimento": number (opzionale),
+                "capacita_contenitore_ml": number (opzionale),
                 "forma": "string" (opzionale),
                 "lunghezza_cm": number (opzionale),
                 "larghezza_cm": number (opzionale),
@@ -218,7 +249,13 @@ object PerceptionPrompt {
         if (calibrations.isEmpty()) return ""
         val righe = calibrations.mapIndexed { index, cal ->
             val imageRef = if (cal.imagePath != null) " (vedi Immagine di riferimento ${pastoImageCount + index + 1})" else ""
-            "- '${cal.name}' (${cal.type})$imageRef: dimensione reale ${cal.valueCm} cm" + (cal.capacityMl?.let { ml -> ", capacità $ml ml" } ?: "")
+            val shapeDesc = if (cal.plateShapeType == "conico") {
+                val bottom = cal.plateBottomDiameterCm?.let { ", fondo $it cm" } ?: ""
+                ", forma conica$bottom"
+            } else ""
+            "- '${cal.name}' (${cal.type})$imageRef: dimensione reale ${cal.valueCm} cm" +
+                (cal.capacityMl?.let { ml -> ", capacità $ml ml" } ?: "") +
+                shapeDesc
         }
         return "\nL'utente ha già calibrato i seguenti oggetti di riferimento. Se ne riconosci uno, usa il suo nome esatto nel campo 'descrizione' e riporta il valore di centimetri indicato:\n" +
             righe.joinToString("\n")

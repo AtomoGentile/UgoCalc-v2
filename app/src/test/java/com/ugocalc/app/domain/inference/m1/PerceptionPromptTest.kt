@@ -31,12 +31,23 @@ class PerceptionPromptTest {
             "\"ancore\"", "\"alimenti\"", "\"sovrapposizioni\"",
             "\"tipo\"", "\"descrizione\"", "\"dimensione_reale_cm\"", "\"confidenza\"",
             "\"nome\"", "\"alternative_identificazione\"", "\"occlusione\"", "\"misure_grezze\"",
-            "\"conteggio\"", "\"frazione_piatto\"", "\"altezza_cm\"", "\"riempimento\"",
-            "\"contenitore\"", "\"frazione_riempimento\"", "\"forma\"",
+            "\"conteggio\"", "\"frazione_piatto\"", "\"altezza_cm\"", "\"riempimento\"", "\"profilo_cumulo\"",
+            "\"contenitore\"", "\"frazione_riempimento\"", "\"capacita_contenitore_ml\"", "\"forma\"",
             "\"lunghezza_cm\"", "\"larghezza_cm\"", "\"diametro_cm\"", "\"nota\"",
             "\"sopra\"", "\"sotto\"",
         ).forEach { field ->
             assertTrue("il prompt deve menzionare il campo $field", prompt.contains(field))
+        }
+    }
+
+    @Test
+    fun `prompt explains inner plate bottom, mound profile options, and visual proportion`() {
+        val prompt = PerceptionPrompt.build(SessionMode.CASA)
+        assertTrue(prompt.contains("fondo utile interno"))
+        assertTrue(prompt.contains("proporzione visiva"))
+        assertTrue(prompt.contains("2 scatti base ottimali"))
+        listOf("\"piatto\"", "\"cupola\"", "\"cono\"").forEach { profile ->
+            assertTrue("il prompt deve menzionare il profilo cumulo $profile", prompt.contains(profile))
         }
     }
 

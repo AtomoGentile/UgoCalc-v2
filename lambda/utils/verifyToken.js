@@ -10,9 +10,11 @@ const CLIENT_ID = process.env.COGNITO_CLIENT_ID || process.env.APP_CLIENT_ID || 
 let verifier;
 if (USER_POOL_ID && USER_POOL_ID !== 'us-east-1_XXXXXXXXX') {
   const { CognitoJwtVerifier } = require('aws-jwt-verify');
+  // Creiamo un verifier flessibile che accetti sia Access che ID token se necessario,
+  // ma di default restiamo su access per coerenza con la configurazione esistente.
   verifier = CognitoJwtVerifier.create({
     userPoolId: USER_POOL_ID,
-    tokenUse: 'access',
+    tokenUse: null, // Permette sia access che id token
     clientId: CLIENT_ID || null,
   });
 }

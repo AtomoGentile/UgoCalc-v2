@@ -6,6 +6,7 @@ import com.ugocalc.app.domain.inference.model.ConfidenceInterval
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.FlagType
 import com.ugocalc.app.domain.inference.model.PerceivedFood
+import com.ugocalc.app.domain.inference.model.PlausibilityLimits
 import com.ugocalc.app.domain.inference.model.RawMeasurements
 import com.ugocalc.app.domain.inference.model.SceneGraph
 import com.ugocalc.app.domain.inference.model.WeightEstimate
@@ -107,6 +108,57 @@ class ConsistencyVerifierTest {
         assertEquals("pane", ambigui.single().nomeAlimento)
     }
 
+    @Test
+    fun `common sense check compares pesoCrudoG rather than cooked pesoG against raw limits`() {
+        // Pasta cotta 225g (= 90g cruda con resa 2.5x) e limiti AI a crudo [70, 120]g:
+        // non deve scattare alcun falso positivo su "buon senso (intuizione AI)".
+        val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = emptyList(),
+            alimenti = listOf(
+                food(
+                    nome = "pasta penne",
+                    misure = RawMeasurements(frazionePiatto = 0.5),
+                    limitiBuonSenso = PlausibilityLimits(pesoMinG = 70.0, pesoMaxG = 120.0),
+                ),
+            ),
+        )
+        val estimates = listOf(
+            estimate("pasta penne", EstimationStrategy.DISTESA_SUL_PIATTO, pesoG = 225.0, pesoCrudoG = 90.0),
+        )
+        val report = verifier.verify(scene, estimates, scale)
+
+        assertTrue(report.controlli.single { it.nome == "buon senso (intuizione AI)" }.superato)
+        assertTrue(report.flaggati.none { it.motivo.contains("intuizione AI") })
+        assertFalse(report.richiedeArbitrato)
+    }
+
+    @Test
+    fun `raw weight outside common sense limits flags intuition violation with raw grams`() {
+        val scene = SceneGraph(
+            schemaVersion = SceneGraph.SCHEMA_VERSION,
+            ancore = emptyList(),
+            alimenti = listOf(
+                food(
+                    nome = "pasta penne",
+                    misure = RawMeasurements(frazionePiatto = 0.5),
+                    limitiBuonSenso = PlausibilityLimits(pesoMinG = 70.0, pesoMaxG = 120.0),
+                ),
+            ),
+        )
+        val estimates = listOf(
+            estimate("pasta penne", EstimationStrategy.DISTESA_SUL_PIATTO, pesoG = 450.0, pesoCrudoG = 180.0),
+        )
+        val report = verifier.verify(scene, estimates, scale)
+
+        val check = report.controlli.single { it.nome == "buon senso (intuizione AI)" }
+        assertFalse(check.superato)
+        assertTrue(check.dettaglio.contains("180g crudo"))
+        val flag = report.flaggati.single { it.motivo.contains("intuizione AI") }
+        assertEquals(FlagType.VINCOLO_FISICO, flag.tipo)
+        assertTrue(flag.motivo.contains("180g crudo"))
+    }
+
     // --- helper ------------------------------------------------------------------------------
 
     private fun food(
@@ -114,19 +166,26 @@ class ConsistencyVerifierTest {
         misure: RawMeasurements = RawMeasurements(),
         alternative: List<String> = emptyList(),
         confidenza: Confidence = Confidence.ALTO,
+        limitiBuonSenso: PlausibilityLimits? = null,
     ) = PerceivedFood(
         nome = nome,
         alternativeIdentificazione = alternative,
         misureGrezze = misure,
+        limitiBuonSenso = limitiBuonSenso,
         confidenza = confidenza,
     )
 
-    private fun estimate(nome: String, strategia: EstimationStrategy, pesoG: Double) = WeightEstimate(
+    private fun estimate(
+        nome: String,
+        strategia: EstimationStrategy,
+        pesoG: Double,
+        pesoCrudoG: Double = pesoG,
+    ) = WeightEstimate(
         nome = nome,
         strategia = strategia,
         pesoG = pesoG,
-        pesoCrudoG = pesoG,
-        intervallo = ConfidenceInterval(minG = pesoG * 0.8, maxG = pesoG * 1.2),
+        pesoCrudoG = pesoCrudoG,
+        intervallo = ConfidenceInterval(minG = pesoCrudoG * 0.8, maxG = pesoCrudoG * 1.2),
         catenaCalcolo = CalculationChain(formula = "", valori = emptyMap(), fonti = emptyList(), sintesi = ""),
         confidenza = ConfidenceScore(65),
     )
