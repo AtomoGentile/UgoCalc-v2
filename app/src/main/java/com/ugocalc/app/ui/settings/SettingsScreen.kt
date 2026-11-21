@@ -31,6 +31,7 @@ import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -109,6 +110,7 @@ fun SettingsScreen(
     onOpenAccount: () -> Unit = {},
     onOpenCostManagement: () -> Unit = {},
     onOpenBiasEvolution: () -> Unit = {},
+    onOpenGlycemicProfile: () -> Unit = {},
     showBackButton: Boolean = true,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -158,6 +160,15 @@ fun SettingsScreen(
         SettingsSectionData(
             title = "Preferenze",
             items = listOf(
+                SettingsMenuItemData(
+                    id = "glycemic_profile",
+                    icon = Icons.Outlined.ShowChart,
+                    title = "Profilo Glicemico",
+                    subtitle = "${settings.toGlycemicProfile().preset.label} · Basale ${settings.baselineGlucoseMgDl} mg/dL",
+                    badgeText = "≤${settings.targetPostPrandialMaxMgDl}",
+                    badgePositive = true,
+                    onClick = onOpenGlycemicProfile,
+                ),
                 SettingsMenuItemData(
                     id = "favorites",
                     icon = Icons.Outlined.StarOutline,

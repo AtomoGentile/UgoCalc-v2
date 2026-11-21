@@ -2,6 +2,8 @@ package com.ugocalc.app.ui.manualentry
 
 import androidx.lifecycle.ViewModel
 import com.ugocalc.app.data.repository.FoodSearchResult
+import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
+import com.ugocalc.app.domain.glycemic.ResolvedGi
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.Confidence
@@ -33,8 +35,17 @@ data class ManualFoodRow(
     val previewChoG: Double
         get() = (gramsOrNull ?: 0.0) * entry.choPer100g / 100.0
 
+    val previewProteineG: Double
+        get() = (gramsOrNull ?: 0.0) * entry.proteinePer100g / 100.0
+
     val previewGrassiG: Double
         get() = (gramsOrNull ?: 0.0) * entry.grassiPer100g / 100.0
+
+    val resolvedGi: ResolvedGi
+        get() = GlycemicIndexResolver.resolve(entry)
+
+    val previewGlycemicLoad: Double
+        get() = resolvedGi.gi * previewChoG / 100.0
 }
 
 data class ManualFoodEntryUiState(
@@ -46,7 +57,9 @@ data class ManualFoodEntryUiState(
 ) {
     val canProceed: Boolean get() = rows.isNotEmpty() && rows.all { it.gramsOrNull != null }
     val previewChoG: Double get() = rows.sumOf { it.previewChoG }
+    val previewProteineG: Double get() = rows.sumOf { it.previewProteineG }
     val previewGrassiG: Double get() = rows.sumOf { it.previewGrassiG }
+    val previewGlycemicLoad: Double get() = rows.sumOf { it.previewGlycemicLoad }
 }
 
 /**

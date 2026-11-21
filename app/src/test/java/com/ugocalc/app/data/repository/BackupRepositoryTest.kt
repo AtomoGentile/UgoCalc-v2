@@ -93,6 +93,11 @@ private class FakeNormalizedFoodEntryDao : NormalizedFoodEntryDao {
     override suspend fun maxRowOrder(tableId: Long): Int? = rows.filter { it.tableId == tableId }.maxOfOrNull { it.rowOrder }
     override suspend fun getById(id: Long): NormalizedFoodEntryEntity? = rows.firstOrNull { it.id == id }
     override suspend fun searchByName(query: String): List<NormalizedFoodEntryEntity> = rows.filter { it.nome.contains(query) }
+    override suspend fun updateStarterNutrition(id: Long, proteinePer100g: Double, indiceGlicemico: Int?) {
+        rows.indexOfFirst { it.id == id }.takeIf { it >= 0 }?.let {
+            rows[it] = rows[it].copy(proteinePer100g = proteinePer100g, indiceGlicemico = indiceGlicemico)
+        }
+    }
 }
 
 private class BackupFakeBiasCorrectionDao : BiasCorrectionDao {
@@ -229,12 +234,12 @@ class BackupRepositoryTest {
         val biasDao = BackupFakeBiasCorrectionDao()
         val favoriteDao = FakeFavoriteShortcutDao()
 
-        val historyId = historyDao.insert(AnalysisHistoryEntity(foodTitle = "Pasta al pomodoro", analyzedAtEpochMillis = 1000L, totalChoG = 80.0, totalGrassiG = 10.0, modelDisplayNamesJson = "[]", detailsJson = "[]"))
+        val historyId = historyDao.insert(AnalysisHistoryEntity(foodTitle = "Pasta al pomodoro", analyzedAtEpochMillis = 1000L, totalChoG = 80.0, totalGrassiG = 10.0, modelDisplayNamesJson = "[]", detailsJson = "[]", totalProteineG = 18.5, glycemicLoad = 39.2))
         val tableId = tableDao.insert(OfficialTableEntity(displayName = "CREA", fileType = OfficialFileType.PDF, storedFilePath = "/tmp/x.pdf", uploadedAtEpochMillis = 1L, priorityOrder = 0, rawExtractedText = "testo", normalizationStatus = NormalizationStatus.DONE))
-        entryDao.insertAll(listOf(NormalizedFoodEntryEntity(tableId = tableId, nome = "riso", choPer100g = 28.0, grassiPer100g = 0.3, rowOrder = 0)))
+        entryDao.insertAll(listOf(NormalizedFoodEntryEntity(tableId = tableId, nome = "riso", choPer100g = 28.0, grassiPer100g = 0.3, rowOrder = 0, proteinePer100g = 2.4, indiceGlicemico = 73)))
         biasDao.upsert(BiasCorrectionEntity("DISTESA_SUL_PIATTO", "claude-opus-4.8", "PASTA", 1.2, 5, 1000L))
         favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = historyId, label = "Pasta preferita", sortOrder = 0))
-        favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = null, label = "Combo standard", sortOrder = 1, comboGrams = 100.0, comboChoPer100g = 20.0, comboGrassiPer100g = 1.0))
+        favoriteDao.insert(FavoriteShortcutEntity(historyEntryId = null, label = "Combo standard", sortOrder = 1, comboGrams = 100.0, comboChoPer100g = 20.0, comboGrassiPer100g = 1.0, comboProteinePer100g = 8.0, comboIndiceGlicemico = 50))
 
         val exportRepo = repository(historyDao, tableDao, entryDao, biasDao, favoriteDao)
         val archiveJson = exportRepo.exportAll()
@@ -257,15 +262,21 @@ class BackupRepositoryTest {
         importRepo.applyImport(archiveJson)
 
         assertEquals("Pasta al pomodoro", freshHistoryDao.rows.single().foodTitle)
+        assertEquals(18.5, freshHistoryDao.rows.single().totalProteineG, 1e-6)
+        assertEquals(39.2, freshHistoryDao.rows.single().glycemicLoad, 1e-6)
         val newTable = freshTableDao.rows.single()
         assertEquals("", newTable.storedFilePath) // documento originale mai esportato
         assertEquals("riso", freshEntryDao.rows.single().nome)
+        assertEquals(2.4, freshEntryDao.rows.single().proteinePer100g, 1e-6)
+        assertEquals(73, freshEntryDao.rows.single().indiceGlicemico)
         assertEquals(newTable.id, freshEntryDao.rows.single().tableId) // rimappato alla nuova tabella
         assertEquals(1.2, freshBiasDao.saved.values.single().factor, 1e-9)
         val linkedFavorite = freshFavoriteDao.rows.single { it.label == "Pasta preferita" }
         assertEquals(freshHistoryDao.rows.single().id, linkedFavorite.historyEntryId) // rimappato alla nuova riga di cronologia
         val comboFavorite = freshFavoriteDao.rows.single { it.label == "Combo standard" }
         assertNull(comboFavorite.historyEntryId)
+        assertEquals(8.0, comboFavorite.comboProteinePer100g!!, 1e-6)
+        assertEquals(50, comboFavorite.comboIndiceGlicemico)
     }
 
     @Test

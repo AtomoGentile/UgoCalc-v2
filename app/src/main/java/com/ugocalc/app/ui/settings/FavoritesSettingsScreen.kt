@@ -163,12 +163,29 @@ fun FavoritesSettingsScreen(
                                     tint = MaterialTheme.colorScheme.tertiary,
                                     modifier = Modifier.padding(end = 10.dp),
                                 )
-                                Text(
-                                    text = favorite.label,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.weight(1f),
-                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = favorite.label,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        fontWeight = FontWeight.Medium,
+                                    )
+                                    val comboCho = favorite.comboChoPer100g
+                                    val comboGrassi = favorite.comboGrassiPer100g
+                                    if (comboCho != null && comboGrassi != null) {
+                                        val protText = favorite.comboProteinePer100g
+                                            ?.takeIf { it > 0.0 }
+                                            ?.let { " · Prot ${"%.1f".format(it)}g" }
+                                            .orEmpty()
+                                        val giText = favorite.comboIndiceGlicemico
+                                            ?.let { " · IG $it" }
+                                            .orEmpty()
+                                        Text(
+                                            text = "Per 100g: CHO ${"%.1f".format(comboCho)}g$protText · Grassi ${"%.1f".format(comboGrassi)}g$giText",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
                                 IconButton(onClick = { pendingDeleteFavorite = favorite }) {
                                     Icon(
                                         imageVector = Icons.Default.DeleteOutline,
@@ -203,7 +220,9 @@ fun FavoritesSettingsScreen(
                             ListItem(
                                 headlineContent = { Text(entry.foodTitle) },
                                 supportingContent = {
-                                    Text("CHO ${"%.1f".format(entry.totalChoG)}g · Grassi ${"%.1f".format(entry.totalGrassiG)}g")
+                                    val protText = if (entry.totalProteineG > 0.0) " · Prot ${"%.1f".format(entry.totalProteineG)}g" else ""
+                                    val glText = if (entry.glycemicLoad > 0.0) " · GL ${"%.1f".format(entry.glycemicLoad)}" else ""
+                                    Text("CHO ${"%.1f".format(entry.totalChoG)}g$protText · Grassi ${"%.1f".format(entry.totalGrassiG)}g$glText")
                                 },
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -227,8 +246,9 @@ fun FavoritesSettingsScreen(
     if (showComboDialog) {
         AddComboFavoriteDialog(
             onDismiss = { showComboDialog = false },
-            onConfirm = { foodName, grams, cho, grassi ->
-                viewModel.addComboFavorite(foodName, grams, cho, grassi)
+            onConfirm = { _, _, _, _ -> },
+            onConfirmFull = { foodName, grams, cho, grassi, prot, gi ->
+                viewModel.addComboFavorite(foodName, grams, cho, grassi, prot, gi)
                 showComboDialog = false
             },
         )

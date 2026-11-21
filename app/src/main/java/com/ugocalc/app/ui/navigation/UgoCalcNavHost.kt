@@ -74,6 +74,7 @@ import com.ugocalc.app.ui.settings.ChangelogScreen
 import com.ugocalc.app.ui.settings.ConfidenceSettingsScreen
 import com.ugocalc.app.ui.settings.CostManagementScreen
 import com.ugocalc.app.ui.settings.FavoritesSettingsScreen
+import com.ugocalc.app.ui.settings.GlycemicProfileSettingsScreen
 import com.ugocalc.app.ui.settings.HistoryChartSettingsScreen
 import com.ugocalc.app.ui.settings.NormalizationModelSettingsScreen
 import com.ugocalc.app.ui.settings.PermissionsSettingsScreen
@@ -206,6 +207,7 @@ fun UgoCalcNavHost(
                     onFavoriteReadyForResult = { navController.navigate(Routes.FINAL_RESULT) },
                     onFavoriteNeedsQuantity = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
                     onRepeatHistoryMeal = { navController.navigate(Routes.MANUAL_FOOD_ENTRY) },
+                    onOpenGlycemicSettings = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
                 )
             }
 
@@ -298,6 +300,7 @@ fun UgoCalcNavHost(
                     },
                     onRegisterGroundTruth = { navController.navigate(Routes.UNIFIED_GROUND_TRUTH_ENTRY) },
                     onRegisterBenchmarkGroundTruth = { navController.navigate(Routes.UNIFIED_GROUND_TRUTH_ENTRY) },
+                    onOpenGlycemicSettings = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
                 )
             }
 
@@ -305,6 +308,7 @@ fun UgoCalcNavHost(
                 HistoryScreen(
                     onBack = safeBack,
                     onOpenEntry = { id -> navController.navigate(Routes.historyDetailRoute(id)) },
+                    onOpenGlycemicSettings = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
                     showBackButton = false,
                 )
             }
@@ -316,6 +320,7 @@ fun UgoCalcNavHost(
                 HistoryDetailScreen(
                     onBack = safeBack,
                     onOpenV2Details = { recordId -> navController.navigate(Routes.v2ResultRoute(recordId)) },
+                    onOpenGlycemicSettings = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
                 )
             }
 
@@ -390,6 +395,7 @@ fun UgoCalcNavHost(
             composable(Routes.SETTINGS_NORMALIZATION_MODEL) { NormalizationModelSettingsScreen(onBack = safeBack) }
             composable(Routes.SETTINGS_SHADOW_MODEL) { ShadowModelSettingsScreen(onBack = safeBack) }
             composable(Routes.SETTINGS_CONFIDENCE) { ConfidenceSettingsScreen(onBack = safeBack) }
+            composable(Routes.GLYCEMIC_PROFILE_SETTINGS) { GlycemicProfileSettingsScreen(onBack = safeBack) }
 
             composable(Routes.SETTINGS) {
                 SettingsScreen(
@@ -411,6 +417,7 @@ fun UgoCalcNavHost(
                     onOpenAccount = { navController.navigate(Routes.SETTINGS_ACCOUNT) },
                     onOpenCostManagement = { navController.navigate(Routes.SETTINGS_COST_MANAGEMENT) },
                     onOpenBiasEvolution = { navController.navigate(Routes.BIAS_EVOLUTION) },
+                    onOpenGlycemicProfile = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
                     showBackButton = false,
                 )
             }

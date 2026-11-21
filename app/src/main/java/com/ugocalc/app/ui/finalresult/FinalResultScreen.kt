@@ -67,6 +67,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
@@ -77,6 +78,7 @@ import com.ugocalc.app.ui.components.AnimatedMetricValue
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.FoodSearchPicker
+import com.ugocalc.app.ui.components.GlycemicCurveCard
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.MacronutrientPieChart
 import com.ugocalc.app.ui.components.StatusBanner
@@ -87,6 +89,7 @@ import com.ugocalc.app.ui.components.shareText
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import com.ugocalc.app.util.parsePositiveLocaleDoubleOrNull
+import java.util.Locale
 import kotlin.math.roundToInt
 
 private val QUICK_PORTIONS_G = listOf(50, 80, 100, 150, 200)
@@ -99,6 +102,7 @@ fun FinalResultScreen(
     onSaved: () -> Unit,
     onRegisterGroundTruth: () -> Unit,
     onRegisterBenchmarkGroundTruth: () -> Unit,
+    onOpenGlycemicSettings: () -> Unit = {},
     viewModel: FinalResultViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -133,6 +137,9 @@ fun FinalResultScreen(
                                     totalChoG = shareTotals.totalChoG,
                                     totalGrassiG = shareTotals.totalGrassiG,
                                     lines = shareTotals.lines,
+                                    totalProteineG = shareTotals.totalProteineG,
+                                    estimatedKcal = shareTotals.estimatedKcal.roundToInt(),
+                                    glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad,
                                 )
                                 shareText(context, mealTitle, summary)
                             },
@@ -215,6 +222,17 @@ fun FinalResultScreen(
                         isSaving = uiState.isSaving,
                         hasSavedSnapshot = uiState.hasSavedSnapshot,
                     )
+                }
+
+                uiState.glycemicSimulation?.let { simulation ->
+                    item(key = "__glycemic_curve_card__") {
+                        GlycemicCurveCard(
+                            simulation = simulation,
+                            targetMaxMgDl = uiState.targetPostPrandialMaxMgDl,
+                            onAdjustBaseline = viewModel::adjustBaselineBy,
+                            onOpenGlycemicSettings = onOpenGlycemicSettings,
+                        )
+                    }
                 }
 
                 if (totals.excludedCount > 0) {
@@ -455,7 +473,7 @@ private fun HeroNutritionCard(
     isSaving: Boolean,
     hasSavedSnapshot: Boolean,
 ) {
-    val estimatedKcal = (totals.totalChoG * 4.0 + totals.totalGrassiG * 9.0).roundToInt()
+    val estimatedKcal = totals.estimatedKcal.roundToInt()
 
     UgoCard(
         modifier = Modifier.fillMaxWidth(),
@@ -500,10 +518,10 @@ private fun HeroNutritionCard(
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             AnimatedMacroMetricTile(
-                label = "CHO totali",
+                label = "CHO",
                 targetValue = totals.totalChoG.toFloat(),
                 decimals = 1,
                 unit = "g",
@@ -511,7 +529,15 @@ private fun HeroNutritionCard(
                 modifier = Modifier.weight(1f),
             )
             AnimatedMacroMetricTile(
-                label = "Grassi totali",
+                label = "Proteine",
+                targetValue = totals.totalProteineG.toFloat(),
+                decimals = 1,
+                unit = "g",
+                accentColor = UgoSemanticColors.protein,
+                modifier = Modifier.weight(1f),
+            )
+            AnimatedMacroMetricTile(
+                label = "Grassi",
                 targetValue = totals.totalGrassiG.toFloat(),
                 decimals = 1,
                 unit = "g",
@@ -552,21 +578,25 @@ private fun HeroNutritionCard(
                     )
                 }
             }
+            if (totals.fpuCount >= 0.5) {
+                MacroPill(
+                    label = "FPU",
+                    value = "%.1f".format(Locale.ITALIAN, totals.fpuCount),
+                    containerColor = UgoSemanticColors.proteinContainer,
+                    contentColor = UgoSemanticColors.onProteinContainer,
+                )
+            }
         }
-        Text(
-            text = "Stima calcolata solo da CHO e Grassi (proteine non incluse).",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
 
         Spacer(Modifier.height(14.dp))
 
         MacronutrientPieChart(
             choPercent = totals.choPercentOfMacros,
             grassiPercent = totals.grassiPercentOfMacros,
+            proteinePercent = totals.proteinePercentOfMacros,
             choGrams = totals.totalChoG,
             grassiGrams = totals.totalGrassiG,
+            proteineGrams = totals.totalProteineG,
         )
     }
 }
@@ -706,11 +736,27 @@ private fun FoodLineCard(
                     contentColor = UgoSemanticColors.onChoContainer,
                 )
                 MacroPill(
+                    label = "Prot",
+                    value = "${"%.1f".format(line.proteineContributionG)} g",
+                    containerColor = UgoSemanticColors.proteinContainer,
+                    contentColor = UgoSemanticColors.onProteinContainer,
+                )
+                MacroPill(
                     label = "Grassi",
                     value = "${"%.1f".format(line.grassiContributionG)} g",
                     containerColor = UgoSemanticColors.fatContainer,
                     contentColor = UgoSemanticColors.onFatContainer,
                 )
+                line.tableEntry?.takeIf { line.choContributionG > 0.0 }?.let { entry ->
+                    val resolvedGi = GlycemicIndexResolver.resolve(entry)
+                    val lineGl = resolvedGi.gi * line.choContributionG / 100.0
+                    MacroPill(
+                        label = "GL",
+                        value = "%.1f".format(Locale.ITALIAN, lineGl),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
             Spacer(Modifier.height(6.dp))
             Text(
@@ -870,12 +916,28 @@ private fun OnlineResearchResultCard(
                     containerColor = UgoSemanticColors.choContainer,
                     contentColor = UgoSemanticColors.onChoContainer,
                 )
+                result.proteinePer100g?.let { prot ->
+                    MacroPill(
+                        label = "Prot/100g",
+                        value = "${"%.1f".format(prot)} g",
+                        containerColor = UgoSemanticColors.proteinContainer,
+                        contentColor = UgoSemanticColors.onProteinContainer,
+                    )
+                }
                 MacroPill(
                     label = "Grassi/100g",
                     value = "${"%.1f".format(result.grassiPer100g)} g",
                     containerColor = UgoSemanticColors.fatContainer,
                     contentColor = UgoSemanticColors.onFatContainer,
                 )
+                result.indiceGlicemico?.let { gi ->
+                    MacroPill(
+                        label = "IG",
+                        value = "$gi",
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
             if (result.fonteNome.isNotBlank()) {
                 Text(

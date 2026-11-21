@@ -15,6 +15,9 @@ import com.ugocalc.app.data.repository.PhysicalDataRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
+import com.ugocalc.app.domain.glycemic.GlycemicProfile
+import com.ugocalc.app.domain.glycemic.GlycemicSimulationResult
 import com.ugocalc.app.domain.inference.m2.FoodCategoryRouter
 import com.ugocalc.app.domain.inference.m2.StrategyRouter
 import com.ugocalc.app.domain.inference.model.SessionMode
@@ -37,6 +40,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
@@ -72,6 +76,9 @@ data class FinalResultUiState(
     val showGroundTruthCta: Boolean = false,
     /** Stessa scorciatoia per il benchmark V1/V2 (§13 punto 5). */
     val showBenchmarkGroundTruthCta: Boolean = false,
+    val glycemicSimulation: GlycemicSimulationResult? = null,
+    val targetPostPrandialMaxMgDl: Double = 140.0,
+    val baselineOverrideMgDl: Int? = null,
 )
 
 @HiltViewModel
@@ -93,6 +100,7 @@ class FinalResultViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FinalResultUiState())
     val uiState: StateFlow<FinalResultUiState> = _uiState
 
+    private val baselineOverrideFlow = MutableStateFlow<Int?>(null)
     private val saveMutex = Mutex()
     private var autoSaveJob: Job? = null
     private var currentHistoryId: Long? = null
@@ -113,6 +121,25 @@ class FinalResultViewModel @Inject constructor(
                     )
                 }
                 autoSave()
+            }
+            .launchIn(viewModelScope)
+
+        combine(
+            sessionStore.session.map { it.totals }.distinctUntilChanged(),
+            settingsRepository.settings.map { it.toGlycemicProfile() }.distinctUntilChanged(),
+            baselineOverrideFlow,
+        ) { totals, profile, overrideMgDl ->
+            val sim = simulateMealWithOverride(totals, profile, overrideMgDl)
+            Triple(sim, profile.targetPostPrandialMaxMgDl, overrideMgDl)
+        }
+            .onEach { (simulation, targetMax, overrideMgDl) ->
+                _uiState.update {
+                    it.copy(
+                        glycemicSimulation = simulation,
+                        targetPostPrandialMaxMgDl = targetMax,
+                        baselineOverrideMgDl = overrideMgDl,
+                    )
+                }
             }
             .launchIn(viewModelScope)
 
@@ -283,6 +310,14 @@ class FinalResultViewModel @Inject constructor(
         }
     }
 
+    /** Regola temporaneamente la glicemia pre-pasto (mg/dL) per la simulazione corrente (clamped 65..180). */
+    fun adjustBaselineBy(delta: Int) {
+        val currentBaseline = _uiState.value.baselineOverrideMgDl
+            ?: _uiState.value.glycemicSimulation?.baselineMgDl?.toInt()
+            ?: 90
+        baselineOverrideFlow.value = (currentBaseline + delta).coerceIn(65, 180)
+    }
+
     /**
      * Regola rapidamente il peso di una riga tramite stepper (+/- grammi), mantenendo almeno 5 g
      * e ricalcolando subito i totali e il salvataggio automatico.
@@ -426,6 +461,8 @@ class FinalResultViewModel @Inject constructor(
                                 alimento = best.nome,
                                 choPer100g = best.choPer100g,
                                 grassiPer100g = best.grassiPer100g,
+                                proteinePer100g = best.proteinePer100g,
+                                indiceGlicemico = best.indiceGlicemico,
                                 fonteNome = "OpenFoodFacts",
                                 fonteUrl = "https://world.openfoodfacts.org",
                             )
@@ -466,8 +503,15 @@ class FinalResultViewModel @Inject constructor(
         val result = state.result
         val cho = result.choPer100g ?: return
         val grassi = result.grassiPer100g ?: return
+        val proteine = result.proteinePer100g ?: 0.0
         viewModelScope.launch {
-            val entry = tableRepository.addOnlineResearchEntry(result.alimento, cho, grassi)
+            val entry = tableRepository.addOnlineResearchEntry(
+                nome = result.alimento,
+                choPer100g = cho,
+                grassiPer100g = grassi,
+                proteinePer100g = proteine,
+                indiceGlicemico = result.indiceGlicemico,
+            )
             applyManualMatch(lineIndex, entry)
             dismissOnlineResult(lineIndex)
         }
@@ -536,4 +580,18 @@ internal fun adjustLineWeight(
         recognizedFood = original.recognizedFood.copy(pesoStimatoG = nextGrams),
     )
     return lines.toMutableList().apply { this[lineIndex] = updatedLine }
+}
+
+internal fun simulateMealWithOverride(
+    totals: AnalysisTotals?,
+    profile: GlycemicProfile,
+    baselineOverrideMgDl: Int?,
+): GlycemicSimulationResult? {
+    val lines = totals?.lines ?: return null
+    val effectiveProfile = if (baselineOverrideMgDl != null) {
+        profile.copy(baselineGlucoseMgDl = baselineOverrideMgDl.toDouble())
+    } else {
+        profile
+    }
+    return GlycemicCurveCalculator.simulateMeal(lines, effectiveProfile)
 }

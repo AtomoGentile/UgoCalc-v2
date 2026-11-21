@@ -33,6 +33,8 @@ data class OnlineFoodResearchResult(
     @SerialName("fonte_nome") val fonteNome: String = "",
     @SerialName("fonte_url") val fonteUrl: String = "",
     @SerialName("motivo_errore") val motivoErrore: String = "",
+    @SerialName("proteine_per_100g") val proteinePer100g: Double? = null,
+    @SerialName("indice_glicemico") val indiceGlicemico: Int? = null,
 ) {
     /** Solo con affidabilità sicura o buona il dato va proposto per l'aggiunta al database. */
     val haDatiUtilizzabili: Boolean get() = affidabilita != OnlineResearchReliability.ERRORE_DATI && choPer100g != null && grassiPer100g != null

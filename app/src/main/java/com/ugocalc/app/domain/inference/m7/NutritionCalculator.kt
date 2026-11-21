@@ -28,17 +28,19 @@ object NutritionCalculator {
                 grassiG = entry?.let { it.grassiPer100g * pesoPerCalcolo / 100.0 },
                 spiegazione = estimate.catenaCalcolo.sintesi,
                 escluso = entry == null,
+                proteineG = entry?.let { it.proteinePer100g * pesoPerCalcolo / 100.0 },
             )
         }
         return NutritionReport(
             righe = righe,
             choTotaleG = righe.sumOf { it.choG ?: 0.0 },
             grassiTotaleG = righe.sumOf { it.grassiG ?: 0.0 },
+            proteineTotaleG = righe.sumOf { it.proteineG ?: 0.0 },
         )
     }
 }
 
-/** Contributo CHO/grassi di UN alimento più la sua spiegazione (§5 M7, §7 catena di calcolo). */
+/** Contributo CHO/grassi/proteine di UN alimento più la sua spiegazione (§5 M7, §7 catena di calcolo). */
 @Serializable
 data class FoodNutritionLine(
     val nome: String,
@@ -48,6 +50,7 @@ data class FoodNutritionLine(
     val spiegazione: String,
     /** Vero se l'alimento non ha un abbinamento nutrizionale: escluso dal totale, mai stimato a zero in silenzio. */
     val escluso: Boolean,
+    val proteineG: Double? = null,
 )
 
 /** Output finale di M7: righe per alimento e totali di sessione (§5 M7). */
@@ -56,4 +59,5 @@ data class NutritionReport(
     val righe: List<FoodNutritionLine>,
     val choTotaleG: Double,
     val grassiTotaleG: Double,
+    val proteineTotaleG: Double = 0.0,
 )

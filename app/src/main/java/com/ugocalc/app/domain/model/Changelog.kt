@@ -40,6 +40,16 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.2.0",
+            categories = listOf("Proteine", "Curva Glicemica", "Carico Glicemico"),
+            highlights = listOf(
+                "Conteggio Proteine completo: tracciamento completo delle proteine (g/100g e totali pasto) in database CREA, ricerca online, scanner barcode, inserimento manuale, editor tabelle, preferiti, cronologia, grafici e condivisione (con kcal reali 4·CHO + 9·Grassi + 4·Proteine).",
+                "Indice e Carico Glicemico (IG / GL): supporto all'Indice Glicemico con stima automatica per categoria quando assente e badge Carico Glicemico colorati (Basso, Medio, Alto) in risultati, cronologia e Home.",
+                "Simulatore Curva Glicemica Interattiva: nuovo grafico 0–4h con fascia target, picco, rientro, curva secondaria FPU per grassi/proteine, scrub tattile sul grafico, stepper rapido glicemia pre-pasto (-10/+10 mg/dL) e timeline giornaliera multi-pasto.",
+                "Profilo Glicemico personalizzabile: nuova schermata Impostazioni > Preferenze > Profilo Glicemico con preset dedicati, cursori sensibilità/target e anteprima live su un pasto italiano di riferimento.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.1.0",
             categories = listOf("CameraX Pro", "Telemetria AI", "UX Polish"),
             highlights = listOf(

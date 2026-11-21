@@ -2,6 +2,7 @@ package com.ugocalc.app.data.repository
 
 import com.ugocalc.app.data.local.db.dao.AnalysisHistoryDao
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AnalysisTotals
 import kotlinx.coroutines.flow.Flow
@@ -40,6 +41,8 @@ class HistoryRepository @Inject constructor(
             detailsJson = json.encodeToString(totals.lines),
             sessionId = sessionId,
             sessionMode = sessionMode.name,
+            totalProteineG = totals.totalProteineG,
+            glycemicLoad = GlycemicCurveCalculator.computeTotalGlycemicLoad(totals.lines),
         )
         return historyDao.insert(entity)
     }

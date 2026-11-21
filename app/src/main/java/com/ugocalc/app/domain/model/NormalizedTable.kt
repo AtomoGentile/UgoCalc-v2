@@ -9,6 +9,8 @@ data class NormalizedFoodEntry(
     val nome: String,
     @SerialName("cho_per_100g") val choPer100g: Double,
     @SerialName("grassi_per_100g") val grassiPer100g: Double,
+    @SerialName("proteine_per_100g") val proteinePer100g: Double = 0.0,
+    @SerialName("indice_glicemico") val indiceGlicemico: Int? = null,
 )
 
 /** Riga scartata durante la normalizzazione, da mostrare come avviso in fase di review (§4). */

@@ -48,7 +48,7 @@ import com.ugocalc.app.data.local.db.entity.V2AnalysisRecordEntity
         CloudSyncQueueEntity::class,
         CostTransactionEntity::class,
     ],
-    version = 25,
+    version = 26,
     exportSchema = true,
 )
 @TypeConverters(Converters::class)

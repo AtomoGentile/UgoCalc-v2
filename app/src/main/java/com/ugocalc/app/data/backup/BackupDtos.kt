@@ -24,7 +24,7 @@ data class UgoCalcBackupArchive(
 ) {
     companion object {
         /** Versione corrente del formato di backup (§17), indipendente dallo schema del database Room. */
-        const val SCHEMA_VERSION = 5
+        const val SCHEMA_VERSION = 6
     }
 }
 
@@ -36,6 +36,8 @@ data class HistoryEntryDto(
     val totalGrassiG: Double,
     val modelDisplayNamesJson: String,
     val detailsJson: String,
+    val totalProteineG: Double = 0.0,
+    val glycemicLoad: Double = 0.0,
 )
 
 @Serializable
@@ -94,6 +96,8 @@ data class FoodEntryDto(
     val grassiPer100g: Double,
     val rowOrder: Int,
     val isManuallyEdited: Boolean,
+    val proteinePer100g: Double = 0.0,
+    val indiceGlicemico: Int? = null,
 )
 
 @Serializable
@@ -121,6 +125,8 @@ data class FavoriteDto(
     val comboGrams: Double?,
     val comboChoPer100g: Double?,
     val comboGrassiPer100g: Double?,
+    val comboProteinePer100g: Double? = null,
+    val comboIndiceGlicemico: Int? = null,
 )
 
 @Serializable

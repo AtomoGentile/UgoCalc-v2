@@ -2,6 +2,18 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.2.0] - 2026-11-21
+
+### Added
+- **Protein Counting (`Proteine/100g`)**: Full end-to-end protein tracking across the CREA starter database, Room schema (migration 25 → 26), OpenFoodFacts barcode lookup, AI online research, manual food entry, table editor, favorites, meal totals, history, charts, and share summaries (including true 3-macro `4*CHO + 9*Grassi + 4*Prot` kcal calculation).
+- **Glycemic Index & Glycemic Load Engine**: Added `indiceGlicemico` (`IG 0–100`) across food models, CREA starter foods, AI online research, and table editor, with automatic category-based GI estimation fallback and color-coded Glycemic Load (`GL` Basso/Medio/Alto) badges.
+- **Interactive Glycemic Curve Simulator (`GlycemicCurveCard` & `DailyGlycemicTimelineCard`)**: Added a physiological post-prandial blood glucose simulator (0–240 min) with target range band, peak & 2h readouts, FPU delayed fat/protein curve, interactive tap/drag scrub, inline pre-meal glycemia stepper (`-10`/`+10 mg/dL`), expandable per-food GI/GL breakdown, and daily multi-meal glycemic timeline on Home and History.
+- **Glycemic Profile Settings (`Profilo Glicemico`)**: Added dedicated settings screen with clinical presets (`Standard`, `Sensibilità moderata`, `Diabete / Impatto pieno`), baseline/sensitivity/target sliders, and a live interactive curve preview for a sample Italian meal.
+
+### Changed
+- **3-Macro Visualization Suite**: Added Cobalt Blue semantic protein tokens (`UgoSemanticColors.protein`), upgraded `MacroProgressRing` and `MacronutrientPieChart` to 3 segments (CHO, Proteine, Grassi), and added the 3rd Protein series to `HistoryColumnChart` and `HistoryLineChart`.
+- **CI Artifact Versioning**: Updated `.github/workflows/android-ci.yml` debug APK artifact name to `UgoCalc-4.2.0-debug-apk`.
+
 ## [4.1.0] - 2026-11-20
 
 ### Added

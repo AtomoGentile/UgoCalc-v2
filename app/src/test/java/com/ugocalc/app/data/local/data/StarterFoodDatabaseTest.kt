@@ -28,11 +28,17 @@ class StarterFoodDatabaseTest {
 
             assertTrue("CHO must be finite for '${entry.nome}'", entry.choPer100g.isFinite())
             assertTrue("Grassi must be finite for '${entry.nome}'", entry.grassiPer100g.isFinite())
+            assertTrue("Proteine must be finite for '${entry.nome}'", entry.proteinePer100g.isFinite())
             assertTrue("CHO must be in 0..100 for '${entry.nome}'", entry.choPer100g in 0.0..100.0)
             assertTrue("Grassi must be in 0..100 for '${entry.nome}'", entry.grassiPer100g in 0.0..100.0)
+            assertTrue("Proteine must be in 0..100 for '${entry.nome}'", entry.proteinePer100g in 0.0..100.0)
             assertTrue(
-                "CHO + Grassi cannot exceed 100g per 100g for '${entry.nome}' (${entry.choPer100g} + ${entry.grassiPer100g})",
-                entry.choPer100g + entry.grassiPer100g <= 100.5,
+                "CHO + Grassi + Proteine cannot exceed 100.5g per 100g for '${entry.nome}' (${entry.choPer100g} + ${entry.grassiPer100g} + ${entry.proteinePer100g})",
+                entry.choPer100g + entry.grassiPer100g + entry.proteinePer100g <= 100.5,
+            )
+            assertTrue(
+                "Indice Glicemico must be populated in 0..100 for '${entry.nome}', got ${entry.indiceGlicemico}",
+                entry.indiceGlicemico != null && entry.indiceGlicemico in 0..100,
             )
         }
     }

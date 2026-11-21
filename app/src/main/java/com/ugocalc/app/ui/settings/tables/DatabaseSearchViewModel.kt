@@ -14,11 +14,26 @@ class DatabaseSearchViewModel @Inject constructor(
 ) : ViewModel() {
 
     /** Stellina sul risultato di ricerca (§ richiesta utente): preferito da database, peso facoltativo. */
-    fun addComboFavorite(foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double) {
+    fun addComboFavorite(
+        foodName: String,
+        grams: Double?,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ) {
         viewModelScope.launch {
             val nextOrder = favoritesRepository.observeFavorites().first().size
             val label = if (grams != null) "$foodName (${grams.toInt()}g)" else foodName
-            favoritesRepository.addComboFavorite(label, grams, choPer100g, grassiPer100g, nextOrder)
+            favoritesRepository.addComboFavorite(
+                label = label,
+                grams = grams,
+                choPer100g = choPer100g,
+                grassiPer100g = grassiPer100g,
+                sortOrder = nextOrder,
+                proteinePer100g = proteinePer100g,
+                indiceGlicemico = indiceGlicemico,
+            )
         }
     }
 }

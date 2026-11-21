@@ -206,13 +206,20 @@ fun BarcodeScanScreen(
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             MacroMetricTile(
-                                label = "Carboidrati (CHO)",
+                                label = "CHO",
                                 value = "%.1f".format(state.entry.choPer100g),
                                 unit = "g",
                                 accentColor = UgoSemanticColors.cho,
+                                modifier = Modifier.weight(1f),
+                            )
+                            MacroMetricTile(
+                                label = "Proteine",
+                                value = "%.1f".format(state.entry.proteinePer100g),
+                                unit = "g",
+                                accentColor = UgoSemanticColors.protein,
                                 modifier = Modifier.weight(1f),
                             )
                             MacroMetricTile(
@@ -221,6 +228,15 @@ fun BarcodeScanScreen(
                                 unit = "g",
                                 accentColor = UgoSemanticColors.fat,
                                 modifier = Modifier.weight(1f),
+                            )
+                        }
+                        state.entry.indiceGlicemico?.let { gi ->
+                            Spacer(Modifier.height(10.dp))
+                            MacroPill(
+                                label = "IG stimato",
+                                value = "$gi",
+                                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                contentColor = MaterialTheme.colorScheme.onSurface,
                             )
                         }
                     }
@@ -306,12 +322,28 @@ fun BarcodeScanScreen(
                                                 containerColor = UgoSemanticColors.choContainer,
                                                 contentColor = UgoSemanticColors.onChoContainer,
                                             )
+                                            if (entry.proteinePer100g > 0.0) {
+                                                MacroPill(
+                                                    label = "Prot/100g",
+                                                    value = "${"%.1f".format(entry.proteinePer100g)} g",
+                                                    containerColor = UgoSemanticColors.proteinContainer,
+                                                    contentColor = UgoSemanticColors.onProteinContainer,
+                                                )
+                                            }
                                             MacroPill(
                                                 label = "Grassi/100g",
                                                 value = "${"%.1f".format(entry.grassiPer100g)} g",
                                                 containerColor = UgoSemanticColors.fatContainer,
                                                 contentColor = UgoSemanticColors.onFatContainer,
                                             )
+                                            entry.indiceGlicemico?.let { gi ->
+                                                MacroPill(
+                                                    label = "IG",
+                                                    value = "$gi",
+                                                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                                    contentColor = MaterialTheme.colorScheme.onSurface,
+                                                )
+                                            }
                                         }
                                     }
                                     Icon(

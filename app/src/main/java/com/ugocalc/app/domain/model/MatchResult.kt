@@ -36,6 +36,9 @@ data class CalculatedFoodLine(
 
     val grassiContributionG: Double
         get() = if (isExcluded) 0.0 else tableEntry!!.grassiPer100g * recognizedFood.pesoStimatoG / 100.0
+
+    val proteineContributionG: Double
+        get() = if (isExcluded) 0.0 else tableEntry!!.proteinePer100g * recognizedFood.pesoStimatoG / 100.0
 }
 
 data class AnalysisTotals(
@@ -43,13 +46,30 @@ data class AnalysisTotals(
 ) {
     val totalChoG: Double get() = lines.sumOf { it.choContributionG }
     val totalGrassiG: Double get() = lines.sumOf { it.grassiContributionG }
+    val totalProteineG: Double get() = lines.sumOf { it.proteineContributionG }
+    val estimatedKcal: Double get() = totalChoG * 4.0 + totalGrassiG * 9.0 + totalProteineG * 4.0
+    val fpuCount: Double get() = (totalGrassiG * 9.0 + totalProteineG * 4.0) / 100.0
     val excludedCount: Int get() = lines.count { it.isExcluded }
 
     /**
-     * Percentuali CHO/grassi calcolate sulla somma dei due grammi (CHO + grassi = 100%), non sulle
-     * calorie: è una proporzione semplice tra i due macronutrienti tracciati dall'app, utile solo
-     * per il grafico a torta in UI, non un valore nutrizionale standard (es. non considera le proteine).
+     * Percentuali CHO/grassi/proteine calcolate sulla somma dei tre macronutrienti in grammi
+     * (CHO + grassi + proteine = 100%), utili per la ripartizione visiva in UI.
      */
-    val choPercentOfMacros: Double get() = if (totalChoG + totalGrassiG > 0) totalChoG / (totalChoG + totalGrassiG) * 100.0 else 0.0
-    val grassiPercentOfMacros: Double get() = if (totalChoG + totalGrassiG > 0) 100.0 - choPercentOfMacros else 0.0
+    val choPercentOfMacros: Double
+        get() {
+            val total = totalChoG + totalGrassiG + totalProteineG
+            return if (total > 0.0) totalChoG / total * 100.0 else 0.0
+        }
+
+    val grassiPercentOfMacros: Double
+        get() {
+            val total = totalChoG + totalGrassiG + totalProteineG
+            return if (total > 0.0) totalGrassiG / total * 100.0 else 0.0
+        }
+
+    val proteinePercentOfMacros: Double
+        get() {
+            val total = totalChoG + totalGrassiG + totalProteineG
+            return if (total > 0.0) (100.0 - choPercentOfMacros - grassiPercentOfMacros).coerceIn(0.0, 100.0) else 0.0
+        }
 }

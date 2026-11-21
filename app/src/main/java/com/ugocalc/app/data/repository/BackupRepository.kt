@@ -122,6 +122,8 @@ class BackupRepository @Inject constructor(
                     grassiPer100g = it.grassiPer100g,
                     rowOrder = it.rowOrder,
                     isManuallyEdited = it.isManuallyEdited,
+                    proteinePer100g = it.proteinePer100g,
+                    indiceGlicemico = it.indiceGlicemico,
                 )
             }
             TableDto(
@@ -158,6 +160,8 @@ class BackupRepository @Inject constructor(
                 comboGrams = it.comboGrams,
                 comboChoPer100g = it.comboChoPer100g,
                 comboGrassiPer100g = it.comboGrassiPer100g,
+                comboProteinePer100g = it.comboProteinePer100g,
+                comboIndiceGlicemico = it.comboIndiceGlicemico,
             )
         }
 
@@ -171,6 +175,8 @@ class BackupRepository @Inject constructor(
                     totalGrassiG = it.totalGrassiG,
                     modelDisplayNamesJson = it.modelDisplayNamesJson,
                     detailsJson = it.detailsJson,
+                    totalProteineG = it.totalProteineG,
+                    glycemicLoad = it.glycemicLoad,
                 )
             },
             v2Records = v2Records,
@@ -231,6 +237,8 @@ class BackupRepository @Inject constructor(
                     totalGrassiG = entry.totalGrassiG,
                     modelDisplayNamesJson = entry.modelDisplayNamesJson,
                     detailsJson = entry.detailsJson,
+                    totalProteineG = entry.totalProteineG,
+                    glycemicLoad = entry.glycemicLoad,
                 ),
             )
         }
@@ -322,6 +330,8 @@ class BackupRepository @Inject constructor(
                         grassiPer100g = it.grassiPer100g,
                         rowOrder = it.rowOrder,
                         isManuallyEdited = it.isManuallyEdited,
+                        proteinePer100g = it.proteinePer100g,
+                        indiceGlicemico = it.indiceGlicemico,
                     )
                 },
             )
@@ -351,6 +361,8 @@ class BackupRepository @Inject constructor(
                     comboGrams = favoriteDto.comboGrams,
                     comboChoPer100g = favoriteDto.comboChoPer100g,
                     comboGrassiPer100g = favoriteDto.comboGrassiPer100g,
+                    comboProteinePer100g = favoriteDto.comboProteinePer100g,
+                    comboIndiceGlicemico = favoriteDto.comboIndiceGlicemico,
                 ),
             )
         }

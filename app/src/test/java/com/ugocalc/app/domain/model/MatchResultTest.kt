@@ -18,8 +18,8 @@ class MatchResultTest {
             confidenzaAbbinamento = Confidence.ALTO,
         )
 
-    private fun tableEntry(cho: Double, grassi: Double) =
-        NormalizedFoodEntry(nome = "voce", choPer100g = cho, grassiPer100g = grassi)
+    private fun tableEntry(cho: Double, grassi: Double, proteine: Double = 0.0) =
+        NormalizedFoodEntry(nome = "voce", choPer100g = cho, grassiPer100g = grassi, proteinePer100g = proteine)
 
     @Test
     fun `a matched line contributes proportionally to its weight`() {
@@ -65,5 +65,24 @@ class MatchResultTest {
         assertEquals(20.0, totals.totalChoG, 0.001)
         assertEquals(2.0, totals.totalGrassiG, 0.001)
         assertEquals(1, totals.excludedCount)
+    }
+
+    @Test
+    fun `totals compute protein, kcal, FPU and three-way macro percentages summing to 100`() {
+        val pasta = CalculatedFoodLine(recognized("pasta", 100.0), match("pasta"), tableEntry(cho = 70.0, grassi = 2.0, proteine = 12.0))
+        val chicken = CalculatedFoodLine(recognized("pollo", 100.0), match("pollo"), tableEntry(cho = 0.0, grassi = 8.0, proteine = 28.0))
+        val totals = AnalysisTotals(listOf(pasta, chicken))
+
+        assertEquals(70.0, totals.totalChoG, 0.001)
+        assertEquals(10.0, totals.totalGrassiG, 0.001)
+        assertEquals(40.0, totals.totalProteineG, 0.001)
+        assertEquals(70.0 * 4.0 + 10.0 * 9.0 + 40.0 * 4.0, totals.estimatedKcal, 0.001)
+        assertEquals((10.0 * 9.0 + 40.0 * 4.0) / 100.0, totals.fpuCount, 0.001)
+        assertEquals(100.0, totals.choPercentOfMacros + totals.grassiPercentOfMacros + totals.proteinePercentOfMacros, 0.001)
+
+        val emptyTotals = AnalysisTotals(emptyList())
+        assertEquals(0.0, emptyTotals.choPercentOfMacros, 0.001)
+        assertEquals(0.0, emptyTotals.grassiPercentOfMacros, 0.001)
+        assertEquals(0.0, emptyTotals.proteinePercentOfMacros, 0.001)
     }
 }

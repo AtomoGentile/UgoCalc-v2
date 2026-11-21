@@ -7,6 +7,10 @@ import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.domain.glycemic.DailyGlycemicTimeline
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
+import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
+import com.ugocalc.app.domain.glycemic.MealTimelineInput
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
@@ -49,6 +53,9 @@ data class FavoriteDisplay(
     val isPerHundredGrams: Boolean = false,
     /** Peso assoluto del combo, se noto (§ richiesta utente "i preferiti, se toccati, aggiungono direttamente al totale"). */
     val comboGrams: Double? = null,
+    val proteineG: Double = 0.0,
+    val indiceGlicemico: Int? = null,
+    val glycemicLoad: Double? = null,
 )
 
 data class HomeUiState(
@@ -57,7 +64,10 @@ data class HomeUiState(
     val todayMealsCount: Int = 0,
     val weekMealsCount: Int = 0,
     val todayChoG: Double = 0.0,
+    val todayProteineG: Double = 0.0,
     val todayGrassiG: Double = 0.0,
+    val todayGlycemicLoad: Double = 0.0,
+    val todayGlycemicTimeline: DailyGlycemicTimeline? = null,
     val recentMeals: List<AnalysisHistoryEntity> = emptyList(),
     val hasAnyAiKey: Boolean = false,
     val totalFoodCount: Int = 0,
@@ -126,23 +136,44 @@ class HomeViewModel @Inject constructor(
             }
             .launchIn(viewModelScope)
 
-        historyRepository.observeHistory()
-            .onEach { history ->
-                val todayStart = startOfTodayMillis()
-                val weekStart = System.currentTimeMillis() - SEVEN_DAYS_MILLIS
-                val todayMeals = history.filter { it.analyzedAtEpochMillis >= todayStart }
-                val weekCount = history.count { it.analyzedAtEpochMillis >= weekStart }
+        combine(
+            historyRepository.observeHistory(),
+            settingsRepository.settings,
+        ) { history, settings ->
+            val todayStart = startOfTodayMillis()
+            val weekStart = System.currentTimeMillis() - SEVEN_DAYS_MILLIS
+            val todayMeals = history.filter { it.analyzedAtEpochMillis >= todayStart }
+            val weekCount = history.count { it.analyzedAtEpochMillis >= weekStart }
+            val profile = settings.toGlycemicProfile()
+            val todayInputs = todayMeals.map { meal -> buildMealTimelineInput(meal, json) }
+            val timeline = GlycemicCurveCalculator.simulateDayTimeline(todayInputs, profile)
+            val totalGl = timeline?.totalDailyGl ?: todayInputs.sumOf { it.glycemicLoad }
+            TodayHistorySnapshot(
+                todayMealsCount = todayMeals.size,
+                weekMealsCount = weekCount,
+                todayChoG = todayMeals.sumOf { it.totalChoG },
+                todayProteineG = todayMeals.sumOf { it.totalProteineG },
+                todayGrassiG = todayMeals.sumOf { it.totalGrassiG },
+                todayGlycemicLoad = totalGl,
+                todayGlycemicTimeline = timeline,
+                recentMeals = history.take(3),
+            )
+        }
+            .flowOn(Dispatchers.Default)
+            .onEach { snap ->
                 _uiState.update {
                     it.copy(
-                        todayMealsCount = todayMeals.size,
-                        weekMealsCount = weekCount,
-                        todayChoG = todayMeals.sumOf { meal -> meal.totalChoG },
-                        todayGrassiG = todayMeals.sumOf { meal -> meal.totalGrassiG },
-                        recentMeals = history.take(3),
+                        todayMealsCount = snap.todayMealsCount,
+                        weekMealsCount = snap.weekMealsCount,
+                        todayChoG = snap.todayChoG,
+                        todayProteineG = snap.todayProteineG,
+                        todayGrassiG = snap.todayGrassiG,
+                        todayGlycemicLoad = snap.todayGlycemicLoad,
+                        todayGlycemicTimeline = snap.todayGlycemicTimeline,
+                        recentMeals = snap.recentMeals,
                     )
                 }
             }
-            .flowOn(Dispatchers.Default)
             .launchIn(viewModelScope)
 
         favoritesRepository.observeFavorites()
@@ -152,6 +183,8 @@ class HomeViewModel @Inject constructor(
                     val comboGrams = favorite.comboGrams
                     val comboCho = favorite.comboChoPer100g
                     val comboGrassi = favorite.comboGrassiPer100g
+                    val comboProt = favorite.comboProteinePer100g ?: 0.0
+                    val comboGi = favorite.comboIndiceGlicemico
                     when {
                         historyEntryId != null -> {
                             val history = historyRepository.getById(historyEntryId) ?: return@mapNotNull null
@@ -161,16 +194,26 @@ class HomeViewModel @Inject constructor(
                                 choG = history.totalChoG,
                                 grassiG = history.totalGrassiG,
                                 historyEntryId = history.id,
+                                proteineG = history.totalProteineG,
+                                glycemicLoad = history.glycemicLoad.takeIf { it > 0.0 },
                             )
                         }
-                        comboCho != null && comboGrassi != null && comboGrams != null -> FavoriteDisplay(
-                            id = favorite.id,
-                            label = favorite.label,
-                            choG = comboCho * comboGrams / 100.0,
-                            grassiG = comboGrassi * comboGrams / 100.0,
-                            historyEntryId = null,
-                            comboGrams = comboGrams,
-                        )
+                        comboCho != null && comboGrassi != null && comboGrams != null -> {
+                            val absCho = comboCho * comboGrams / 100.0
+                            val resolvedGi = comboGi ?: GlycemicIndexResolver.resolveByName(favorite.label, comboCho).gi
+                            val gl = (resolvedGi * absCho / 100.0).takeIf { absCho > 0.0 }
+                            FavoriteDisplay(
+                                id = favorite.id,
+                                label = favorite.label,
+                                choG = absCho,
+                                grassiG = comboGrassi * comboGrams / 100.0,
+                                historyEntryId = null,
+                                comboGrams = comboGrams,
+                                proteineG = comboProt * comboGrams / 100.0,
+                                indiceGlicemico = comboGi,
+                                glycemicLoad = gl,
+                            )
+                        }
                         comboCho != null && comboGrassi != null -> FavoriteDisplay(
                             id = favorite.id,
                             label = favorite.label,
@@ -178,6 +221,8 @@ class HomeViewModel @Inject constructor(
                             grassiG = comboGrassi,
                             historyEntryId = null,
                             isPerHundredGrams = true,
+                            proteineG = comboProt,
+                            indiceGlicemico = comboGi,
                         )
                         else -> null
                     }
@@ -267,11 +312,26 @@ class HomeViewModel @Inject constructor(
     }
 
     /** "+" in Homepage: aggiunge un preferito da database senza passare da Impostazioni. */
-    fun addComboFavorite(foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double) {
+    fun addComboFavorite(
+        foodName: String,
+        grams: Double?,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ) {
         viewModelScope.launch {
             val nextOrder = _uiState.value.favorites.size
             val label = if (grams != null) "$foodName (${grams.toInt()}g)" else foodName
-            favoritesRepository.addComboFavorite(label, grams, choPer100g, grassiPer100g, nextOrder)
+            favoritesRepository.addComboFavorite(
+                label = label,
+                grams = grams,
+                choPer100g = choPer100g,
+                grassiPer100g = grassiPer100g,
+                sortOrder = nextOrder,
+                proteinePer100g = proteinePer100g,
+                indiceGlicemico = indiceGlicemico,
+            )
         }
     }
 
@@ -283,7 +343,14 @@ class HomeViewModel @Inject constructor(
         val grams = favorite.comboGrams ?: return
         val choPer100g = if (grams > 0) favorite.choG / grams * 100.0 else 0.0
         val grassiPer100g = if (grams > 0) favorite.grassiG / grams * 100.0 else 0.0
-        val entry = NormalizedFoodEntry(nome = favorite.label, choPer100g = choPer100g, grassiPer100g = grassiPer100g)
+        val protPer100g = if (grams > 0) favorite.proteineG / grams * 100.0 else 0.0
+        val entry = NormalizedFoodEntry(
+            nome = favorite.label,
+            choPer100g = choPer100g,
+            grassiPer100g = grassiPer100g,
+            proteinePer100g = protPer100g,
+            indiceGlicemico = favorite.indiceGlicemico,
+        )
         val line = CalculatedFoodLine(
             recognizedFood = RecognizedFood(nome = favorite.label, pesoStimatoG = grams, commento = "Da preferito", confidenza = Confidence.ALTO),
             match = FoodMatch(nomeRiconosciuto = favorite.label, voceTabellaAbbinata = favorite.label, nessunaCorrispondenza = false, confidenzaAbbinamento = Confidence.ALTO),
@@ -311,12 +378,19 @@ class HomeViewModel @Inject constructor(
                     nome = line.recognizedFood.nome,
                     choPer100g = if (grams > 0) line.choContributionG / grams * 100.0 else 0.0,
                     grassiPer100g = if (grams > 0) line.grassiContributionG / grams * 100.0 else 0.0,
+                    proteinePer100g = if (grams > 0) line.proteineContributionG / grams * 100.0 else 0.0,
                 )
                 AnalysisSessionStore.PendingManualRow(tableEntry, grams)
             }
             sessionStore.setPendingManualRows(rows)
         } else {
-            val entry = NormalizedFoodEntry(nome = favorite.label, choPer100g = favorite.choG, grassiPer100g = favorite.grassiG)
+            val entry = NormalizedFoodEntry(
+                nome = favorite.label,
+                choPer100g = favorite.choG,
+                grassiPer100g = favorite.grassiG,
+                proteinePer100g = favorite.proteineG,
+                indiceGlicemico = favorite.indiceGlicemico,
+            )
             sessionStore.setPendingManualRows(listOf(AnalysisSessionStore.PendingManualRow(entry, 100.0)))
         }
     }
@@ -339,6 +413,7 @@ class HomeViewModel @Inject constructor(
                 nome = line.recognizedFood.nome,
                 choPer100g = if (!line.isExcluded && grams > 0) line.choContributionG / grams * 100.0 else 0.0,
                 grassiPer100g = if (!line.isExcluded && grams > 0) line.grassiContributionG / grams * 100.0 else 0.0,
+                proteinePer100g = if (!line.isExcluded && grams > 0) line.proteineContributionG / grams * 100.0 else 0.0,
             )
             AnalysisSessionStore.PendingManualRow(tableEntry, grams)
         }
@@ -353,4 +428,43 @@ class HomeViewModel @Inject constructor(
     companion object {
         private const val SEVEN_DAYS_MILLIS = 7L * 24L * 60L * 60L * 1000L
     }
+}
+
+private data class TodayHistorySnapshot(
+    val todayMealsCount: Int,
+    val weekMealsCount: Int,
+    val todayChoG: Double,
+    val todayProteineG: Double,
+    val todayGrassiG: Double,
+    val todayGlycemicLoad: Double,
+    val todayGlycemicTimeline: DailyGlycemicTimeline?,
+    val recentMeals: List<AnalysisHistoryEntity>,
+)
+
+internal fun buildMealTimelineInput(
+    meal: AnalysisHistoryEntity,
+    json: Json,
+): MealTimelineInput {
+    val lines = runCatching {
+        json.decodeFromString<List<CalculatedFoodLine>>(meal.detailsJson)
+    }.getOrDefault(emptyList())
+    val resolvedGl = when {
+        meal.glycemicLoad > 0.0 -> meal.glycemicLoad
+        lines.any { !it.isExcluded } -> GlycemicCurveCalculator.computeTotalGlycemicLoad(lines)
+        meal.totalChoG > 0.0 -> GlycemicCurveCalculator.simulateFromTotals(
+            choG = meal.totalChoG,
+            grassiG = meal.totalGrassiG,
+            proteineG = meal.totalProteineG,
+        ).totalGlycemicLoad
+        else -> 0.0
+    }
+    return MealTimelineInput(
+        title = meal.foodTitle,
+        analyzedAtEpochMillis = meal.analyzedAtEpochMillis,
+        choG = meal.totalChoG,
+        grassiG = meal.totalGrassiG,
+        proteineG = meal.totalProteineG,
+        glycemicLoad = resolvedGl,
+        lines = lines,
+    )
 }

@@ -44,10 +44,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.GlycemicCurveCard
 import com.ugocalc.app.ui.components.MacroMetricTile
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.MacronutrientPieChart
@@ -62,6 +64,7 @@ import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 private val detailDateFormat = SimpleDateFormat("d MMM yyyy · HH:mm", Locale.ITALIAN)
 
@@ -71,19 +74,21 @@ private val detailDateFormat = SimpleDateFormat("d MMM yyyy · HH:mm", Locale.IT
 fun HistoryDetailScreen(
     onBack: () -> Unit,
     onOpenV2Details: (Long) -> Unit,
+    onOpenGlycemicSettings: () -> Unit = {},
     viewModel: HistoryDetailViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    val macroSum = uiState.totalChoG + uiState.totalGrassiG
+    val macroSum = uiState.totalChoG + uiState.totalProteineG + uiState.totalGrassiG
     val choPercent = if (macroSum > 0) uiState.totalChoG / macroSum * 100.0 else 0.0
-    val grassiPercent = if (macroSum > 0) 100.0 - choPercent else 0.0
-    val kcalEstimate = (uiState.totalChoG * 4.0 + uiState.totalGrassiG * 9.0).toInt()
+    val proteinePercent = if (macroSum > 0) uiState.totalProteineG / macroSum * 100.0 else 0.0
+    val grassiPercent = if (macroSum > 0) (100.0 - choPercent - proteinePercent).coerceIn(0.0, 100.0) else 0.0
+    val kcalEstimate = (uiState.totalChoG * 4.0 + uiState.totalGrassiG * 9.0 + uiState.totalProteineG * 4.0).roundToInt()
     val isRistorante = uiState.sessionMode == SessionMode.RISTORANTE.name
     val canShare = uiState.lines.isNotEmpty() || uiState.foodTitle.isNotBlank() ||
-        uiState.totalChoG > 0.0 || uiState.totalGrassiG > 0.0
+        uiState.totalChoG > 0.0 || uiState.totalGrassiG > 0.0 || uiState.totalProteineG > 0.0
 
     Scaffold(
         topBar = {
@@ -111,7 +116,10 @@ fun HistoryDetailScreen(
                                     totalChoG = uiState.totalChoG,
                                     totalGrassiG = uiState.totalGrassiG,
                                     lines = uiState.lines,
+                                    totalProteineG = uiState.totalProteineG,
                                     estimatedKcal = kcalEstimate,
+                                    glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad
+                                        ?: uiState.glycemicLoad.takeIf { it > 0.0 },
                                     sessionModeLabel = modeText,
                                     dateLabel = dateText,
                                 )
@@ -193,8 +201,10 @@ fun HistoryDetailScreen(
                     MacronutrientPieChart(
                         choPercent = choPercent,
                         grassiPercent = grassiPercent,
+                        proteinePercent = proteinePercent,
                         choGrams = uiState.totalChoG,
                         grassiGrams = uiState.totalGrassiG,
+                        proteineGrams = uiState.totalProteineG,
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
@@ -204,10 +214,17 @@ fun HistoryDetailScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         MacroMetricTile(
-                            label = "Carboidrati",
+                            label = "CHO",
                             value = "%.1f".format(uiState.totalChoG),
                             unit = "g",
                             accentColor = UgoSemanticColors.cho,
+                            modifier = Modifier.weight(1f),
+                        )
+                        MacroMetricTile(
+                            label = "Proteine",
+                            value = "%.1f".format(uiState.totalProteineG),
+                            unit = "g",
+                            accentColor = UgoSemanticColors.protein,
                             modifier = Modifier.weight(1f),
                         )
                         MacroMetricTile(
@@ -217,14 +234,16 @@ fun HistoryDetailScreen(
                             accentColor = UgoSemanticColors.fat,
                             modifier = Modifier.weight(1f),
                         )
-                        MacroMetricTile(
-                            label = "kcal (C+G)",
-                            value = kcalEstimate.toString(),
-                            unit = "kcal",
-                            accentColor = MaterialTheme.colorScheme.tertiary,
-                            modifier = Modifier.weight(1f),
-                        )
                     }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    MacroPill(
+                        label = "Energia stimata",
+                        value = "~$kcalEstimate kcal",
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    )
 
                     if (uiState.modelNames.isNotEmpty()) {
                         Spacer(modifier = Modifier.height(12.dp))
@@ -264,6 +283,17 @@ fun HistoryDetailScreen(
                             Text("Mostra analisi V2 (Shadow)")
                         }
                     }
+                }
+            }
+
+            uiState.glycemicSimulation?.let { simulation ->
+                item(key = "glycemic_curve") {
+                    GlycemicCurveCard(
+                        simulation = simulation,
+                        targetMaxMgDl = uiState.targetPostPrandialMaxMgDl,
+                        onAdjustBaseline = viewModel::adjustBaselineBy,
+                        onOpenGlycemicSettings = onOpenGlycemicSettings,
+                    )
                 }
             }
 
@@ -357,11 +387,27 @@ private fun HistoryFoodLineCard(line: CalculatedFoodLine) {
                     contentColor = UgoSemanticColors.onChoContainer,
                 )
                 MacroPill(
+                    label = "Prot",
+                    value = "${"%.1f".format(line.proteineContributionG)} g",
+                    containerColor = UgoSemanticColors.proteinContainer,
+                    contentColor = UgoSemanticColors.onProteinContainer,
+                )
+                MacroPill(
                     label = "Grassi",
                     value = "${"%.1f".format(line.grassiContributionG)} g",
                     containerColor = UgoSemanticColors.fatContainer,
                     contentColor = UgoSemanticColors.onFatContainer,
                 )
+                line.tableEntry?.takeIf { line.choContributionG > 0.0 }?.let { entry ->
+                    val resolvedGi = GlycemicIndexResolver.resolve(entry)
+                    val lineGl = resolvedGi.gi * line.choContributionG / 100.0
+                    MacroPill(
+                        label = "GL",
+                        value = "%.1f".format(Locale.ITALIAN, lineGl),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        contentColor = MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
     }

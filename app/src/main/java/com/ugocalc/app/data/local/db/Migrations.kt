@@ -288,3 +288,15 @@ val MIGRATION_24_25 = object : Migration(24, 25) {
         db.execSQL("ALTER TABLE scale_calibrations ADD COLUMN clientId TEXT")
     }
 }
+
+/** v4.2.0: conteggio proteine, Indice Glicemico e Carico Glicemico post-prandiale. */
+val MIGRATION_25_26 = object : Migration(25, 26) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE normalized_food_entries ADD COLUMN proteinePer100g REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE normalized_food_entries ADD COLUMN indiceGlicemico INTEGER")
+        db.execSQL("ALTER TABLE analysis_history ADD COLUMN totalProteineG REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE analysis_history ADD COLUMN glycemicLoad REAL NOT NULL DEFAULT 0.0")
+        db.execSQL("ALTER TABLE favorite_shortcuts ADD COLUMN comboProteinePer100g REAL")
+        db.execSQL("ALTER TABLE favorite_shortcuts ADD COLUMN comboIndiceGlicemico INTEGER")
+    }
+}

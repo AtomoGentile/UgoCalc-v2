@@ -59,6 +59,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
+import com.ugocalc.app.domain.glycemic.GlycemicLoadLevel
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.ui.theme.UgoSemanticColors
@@ -722,7 +724,7 @@ fun MacroProgressRing(
     }
     val choColor = UgoSemanticColors.cho
     val fatColor = UgoSemanticColors.fat
-    val protColor = MaterialTheme.colorScheme.tertiary
+    val protColor = UgoSemanticColors.protein
 
     Box(
         modifier = modifier.size(size),
@@ -797,8 +799,9 @@ fun formatMealShareSummary(
     totalChoG: Double,
     totalGrassiG: Double,
     lines: List<CalculatedFoodLine>,
-    estimatedKcal: Int = (totalChoG * 4.0 + totalGrassiG * 9.0).roundToInt(),
     totalProteineG: Double? = null,
+    estimatedKcal: Int = (totalChoG * 4.0 + totalGrassiG * 9.0 + (totalProteineG ?: 0.0) * 4.0).roundToInt(),
+    glycemicLoad: Double? = null,
     sessionModeLabel: String? = null,
     dateLabel: String? = null,
 ): String = buildString {
@@ -815,9 +818,17 @@ fun formatMealShareSummary(
     appendLine("Riepilogo nutrizionale:")
     appendLine("• Energia stimata: ~$estimatedKcal kcal")
     appendLine("• Carboidrati (CHO): ${formatShareNumber(totalChoG)} g")
-    appendLine("• Grassi: ${formatShareNumber(totalGrassiG)} g")
-    if (totalProteineG != null) {
+    if (totalProteineG != null && totalProteineG > 0.0) {
         appendLine("• Proteine: ${formatShareNumber(totalProteineG)} g")
+    }
+    appendLine("• Grassi: ${formatShareNumber(totalGrassiG)} g")
+    if (glycemicLoad != null && glycemicLoad > 0.0) {
+        val levelLabel = when (GlycemicCurveCalculator.classifyGlycemicLoad(glycemicLoad)) {
+            GlycemicLoadLevel.BASSO -> "Basso"
+            GlycemicLoadLevel.MEDIO -> "Medio"
+            GlycemicLoadLevel.ALTO -> "Alto"
+        }
+        appendLine("• Carico Glicemico: ${"%.1f".format(Locale.ITALIAN, glycemicLoad)} ($levelLabel)")
     }
     if (lines.isNotEmpty()) {
         appendLine()
@@ -831,8 +842,13 @@ fun formatMealShareSummary(
             if (line.isExcluded) {
                 appendLine("• ${line.recognizedFood.nome} ($weightText) — escluso")
             } else {
+                val protPart = if (line.proteineContributionG > 0.0) {
+                    " · Prot ${formatShareNumber(line.proteineContributionG)} g"
+                } else {
+                    ""
+                }
                 appendLine(
-                    "• ${line.recognizedFood.nome} ($weightText) — CHO ${formatShareNumber(line.choContributionG)} g · Grassi ${formatShareNumber(line.grassiContributionG)} g"
+                    "• ${line.recognizedFood.nome} ($weightText) — CHO ${formatShareNumber(line.choContributionG)} g$protPart · Grassi ${formatShareNumber(line.grassiContributionG)} g"
                 )
             }
         }

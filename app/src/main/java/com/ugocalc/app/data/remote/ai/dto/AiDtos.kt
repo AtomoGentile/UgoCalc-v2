@@ -33,14 +33,31 @@ fun VisionAnalysisDto.toDomain() = VisionAnalysisResult(
 )
 
 @Serializable
+data class NormalizedFoodEntryDto(
+    val nome: String,
+    @SerialName("cho_per_100g") val choPer100g: Double,
+    @SerialName("grassi_per_100g") val grassiPer100g: Double,
+    @SerialName("proteine_per_100g") val proteinePer100g: Double? = null,
+    @SerialName("indice_glicemico") val indiceGlicemico: Int? = null,
+)
+
+@Serializable
 data class NormalizationDto(
-    val alimenti: List<NormalizedFoodEntry>,
+    val alimenti: List<NormalizedFoodEntryDto>,
     @SerialName("righe_scartate") val righeScartate: List<DiscardedRow> = emptyList(),
     @SerialName("note_conversione") val noteConversione: String = ""
 )
 
 fun NormalizationDto.toDomain() = NormalizationResult(
-    alimenti = alimenti,
+    alimenti = alimenti.map {
+        NormalizedFoodEntry(
+            nome = it.nome,
+            choPer100g = it.choPer100g,
+            grassiPer100g = it.grassiPer100g,
+            proteinePer100g = it.proteinePer100g ?: 0.0,
+            indiceGlicemico = it.indiceGlicemico?.coerceIn(0, 100),
+        )
+    },
     righeScartate = righeScartate,
     noteConversione = noteConversione
 )
@@ -62,7 +79,9 @@ data class OnlineFoodResearchDto(
     @SerialName("grassi_per_100g") val grassiPer100g: Double? = null,
     @SerialName("fonte_nome") val fonteNome: String = "",
     @SerialName("fonte_url") val fonteUrl: String = "",
-    @SerialName("motivo_errore") val motivoErrore: String = ""
+    @SerialName("motivo_errore") val motivoErrore: String = "",
+    @SerialName("proteine_per_100g") val proteinePer100g: Double? = null,
+    @SerialName("indice_glicemico") val indiceGlicemico: Int? = null,
 )
 
 fun OnlineFoodResearchDto.toDomain() = OnlineFoodResearchResult(
@@ -72,7 +91,9 @@ fun OnlineFoodResearchDto.toDomain() = OnlineFoodResearchResult(
     grassiPer100g = grassiPer100g,
     fonteNome = fonteNome,
     fonteUrl = fonteUrl,
-    motivoErrore = motivoErrore
+    motivoErrore = motivoErrore,
+    proteinePer100g = proteinePer100g,
+    indiceGlicemico = indiceGlicemico?.coerceIn(0, 100),
 )
 
 @Serializable
@@ -85,5 +106,6 @@ data class MatchingInputFoodDto(
 data class MatchingInputTableEntryDto(
     val nome: String,
     val choPer100g: Double,
-    val grassiPer100g: Double
+    val grassiPer100g: Double,
+    val proteinePer100g: Double = 0.0,
 )

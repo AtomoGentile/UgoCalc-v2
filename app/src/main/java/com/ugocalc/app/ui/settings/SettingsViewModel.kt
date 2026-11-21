@@ -14,6 +14,7 @@ import com.ugocalc.app.data.remote.ai.client.AwsSigV4Signer
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.TableRepository
+import com.ugocalc.app.domain.glycemic.GlycemicProfilePreset
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
 import com.ugocalc.app.domain.model.AiProviderType
@@ -184,6 +185,18 @@ class SettingsViewModel @Inject constructor(
     fun setHistoryChartEnabled(enabled: Boolean) { viewModelScope.launch { settingsRepository.setHistoryChartEnabled(enabled) } }
     fun setFontFamily(name: String?) { viewModelScope.launch { settingsRepository.setFontFamily(name) } }
     fun setFontColor(argb: Int?) { viewModelScope.launch { settingsRepository.setFontColor(argb) } }
+    fun applyGlycemicProfilePreset(preset: GlycemicProfilePreset) {
+        viewModelScope.launch { settingsRepository.applyGlycemicProfilePreset(preset) }
+    }
+    fun setBaselineGlucoseMgDl(mgDl: Int) {
+        viewModelScope.launch { settingsRepository.setBaselineGlucoseMgDl(mgDl.coerceIn(65, 180)) }
+    }
+    fun setCarbSensitivityMgDlPer10g(mgDlPer10g: Int) {
+        viewModelScope.launch { settingsRepository.setCarbSensitivityMgDlPer10g(mgDlPer10g.coerceIn(10, 60)) }
+    }
+    fun setTargetPostPrandialMaxMgDl(mgDl: Int) {
+        viewModelScope.launch { settingsRepository.setTargetPostPrandialMaxMgDl(mgDl.coerceIn(120, 200)) }
+    }
 
     private fun toggleModelIdOrUid(current: Set<String>, uidOrId: String): Set<String> {
         val bareId = uidOrId.substringAfter("::", uidOrId)

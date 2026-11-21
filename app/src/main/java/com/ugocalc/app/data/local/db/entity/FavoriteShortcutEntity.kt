@@ -31,4 +31,6 @@ data class FavoriteShortcutEntity(
     val comboGrams: Double? = null,
     val comboChoPer100g: Double? = null,
     val comboGrassiPer100g: Double? = null,
+    val comboProteinePer100g: Double? = null,
+    val comboIndiceGlicemico: Int? = null,
 )

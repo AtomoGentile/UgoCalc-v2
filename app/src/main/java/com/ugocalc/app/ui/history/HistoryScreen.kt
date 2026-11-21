@@ -64,6 +64,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.DailyGlycemicTimelineCard
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.HistoryColumnChart
 import com.ugocalc.app.ui.components.HistoryLineChart
@@ -90,12 +91,14 @@ private val dateOnlyFormat = SimpleDateFormat("dd/MM/yyyy", Locale.ITALY)
 fun HistoryScreen(
     onBack: () -> Unit,
     onOpenEntry: (Long) -> Unit,
+    onOpenGlycemicSettings: () -> Unit = {},
     showBackButton: Boolean = true,
     viewModel: HistoryViewModel = hiltViewModel(),
 ) {
     val history by viewModel.history.collectAsState()
     val favoritedIds by viewModel.favoritedHistoryIds.collectAsState()
     val chartEnabled by viewModel.chartEnabled.collectAsState()
+    val todayTimeline by viewModel.todayGlycemicTimeline.collectAsState()
     val chartInterval by viewModel.chartInterval.collectAsState()
     val chartType by viewModel.chartType.collectAsState()
     val chartEntries by viewModel.chartEntries.collectAsState()
@@ -203,6 +206,15 @@ fun HistoryScreen(
                                 onReset = viewModel::resetFilters,
                             )
                         }
+                    }
+                }
+
+                todayTimeline?.let { timeline ->
+                    item(key = "today_glycemic_timeline") {
+                        DailyGlycemicTimelineCard(
+                            timeline = timeline,
+                            onOpenSettings = onOpenGlycemicSettings,
+                        )
                     }
                 }
 
@@ -421,12 +433,28 @@ private fun HistoryEntryCard(
                         containerColor = UgoSemanticColors.choContainer,
                         contentColor = UgoSemanticColors.onChoContainer,
                     )
+                    if (entry.totalProteineG > 0.0) {
+                        MacroPill(
+                            label = "Prot",
+                            value = "${"%.1f".format(entry.totalProteineG)} g",
+                            containerColor = UgoSemanticColors.proteinContainer,
+                            contentColor = UgoSemanticColors.onProteinContainer,
+                        )
+                    }
                     MacroPill(
                         label = "Grassi",
                         value = "${"%.1f".format(entry.totalGrassiG)} g",
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
                     )
+                    if (entry.glycemicLoad > 0.0) {
+                        MacroPill(
+                            label = "GL",
+                            value = "%.1f".format(Locale.ITALIAN, entry.glycemicLoad),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
 

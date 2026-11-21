@@ -1,6 +1,7 @@
 package com.ugocalc.app.domain.inference.m6
 
 import com.ugocalc.app.data.repository.RecipeRepository
+import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
 import com.ugocalc.app.domain.inference.model.WeightEstimate
 import com.ugocalc.app.domain.inference.model.EstimationStrategy
 import com.ugocalc.app.domain.inference.model.SessionMode
@@ -131,10 +132,23 @@ class NutritionMatchStepAdapter @Inject constructor(
             if (matchedIngredients.isNotEmpty()) {
                 val choPer100g = matchedIngredients.sumOf { (pct, entry) -> pct * entry.choPer100g }
                 val grassiPer100g = matchedIngredients.sumOf { (pct, entry) -> pct * entry.grassiPer100g }
+                val proteinePer100g = matchedIngredients.sumOf { (pct, entry) -> pct * entry.proteinePer100g }
+                val blendedGi = if (choPer100g > 0.0) {
+                    val weightedGiSum = matchedIngredients.sumOf { (pct, entry) ->
+                        val ingredientCho = pct * entry.choPer100g
+                        val gi = GlycemicIndexResolver.resolve(entry).gi
+                        ingredientCho * gi
+                    }
+                    (weightedGiSum / choPer100g).toInt().coerceIn(0, 100)
+                } else {
+                    0
+                }
                 result[decomposed.foodName] = NormalizedFoodEntry(
                     nome = "${decomposed.recipeName} (${matchedIngredients.joinToString(" + ") { it.second.nome }})",
                     choPer100g = choPer100g,
                     grassiPer100g = grassiPer100g,
+                    proteinePer100g = proteinePer100g,
+                    indiceGlicemico = blendedGi,
                 )
             }
         }

@@ -1,5 +1,6 @@
 package com.ugocalc.app.ui.finalresult
 
+import com.ugocalc.app.domain.glycemic.GlycemicProfile
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.Confidence
@@ -33,6 +34,8 @@ class FinalResultViewModelTest {
                 nome = name,
                 choPer100g = 75.0,
                 grassiPer100g = 1.5,
+                proteinePer100g = 12.5,
+                indiceGlicemico = 49,
             ),
         )
 
@@ -74,14 +77,35 @@ class FinalResultViewModelTest {
             totalChoG = totals.totalChoG,
             totalGrassiG = totals.totalGrassiG,
             lines = lines,
+            totalProteineG = totals.totalProteineG,
+            glycemicLoad = 36.75,
             sessionModeLabel = "Casa",
         )
         assertTrue(text.contains("Pranzo veloce"))
         assertTrue(text.contains("Casa"))
         assertTrue(text.contains("kcal"))
         assertTrue(text.contains("Carboidrati (CHO)"))
+        assertTrue(text.contains("Proteine"))
         assertTrue(text.contains("Grassi"))
+        assertTrue(text.contains("Carico Glicemico"))
         assertTrue(text.contains("Pasta (100 g)"))
         assertTrue(text.contains("Calcolato con UgoCalc"))
+    }
+
+    @Test
+    fun `simulateMealWithOverride reacts to weight adjustment and baseline override`() {
+        val baseTotals = AnalysisTotals(listOf(sampleLine("Pasta", 80.0)))
+        val simBase = simulateMealWithOverride(baseTotals, GlycemicProfile(), baselineOverrideMgDl = null)
+        assertNotNull(simBase)
+        assertEquals(90.0, simBase!!.baselineMgDl, 1e-6)
+
+        val simShifted = simulateMealWithOverride(baseTotals, GlycemicProfile(), baselineOverrideMgDl = 120)
+        assertNotNull(simShifted)
+        assertEquals(120.0, simShifted!!.baselineMgDl, 1e-6)
+        assertEquals(simBase.peakMgDl + 30.0, simShifted.peakMgDl, 1e-6)
+
+        val heavierLines = adjustLineWeight(baseTotals.lines, 0, 40f)!!
+        val heavierSim = simulateMealWithOverride(AnalysisTotals(heavierLines), GlycemicProfile(), baselineOverrideMgDl = null)
+        assertTrue(heavierSim!!.totalGlycemicLoad > simBase.totalGlycemicLoad)
     }
 }

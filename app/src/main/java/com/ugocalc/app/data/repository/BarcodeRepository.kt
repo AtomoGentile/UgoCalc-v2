@@ -106,7 +106,16 @@ class BarcodeRepository @Inject constructor(
             val cho = result.choPer100g
             val grassi = result.grassiPer100g
             if (result.haDatiUtilizzabili && cho != null && grassi != null) {
-                BarcodeLookupResult.Found(NormalizedFoodEntry(result.alimento, cho, grassi), "Ricerca AI")
+                BarcodeLookupResult.Found(
+                    NormalizedFoodEntry(
+                        nome = result.alimento,
+                        choPer100g = cho,
+                        grassiPer100g = grassi,
+                        proteinePer100g = result.proteinePer100g ?: 0.0,
+                        indiceGlicemico = result.indiceGlicemico?.coerceIn(0, 100),
+                    ),
+                    "Ricerca AI",
+                )
             } else {
                 BarcodeLookupResult.NotFound
             }

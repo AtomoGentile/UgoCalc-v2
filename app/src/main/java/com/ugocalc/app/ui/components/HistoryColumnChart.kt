@@ -25,7 +25,7 @@ import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 /**
- * Colonna per pasto: CHO e grassi impilati, una colonna per ogni analisi salvata nell'intervallo.
+ * Colonna per pasto: CHO, proteine e grassi impilati, una colonna per ogni analisi salvata nell'intervallo.
  */
 @Composable
 fun HistoryColumnChart(
@@ -33,9 +33,10 @@ fun HistoryColumnChart(
     modifier: Modifier = Modifier,
 ) {
     val choColor = UgoSemanticColors.cho
+    val protColor = UgoSemanticColors.protein
     val grassiColor = UgoSemanticColors.fat
     val axisColor = MaterialTheme.colorScheme.outlineVariant
-    val maxTotal = entries.maxOfOrNull { it.totalChoG + it.totalGrassiG } ?: 0.0
+    val maxTotal = entries.maxOfOrNull { it.totalChoG + it.totalProteineG + it.totalGrassiG } ?: 0.0
 
     Column(modifier = modifier) {
         if (entries.isEmpty() || maxTotal <= 0.0) {
@@ -63,6 +64,7 @@ fun HistoryColumnChart(
 
                 entries.forEachIndexed { index, entry ->
                     val choHeight = (entry.totalChoG / maxTotal * chartHeight).toFloat()
+                    val protHeight = (entry.totalProteineG / maxTotal * chartHeight).toFloat()
                     val grassiHeight = (entry.totalGrassiG / maxTotal * chartHeight).toFloat()
                     val x = index * barSlot + (barSlot - barWidth) / 2f
                     if (choHeight > 0f) {
@@ -70,13 +72,21 @@ fun HistoryColumnChart(
                             color = choColor,
                             topLeft = Offset(x, baselineY - choHeight),
                             size = Size(barWidth, choHeight),
+                            cornerRadius = if (protHeight <= 0f && grassiHeight <= 0f) radius else CornerRadius.Zero,
+                        )
+                    }
+                    if (protHeight > 0f) {
+                        drawRoundRect(
+                            color = protColor,
+                            topLeft = Offset(x, baselineY - choHeight - protHeight),
+                            size = Size(barWidth, protHeight),
                             cornerRadius = if (grassiHeight <= 0f) radius else CornerRadius.Zero,
                         )
                     }
                     if (grassiHeight > 0f) {
                         drawRoundRect(
                             color = grassiColor,
-                            topLeft = Offset(x, baselineY - choHeight - grassiHeight),
+                            topLeft = Offset(x, baselineY - choHeight - protHeight - grassiHeight),
                             size = Size(barWidth, grassiHeight),
                             cornerRadius = radius,
                         )
@@ -88,6 +98,7 @@ fun HistoryColumnChart(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 LegendDot(choColor, "CHO")
+                LegendDot(protColor, "Proteine")
                 LegendDot(grassiColor, "Grassi")
             }
         }

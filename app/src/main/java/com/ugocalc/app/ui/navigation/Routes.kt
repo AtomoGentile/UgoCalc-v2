@@ -45,6 +45,7 @@ object Routes {
     const val SETTINGS_TABLE_EDITOR = "settings_table_editor/{tableId}"
     const val SETTINGS_BACKUP = "settings_backup"
     const val SETTINGS_COST_MANAGEMENT = "settings_cost_management"
+    const val GLYCEMIC_PROFILE_SETTINGS = "settings_glycemic_profile"
 
     const val AUTH = "auth"
     const val SETTINGS_ACCOUNT = "settings_account"

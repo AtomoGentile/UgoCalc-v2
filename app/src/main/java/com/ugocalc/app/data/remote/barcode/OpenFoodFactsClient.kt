@@ -100,6 +100,7 @@ class OpenFoodFactsClient @Inject constructor(
         val nutriments = product["nutriments"] as? JsonObject ?: return null
         val cho = (nutriments["carbohydrates_100g"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() } ?: return null
         val fat = (nutriments["fat_100g"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() } ?: return null
-        return NormalizedFoodEntry(name, cho, fat)
+        val proteins = (nutriments["proteins_100g"] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() } ?: 0.0
+        return NormalizedFoodEntry(name, cho, fat, proteinePer100g = proteins)
     }
 }

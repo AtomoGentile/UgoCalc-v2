@@ -21,6 +21,8 @@ data class EditableRow(
     val nome: String,
     val choPer100g: String,
     val grassiPer100g: String,
+    val proteinePer100g: String = "0",
+    val indiceGlicemico: String = "",
 )
 
 data class TableEditorUiState(
@@ -67,6 +69,8 @@ class TableEditorViewModel @Inject constructor(
         nome = nome,
         choPer100g = formatNumber(choPer100g),
         grassiPer100g = formatNumber(grassiPer100g),
+        proteinePer100g = formatNumber(proteinePer100g),
+        indiceGlicemico = indiceGlicemico?.toString().orEmpty(),
     )
 
     private fun formatNumber(value: Double): String =
@@ -75,6 +79,8 @@ class TableEditorViewModel @Inject constructor(
     fun updateNome(localKey: Int, value: String) = updateRow(localKey) { it.copy(nome = value) }
     fun updateCho(localKey: Int, value: String) = updateRow(localKey) { it.copy(choPer100g = value) }
     fun updateGrassi(localKey: Int, value: String) = updateRow(localKey) { it.copy(grassiPer100g = value) }
+    fun updateProteine(localKey: Int, value: String) = updateRow(localKey) { it.copy(proteinePer100g = value) }
+    fun updateIndiceGlicemico(localKey: Int, value: String) = updateRow(localKey) { it.copy(indiceGlicemico = value) }
 
     private fun updateRow(localKey: Int, transform: (EditableRow) -> EditableRow) {
         _uiState.value = _uiState.value.copy(
@@ -90,6 +96,8 @@ class TableEditorViewModel @Inject constructor(
             nome = "",
             choPer100g = "0",
             grassiPer100g = "0",
+            proteinePer100g = "0",
+            indiceGlicemico = "",
         )
         _uiState.value = _uiState.value.copy(rows = _uiState.value.rows + newRow, isDirty = true)
     }
@@ -112,6 +120,8 @@ class TableEditorViewModel @Inject constructor(
                         nome = it.nome.trim(),
                         choPer100g = it.choPer100g.parseLocaleDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0,
                         grassiPer100g = it.grassiPer100g.parseLocaleDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0,
+                        proteinePer100g = it.proteinePer100g.parseLocaleDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0,
+                        indiceGlicemico = it.indiceGlicemico.trim().toIntOrNull()?.takeIf { gi -> gi in 0..100 },
                         rowOrder = 0,
                         isManuallyEdited = true,
                     )

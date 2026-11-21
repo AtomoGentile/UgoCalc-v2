@@ -8,6 +8,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.ugocalc.app.domain.glycemic.GlycemicProfile
+import com.ugocalc.app.domain.glycemic.GlycemicProfilePreset
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.ConfidenceScore
@@ -97,7 +99,22 @@ data class UserSettings(
     val hasCompletedOnboarding: Boolean = false,
     val hasSeededStarterTable: Boolean = false,
     val angleOverlayEnabled: Boolean = false,
-)
+    val glycemicProfilePreset: String = "STANDARD",
+    val baselineGlucoseMgDl: Int = 90,
+    val carbSensitivityMgDlPer10g: Int = 18,
+    val targetPostPrandialMaxMgDl: Int = 140,
+) {
+    fun toGlycemicProfile(): GlycemicProfile {
+        val preset = runCatching { GlycemicProfilePreset.valueOf(glycemicProfilePreset) }
+            .getOrDefault(GlycemicProfilePreset.STANDARD)
+        return GlycemicProfile(
+            preset = preset,
+            baselineGlucoseMgDl = baselineGlucoseMgDl.toDouble(),
+            carbSensitivityMgDlPer10g = carbSensitivityMgDlPer10g.toDouble(),
+            targetPostPrandialMaxMgDl = targetPostPrandialMaxMgDl.toDouble(),
+        )
+    }
+}
 
 @Singleton
 class SettingsDataStore @Inject constructor(@param:ApplicationContext private val context: Context) {
@@ -136,6 +153,10 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
         val HAS_SEEDED_STARTER_TABLE = booleanPreferencesKey("has_seeded_starter_table")
         val ANGLE_OVERLAY_ENABLED = booleanPreferencesKey("angle_overlay_enabled")
+        val GLYCEMIC_PROFILE_PRESET = stringPreferencesKey("glycemic_profile_preset")
+        val BASELINE_GLUCOSE_MG_DL = intPreferencesKey("baseline_glucose_mg_dl")
+        val CARB_SENSITIVITY_MG_DL_PER_10G = intPreferencesKey("carb_sensitivity_mg_dl_per_10g")
+        val TARGET_POST_PRANDIAL_MAX_MG_DL = intPreferencesKey("target_post_prandial_max_mg_dl")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -173,6 +194,10 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             hasCompletedOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
             hasSeededStarterTable = prefs[Keys.HAS_SEEDED_STARTER_TABLE] ?: false,
             angleOverlayEnabled = prefs[Keys.ANGLE_OVERLAY_ENABLED] ?: false,
+            glycemicProfilePreset = prefs[Keys.GLYCEMIC_PROFILE_PRESET] ?: GlycemicProfilePreset.STANDARD.name,
+            baselineGlucoseMgDl = prefs[Keys.BASELINE_GLUCOSE_MG_DL] ?: 90,
+            carbSensitivityMgDlPer10g = prefs[Keys.CARB_SENSITIVITY_MG_DL_PER_10G] ?: 18,
+            targetPostPrandialMaxMgDl = prefs[Keys.TARGET_POST_PRANDIAL_MAX_MG_DL] ?: 140,
         )
     }.distinctUntilChanged()
 
@@ -256,6 +281,20 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.HAS_SEEDED_STARTER_TABLE] = seeded }
     suspend fun setAngleOverlayEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.ANGLE_OVERLAY_ENABLED] = enabled }
+    suspend fun setGlycemicProfilePreset(preset: String) =
+        context.dataStore.edit { it[Keys.GLYCEMIC_PROFILE_PRESET] = preset }
+    suspend fun setBaselineGlucoseMgDl(mgDl: Int) =
+        context.dataStore.edit { it[Keys.BASELINE_GLUCOSE_MG_DL] = mgDl.coerceIn(60, 200) }
+    suspend fun setCarbSensitivityMgDlPer10g(mgDlPer10g: Int) =
+        context.dataStore.edit { it[Keys.CARB_SENSITIVITY_MG_DL_PER_10G] = mgDlPer10g.coerceIn(5, 80) }
+    suspend fun setTargetPostPrandialMaxMgDl(mgDl: Int) =
+        context.dataStore.edit { it[Keys.TARGET_POST_PRANDIAL_MAX_MG_DL] = mgDl.coerceIn(110, 260) }
+    suspend fun applyGlycemicProfilePreset(preset: GlycemicProfilePreset) = context.dataStore.edit {
+        it[Keys.GLYCEMIC_PROFILE_PRESET] = preset.name
+        it[Keys.BASELINE_GLUCOSE_MG_DL] = preset.defaultBaselineMgDl
+        it[Keys.CARB_SENSITIVITY_MG_DL_PER_10G] = preset.defaultCarbSensitivity
+        it[Keys.TARGET_POST_PRANDIAL_MAX_MG_DL] = preset.defaultTargetMaxMgDl
+    }
 
     suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }

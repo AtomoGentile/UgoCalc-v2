@@ -1,6 +1,7 @@
 package com.ugocalc.app.ui.home
 
 import android.content.res.Configuration
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
@@ -39,6 +40,8 @@ import androidx.compose.material.icons.rounded.CloudOff
 import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
+import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Replay
@@ -83,10 +86,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.ugocalc.app.R
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
+import com.ugocalc.app.domain.glycemic.GlycemicLoadLevel
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.BannerTone
-import com.ugocalc.app.ui.components.MacroMetricTile
+import com.ugocalc.app.ui.components.DailyGlycemicTimelineCard
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.MacroProgressRing
 import com.ugocalc.app.ui.components.StatusBanner
@@ -117,6 +122,7 @@ fun HomeScreen(
     onFavoriteNeedsQuantity: () -> Unit,
     /** Ripete un pasto recente precaricandolo come bozza nel passo Quantità. */
     onRepeatHistoryMeal: () -> Unit = {},
+    onOpenGlycemicSettings: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -125,6 +131,7 @@ fun HomeScreen(
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var showAiSetupDialog by remember { mutableStateOf(false) }
     var showOfflineAiDialog by remember { mutableStateOf(false) }
+    var timelineExpanded by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -230,9 +237,21 @@ fun HomeScreen(
                         TodayNutritionCard(
                             mealsCount = uiState.todayMealsCount,
                             choG = uiState.todayChoG,
+                            proteineG = uiState.todayProteineG,
                             grassiG = uiState.todayGrassiG,
+                            glycemicLoad = uiState.todayGlycemicLoad,
                             onClick = onNavigateToHistory,
                         )
+                    }
+                    uiState.todayGlycemicTimeline?.takeIf { uiState.todayMealsCount > 0 }?.let { timeline ->
+                        item(key = "today_glycemic_timeline") {
+                            CollapsibleDailyTimelineSection(
+                                timeline = timeline,
+                                expanded = timelineExpanded,
+                                onToggleExpand = { timelineExpanded = !timelineExpanded },
+                                onOpenSettings = onOpenGlycemicSettings,
+                            )
+                        }
                     }
                 }
 
@@ -290,9 +309,22 @@ fun HomeScreen(
                     TodayNutritionCard(
                         mealsCount = uiState.todayMealsCount,
                         choG = uiState.todayChoG,
+                        proteineG = uiState.todayProteineG,
                         grassiG = uiState.todayGrassiG,
+                        glycemicLoad = uiState.todayGlycemicLoad,
                         onClick = onNavigateToHistory,
                     )
+                }
+
+                uiState.todayGlycemicTimeline?.takeIf { uiState.todayMealsCount > 0 }?.let { timeline ->
+                    item(key = "today_glycemic_timeline") {
+                        CollapsibleDailyTimelineSection(
+                            timeline = timeline,
+                            expanded = timelineExpanded,
+                            onToggleExpand = { timelineExpanded = !timelineExpanded },
+                            onOpenSettings = onOpenGlycemicSettings,
+                        )
+                    }
                 }
 
                 if (shouldShowHomeBanner(uiState)) {
@@ -345,8 +377,9 @@ fun HomeScreen(
     if (showAddFavoriteDialog) {
         AddComboFavoriteDialog(
             onDismiss = { showAddFavoriteDialog = false },
-            onConfirm = { foodName, grams, cho, grassi ->
-                viewModel.addComboFavorite(foodName, grams, cho, grassi)
+            onConfirm = { _, _, _, _ -> },
+            onConfirmFull = { foodName, grams, cho, grassi, prot, gi ->
+                viewModel.addComboFavorite(foodName, grams, cho, grassi, prot, gi)
                 showAddFavoriteDialog = false
             },
         )
@@ -627,11 +660,14 @@ private fun HomeGreetingRow(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TodayNutritionCard(
     mealsCount: Int,
     choG: Double,
+    proteineG: Double,
     grassiG: Double,
+    glycemicLoad: Double,
     onClick: () -> Unit,
 ) {
     val todayLabel = remember {
@@ -639,7 +675,7 @@ private fun TodayNutritionCard(
             .format(Date())
             .replaceFirstChar { it.uppercase() }
     }
-    val estimatedKcal = (choG * 4.0 + grassiG * 9.0).roundToInt()
+    val estimatedKcal = (choG * 4.0 + grassiG * 9.0 + proteineG * 4.0).roundToInt()
 
     UgoCard(
         onClick = onClick,
@@ -693,6 +729,7 @@ private fun TodayNutritionCard(
             MacroProgressRing(
                 choG = choG,
                 grassiG = grassiG,
+                proteineG = proteineG,
                 estimatedKcal = estimatedKcal,
                 size = 94.dp,
                 strokeWidth = 10.dp,
@@ -702,23 +739,28 @@ private fun TodayNutritionCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
+                FlowRow(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    MacroMetricTile(
+                    MacroPill(
                         label = "CHO",
-                        value = formatMacroValue(choG),
-                        unit = "g",
-                        accentColor = UgoSemanticColors.cho,
-                        modifier = Modifier.weight(1f),
+                        value = "${formatMacroValue(choG)}g",
+                        containerColor = UgoSemanticColors.choContainer,
+                        contentColor = UgoSemanticColors.onChoContainer,
                     )
-                    MacroMetricTile(
+                    MacroPill(
+                        label = "Prot",
+                        value = "${formatMacroValue(proteineG)}g",
+                        containerColor = UgoSemanticColors.proteinContainer,
+                        contentColor = UgoSemanticColors.onProteinContainer,
+                    )
+                    MacroPill(
                         label = "Grassi",
-                        value = formatMacroValue(grassiG),
-                        unit = "g",
-                        accentColor = UgoSemanticColors.fat,
-                        modifier = Modifier.weight(1f),
+                        value = "${formatMacroValue(grassiG)}g",
+                        containerColor = UgoSemanticColors.fatContainer,
+                        contentColor = UgoSemanticColors.onFatContainer,
                     )
                 }
 
@@ -733,19 +775,87 @@ private fun TodayNutritionCard(
                         horizontalArrangement = Arrangement.SpaceBetween,
                     ) {
                         Text(
-                            text = "Pasti oggi",
+                            text = "$mealsCount ${if (mealsCount == 1) "pasto" else "pasti"} oggi",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Text(
-                            text = "$mealsCount ${if (mealsCount == 1) "pasto" else "pasti"}",
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
+                        if (glycemicLoad > 0.0) {
+                            val glLevel = GlycemicCurveCalculator.classifyGlycemicLoad(glycemicLoad)
+                            val (glBg, glFg) = when (glLevel) {
+                                GlycemicLoadLevel.BASSO -> UgoSemanticColors.successContainer to UgoSemanticColors.onSuccessContainer
+                                GlycemicLoadLevel.MEDIO -> UgoSemanticColors.warningContainer to UgoSemanticColors.onWarningContainer
+                                GlycemicLoadLevel.ALTO -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer
+                            }
+                            Surface(
+                                shape = RoundedCornerShape(50),
+                                color = glBg,
+                            ) {
+                                Text(
+                                    text = "GL oggi ${"%.1f".format(Locale.ITALIAN, glycemicLoad)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = glFg,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                )
+                            }
+                        } else {
+                            Text(
+                                text = "GL oggi —",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun CollapsibleDailyTimelineSection(
+    timeline: com.ugocalc.app.domain.glycemic.DailyGlycemicTimeline,
+    expanded: Boolean,
+    onToggleExpand: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Surface(
+            onClick = onToggleExpand,
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    text = "Andamento glicemico oggi · Picco ${timeline.peakMgDl.roundToInt()} mg/dL",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Icon(
+                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    contentDescription = if (expanded) "Comprimi timeline" else "Espandi timeline",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        AnimatedVisibility(visible = expanded) {
+            DailyGlycemicTimelineCard(
+                timeline = timeline,
+                onOpenSettings = onOpenSettings,
+            )
         }
     }
 }
@@ -1141,12 +1251,28 @@ private fun FavoriteQuickCard(
                 containerColor = UgoSemanticColors.choContainer,
                 contentColor = UgoSemanticColors.onChoContainer,
             )
+            if (favorite.proteineG > 0.0) {
+                MacroPill(
+                    label = "Prot",
+                    value = "${formatMacroValue(favorite.proteineG)}g",
+                    containerColor = UgoSemanticColors.proteinContainer,
+                    contentColor = UgoSemanticColors.onProteinContainer,
+                )
+            }
             MacroPill(
                 label = "Grassi",
                 value = "${formatMacroValue(favorite.grassiG)}g",
                 containerColor = UgoSemanticColors.fatContainer,
                 contentColor = UgoSemanticColors.onFatContainer,
             )
+            if (favorite.glycemicLoad != null && favorite.glycemicLoad > 0.0) {
+                MacroPill(
+                    label = "GL",
+                    value = "%.1f".format(Locale.ITALIAN, favorite.glycemicLoad),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                )
+            }
         }
         Spacer(modifier = Modifier.height(6.dp))
         Text(
@@ -1293,12 +1419,28 @@ private fun RecentMealRowCard(
                         containerColor = UgoSemanticColors.choContainer,
                         contentColor = UgoSemanticColors.onChoContainer,
                     )
+                    if (meal.totalProteineG > 0.0) {
+                        MacroPill(
+                            label = "Prot",
+                            value = "${formatMacroValue(meal.totalProteineG)}g",
+                            containerColor = UgoSemanticColors.proteinContainer,
+                            contentColor = UgoSemanticColors.onProteinContainer,
+                        )
+                    }
                     MacroPill(
                         label = "Grassi",
                         value = "${formatMacroValue(meal.totalGrassiG)}g",
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
                     )
+                    if (meal.glycemicLoad > 0.0) {
+                        MacroPill(
+                            label = "GL",
+                            value = "%.1f".format(Locale.ITALIAN, meal.glycemicLoad),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
             }
 

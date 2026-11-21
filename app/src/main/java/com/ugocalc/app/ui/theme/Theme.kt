@@ -248,6 +248,10 @@ data class UgoSemanticPalette(
     val onFat: Color,
     val fatContainer: Color,
     val onFatContainer: Color,
+    val protein: Color,
+    val onProtein: Color,
+    val proteinContainer: Color,
+    val onProteinContainer: Color,
     val success: Color,
     val onSuccess: Color,
     val successContainer: Color,
@@ -267,6 +271,10 @@ private val DefaultLightSemanticColors = UgoSemanticPalette(
     onFat = Color(0xFFFFFFFF),
     fatContainer = Color(0xFFFFEDD5),
     onFatContainer = Color(0xFF431407),
+    protein = Color(0xFF2563EB),
+    onProtein = Color(0xFFFFFFFF),
+    proteinContainer = Color(0xFFDBEAFE),
+    onProteinContainer = Color(0xFF1E3A8A),
     success = Color(0xFF16A34A),
     onSuccess = Color(0xFFFFFFFF),
     successContainer = Color(0xFFDCFCE7),
@@ -286,6 +294,10 @@ private val DefaultDarkSemanticColors = UgoSemanticPalette(
     onFat = Color(0xFF431407),
     fatContainer = Color(0xFF7C2D12),
     onFatContainer = Color(0xFFFFEDD5),
+    protein = Color(0xFF60A5FA),
+    onProtein = Color(0xFF0F172A),
+    proteinContainer = Color(0xFF1E3A8A),
+    onProteinContainer = Color(0xFFDBEAFE),
     success = Color(0xFF4ADE80),
     onSuccess = Color(0xFF052E16),
     successContainer = Color(0xFF064E3B),
@@ -316,6 +328,11 @@ object UgoSemanticColors {
     val onFat: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onFat
     val fatContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.fatContainer
     val onFatContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onFatContainer
+
+    val protein: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.protein
+    val onProtein: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onProtein
+    val proteinContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.proteinContainer
+    val onProteinContainer: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onProteinContainer
 
     val success: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.success
     val onSuccess: Color @Composable @ReadOnlyComposable get() = LocalUgoSemanticColors.current.onSuccess

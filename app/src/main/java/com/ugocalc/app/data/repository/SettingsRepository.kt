@@ -3,6 +3,7 @@ package com.ugocalc.app.data.repository
 import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
 import com.ugocalc.app.data.local.prefs.SettingsDataStore
 import com.ugocalc.app.data.local.prefs.UserSettings
+import com.ugocalc.app.domain.glycemic.GlycemicProfilePreset
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiProviderType
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +51,11 @@ class SettingsRepository @Inject constructor(
     suspend fun setHasCompletedOnboarding(completed: Boolean) = dataStore.setHasCompletedOnboarding(completed)
     suspend fun setHasSeededStarterTable(seeded: Boolean) = dataStore.setHasSeededStarterTable(seeded)
     suspend fun setAngleOverlayEnabled(enabled: Boolean) = dataStore.setAngleOverlayEnabled(enabled)
+    suspend fun setGlycemicProfilePreset(preset: String) = dataStore.setGlycemicProfilePreset(preset)
+    suspend fun setBaselineGlucoseMgDl(mgDl: Int) = dataStore.setBaselineGlucoseMgDl(mgDl)
+    suspend fun setCarbSensitivityMgDlPer10g(mgDlPer10g: Int) = dataStore.setCarbSensitivityMgDlPer10g(mgDlPer10g)
+    suspend fun setTargetPostPrandialMaxMgDl(mgDl: Int) = dataStore.setTargetPostPrandialMaxMgDl(mgDl)
+    suspend fun applyGlycemicProfilePreset(preset: GlycemicProfilePreset) = dataStore.applyGlycemicProfilePreset(preset)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)

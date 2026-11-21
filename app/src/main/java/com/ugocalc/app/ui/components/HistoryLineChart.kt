@@ -25,7 +25,7 @@ import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 /**
- * Grafico a linee per seguire l'andamento nel tempo di CHO e grassi separatamente.
+ * Grafico a linee per seguire l'andamento nel tempo di CHO, proteine e grassi separatamente.
  */
 @Composable
 fun HistoryLineChart(
@@ -33,9 +33,10 @@ fun HistoryLineChart(
     modifier: Modifier = Modifier,
 ) {
     val choColor = UgoSemanticColors.cho
+    val protColor = UgoSemanticColors.protein
     val grassiColor = UgoSemanticColors.fat
     val axisColor = MaterialTheme.colorScheme.outlineVariant
-    val maxValue = entries.maxOfOrNull { maxOf(it.totalChoG, it.totalGrassiG) } ?: 0.0
+    val maxValue = entries.maxOfOrNull { maxOf(it.totalChoG, it.totalProteineG, it.totalGrassiG) } ?: 0.0
 
     Column(modifier = modifier) {
         if (entries.size < 2 || maxValue <= 0.0) {
@@ -68,9 +69,14 @@ fun HistoryLineChart(
                 }
 
                 val choPoints = points(entries.map { it.totalChoG })
+                val protPoints = points(entries.map { it.totalProteineG })
                 val grassiPoints = points(entries.map { it.totalGrassiG })
 
-                listOf(choColor to choPoints, grassiColor to grassiPoints).forEach { (color, pts) ->
+                listOf(
+                    choColor to choPoints,
+                    protColor to protPoints,
+                    grassiColor to grassiPoints,
+                ).forEach { (color, pts) ->
                     if (pts.size > 1) {
                         val path = Path().apply {
                             moveTo(pts[0].x, baselineY)
@@ -82,7 +88,11 @@ fun HistoryLineChart(
                     }
                 }
 
-                listOf(choColor to choPoints, grassiColor to grassiPoints).forEach { (color, pts) ->
+                listOf(
+                    choColor to choPoints,
+                    protColor to protPoints,
+                    grassiColor to grassiPoints,
+                ).forEach { (color, pts) ->
                     for (i in 0 until pts.size - 1) {
                         drawLine(
                             color = color,
@@ -102,6 +112,7 @@ fun HistoryLineChart(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 LegendDot(choColor, "CHO")
+                LegendDot(protColor, "Proteine")
                 LegendDot(grassiColor, "Grassi")
             }
         }

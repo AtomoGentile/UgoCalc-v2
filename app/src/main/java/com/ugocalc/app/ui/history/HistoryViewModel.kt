@@ -8,8 +8,11 @@ import com.ugocalc.app.data.repository.FavoritesRepository
 import com.ugocalc.app.data.repository.HistoryRepository
 import com.ugocalc.app.data.repository.SettingsRepository
 import com.ugocalc.app.data.repository.V2TelemetryRepository
+import com.ugocalc.app.domain.glycemic.DailyGlycemicTimeline
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.CalculatedFoodLine
+import com.ugocalc.app.ui.home.buildMealTimelineInput
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -107,6 +110,24 @@ class HistoryViewModel @Inject constructor(
     val chartEnabled: StateFlow<Boolean> = settingsRepository.settings
         .map { it.historyChartEnabled }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), true)
+
+    val todayGlycemicTimeline: StateFlow<DailyGlycemicTimeline?> = combine(
+        historyRepository.observeHistory(),
+        settingsRepository.settings,
+    ) { allEntries, settings ->
+        val todayStart = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val todayMeals = allEntries
+            .filter { it.analyzedAtEpochMillis >= todayStart }
+            .map { buildMealTimelineInput(it, json) }
+        GlycemicCurveCalculator.simulateDayTimeline(todayMeals, settings.toGlycemicProfile())
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _chartInterval = MutableStateFlow(HistoryChartInterval.WEEK)
     val chartInterval: StateFlow<HistoryChartInterval> = _chartInterval.asStateFlow()

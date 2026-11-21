@@ -36,6 +36,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
@@ -46,6 +47,7 @@ import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -155,6 +157,7 @@ private fun ShadowV2ResultCard(shadowResult: AnalysisSessionStore.V2ShadowResult
                     tone = BannerTone.SUCCESS,
                 )
                 Spacer(Modifier.height(10.dp))
+                val shadowGl = GlycemicCurveCalculator.computeTotalGlycemicLoad(outcome.totals.lines)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -166,11 +169,25 @@ private fun ShadowV2ResultCard(shadowResult: AnalysisSessionStore.V2ShadowResult
                         contentColor = UgoSemanticColors.onChoContainer,
                     )
                     MacroPill(
+                        label = "Prot",
+                        value = "${outcome.totals.totalProteineG.toInt()} g",
+                        containerColor = UgoSemanticColors.proteinContainer,
+                        contentColor = UgoSemanticColors.onProteinContainer,
+                    )
+                    MacroPill(
                         label = "Grassi",
                         value = "${outcome.totals.totalGrassiG.toInt()} g",
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
                     )
+                    if (shadowGl > 0.0) {
+                        MacroPill(
+                            label = "GL",
+                            value = "%.1f".format(Locale.ITALIAN, shadowGl),
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 outcome.stime.forEach { stima ->

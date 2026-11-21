@@ -16,4 +16,6 @@ data class AnalysisHistoryEntity(
     val sessionId: String? = null,
     /** Modalità in cui è avvenuta l'analisi; DEFAULT 'CASA' per i record precedenti alla migration 20→21. */
     val sessionMode: String = "CASA",
+    val totalProteineG: Double = 0.0,
+    val glycemicLoad: Double = 0.0,
 )

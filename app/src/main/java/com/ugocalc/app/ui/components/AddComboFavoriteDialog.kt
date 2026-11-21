@@ -39,6 +39,7 @@ fun AddComboFavoriteDialog(
     onDismiss: () -> Unit,
     onConfirm: (foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double) -> Unit,
     initialEntry: NormalizedFoodEntry? = null,
+    onConfirmFull: ((foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double, proteinePer100g: Double, indiceGlicemico: Int?) -> Unit)? = null,
 ) {
     var selectedEntry by remember { mutableStateOf(initialEntry) }
     var gramsText by remember { mutableStateOf("") }
@@ -102,12 +103,28 @@ fun AddComboFavoriteDialog(
                                     containerColor = UgoSemanticColors.choContainer,
                                     contentColor = UgoSemanticColors.onChoContainer,
                                 )
+                                if (entry.proteinePer100g > 0.0) {
+                                    MacroPill(
+                                        label = "Prot",
+                                        value = "${"%.1f".format(entry.proteinePer100g)}g/100g",
+                                        containerColor = UgoSemanticColors.proteinContainer,
+                                        contentColor = UgoSemanticColors.onProteinContainer,
+                                    )
+                                }
                                 MacroPill(
                                     label = "Grassi",
                                     value = "${"%.1f".format(entry.grassiPer100g)}g/100g",
                                     containerColor = UgoSemanticColors.fatContainer,
                                     contentColor = UgoSemanticColors.onFatContainer,
                                 )
+                                entry.indiceGlicemico?.let { gi ->
+                                    MacroPill(
+                                        label = "IG",
+                                        value = "$gi",
+                                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        contentColor = MaterialTheme.colorScheme.onSurface,
+                                    )
+                                }
                             }
                         }
                     }
@@ -150,12 +167,24 @@ fun AddComboFavoriteDialog(
                         Button(
                             enabled = gramsValid,
                             onClick = {
-                                onConfirm(
-                                    entry.nome,
-                                    if (gramsText.isBlank()) null else grams,
-                                    entry.choPer100g,
-                                    entry.grassiPer100g,
-                                )
+                                val resolvedGrams = if (gramsText.isBlank()) null else grams
+                                if (onConfirmFull != null) {
+                                    onConfirmFull(
+                                        entry.nome,
+                                        resolvedGrams,
+                                        entry.choPer100g,
+                                        entry.grassiPer100g,
+                                        entry.proteinePer100g,
+                                        entry.indiceGlicemico,
+                                    )
+                                } else {
+                                    onConfirm(
+                                        entry.nome,
+                                        resolvedGrams,
+                                        entry.choPer100g,
+                                        entry.grassiPer100g,
+                                    )
+                                }
                             },
                             modifier = Modifier.padding(start = 8.dp),
                             shape = RoundedCornerShape(12.dp),

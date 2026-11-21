@@ -36,4 +36,7 @@ interface NormalizedFoodEntryDao {
     /** Ricerca manuale (§ ricerca tra i cibi del database): su tutte le tabelle, non solo una. */
     @Query("SELECT * FROM normalized_food_entries WHERE LOWER(nome) LIKE '%' || LOWER(:query) || '%' ORDER BY nome ASC LIMIT 50")
     suspend fun searchByName(query: String): List<NormalizedFoodEntryEntity>
+
+    @Query("UPDATE normalized_food_entries SET proteinePer100g = :proteinePer100g, indiceGlicemico = :indiceGlicemico WHERE id = :id")
+    suspend fun updateStarterNutrition(id: Long, proteinePer100g: Double, indiceGlicemico: Int?)
 }

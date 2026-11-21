@@ -73,12 +73,14 @@ class TableRepository @Inject constructor(
      */
     suspend fun ensureStarterTableSeeded(settingsRepository: SettingsRepository) = starterSeedMutex.withLock {
         val currentSettings = settingsRepository.settings.first()
-        if (currentSettings.hasSeededStarterTable) return@withLock
-        val existingTables = tableDao.getAllOrderedByPriority()
-        if (existingTables.isEmpty()) {
-            insertStarterTable(priorityOrder = 0)
+        if (!currentSettings.hasSeededStarterTable) {
+            val existingTables = tableDao.getAllOrderedByPriority()
+            if (existingTables.isEmpty()) {
+                insertStarterTable(priorityOrder = 0)
+            }
+            settingsRepository.setHasSeededStarterTable(true)
         }
-        settingsRepository.setHasSeededStarterTable(true)
+        backfillStarterProteinAndGi()
     }
 
     /**
@@ -106,11 +108,39 @@ class TableRepository @Inject constructor(
                         choPer100g = entry.choPer100g,
                         grassiPer100g = entry.grassiPer100g,
                         rowOrder = startOrder + index,
+                        proteinePer100g = entry.proteinePer100g,
+                        indiceGlicemico = entry.indiceGlicemico,
                     )
                 }
             )
         }
+        backfillStarterProteinAndGi(existing.id)
         existing.id
+    }
+
+    /**
+     * Backfill idempotente e non distruttivo per gli aggiornamenti alla v4.2.0: aggiorna proteine/100g
+     * e Indice Glicemico SOLO sulle righe non modificate manualmente della tabella base CREA.
+     */
+    private suspend fun backfillStarterProteinAndGi(starterTableId: Long? = null) {
+        val tableId = starterTableId ?: tableDao.getAllOrderedByPriority()
+            .firstOrNull { it.displayName == StarterFoodDatabase.STARTER_TABLE_DISPLAY_NAME }
+            ?.id ?: return
+        val currentEntries = entryDao.getForTable(tableId)
+        if (currentEntries.isEmpty()) return
+        val starterByName = StarterFoodDatabase.ENTRIES.associateBy { it.nome.trim().lowercase() }
+        for (entry in currentEntries) {
+            if (!entry.isManuallyEdited && entry.proteinePer100g == 0.0 && entry.indiceGlicemico == null) {
+                val starter = starterByName[entry.nome.trim().lowercase()] ?: continue
+                if (starter.proteinePer100g != 0.0 || starter.indiceGlicemico != null) {
+                    entryDao.updateStarterNutrition(
+                        id = entry.id,
+                        proteinePer100g = starter.proteinePer100g,
+                        indiceGlicemico = starter.indiceGlicemico,
+                    )
+                }
+            }
+        }
     }
 
     private suspend fun insertStarterTable(priorityOrder: Int): Long {
@@ -133,6 +163,8 @@ class TableRepository @Inject constructor(
                     choPer100g = entry.choPer100g,
                     grassiPer100g = entry.grassiPer100g,
                     rowOrder = index,
+                    proteinePer100g = entry.proteinePer100g,
+                    indiceGlicemico = entry.indiceGlicemico,
                 )
             }
         )
@@ -284,7 +316,15 @@ class TableRepository @Inject constructor(
         val tableId = tableDao.insert(entity)
         entryDao.insertAll(
             result.alimenti.mapIndexed { index, e ->
-                NormalizedFoodEntryEntity(tableId = tableId, nome = e.nome, choPer100g = e.choPer100g, grassiPer100g = e.grassiPer100g, rowOrder = index)
+                NormalizedFoodEntryEntity(
+                    tableId = tableId,
+                    nome = e.nome,
+                    choPer100g = e.choPer100g,
+                    grassiPer100g = e.grassiPer100g,
+                    rowOrder = index,
+                    proteinePer100g = e.proteinePer100g,
+                    indiceGlicemico = e.indiceGlicemico,
+                )
             }
         )
         exportTableAsXlsx(tableId)
@@ -344,6 +384,8 @@ class TableRepository @Inject constructor(
                             choPer100g = e.choPer100g,
                             grassiPer100g = e.grassiPer100g,
                             rowOrder = nextRowOrder + i,
+                            proteinePer100g = e.proteinePer100g,
+                            indiceGlicemico = e.indiceGlicemico,
                         )
                     }
                 )
@@ -470,23 +512,41 @@ class TableRepository @Inject constructor(
     }
 
     /** "Aggiungi al database" (§Pezzo E): persiste un alimento trovato con la ricerca online. */
-    suspend fun addOnlineResearchEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
+    suspend fun addOnlineResearchEntry(
+        nome: String,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ): NormalizedFoodEntry {
         val table = getOrCreateOnlineResearchTable()
-        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g).second
+        return addEntryToTable(table.id, nome, choPer100g, grassiPer100g, proteinePer100g, indiceGlicemico).second
     }
 
     /** Crea una nuova voce manuale nel database (§ richiesta utente). */
-    suspend fun addManualEntry(nome: String, choPer100g: Double, grassiPer100g: Double): NormalizedFoodEntry {
-        return addManualEntryWithResult(nome, choPer100g, grassiPer100g).entry
+    suspend fun addManualEntry(
+        nome: String,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ): NormalizedFoodEntry {
+        return addManualEntryWithResult(nome, choPer100g, grassiPer100g, proteinePer100g, indiceGlicemico).entry
     }
 
     /**
      * Crea una nuova voce manuale nel database e restituisce un [FoodSearchResult] contenente
      * l'`entryId` reale generato da Room (utile nei picker in modalità selezione multipla).
      */
-    suspend fun addManualEntryWithResult(nome: String, choPer100g: Double, grassiPer100g: Double): FoodSearchResult {
+    suspend fun addManualEntryWithResult(
+        nome: String,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ): FoodSearchResult {
         val table = getOrCreateManualEntriesTable()
-        val (entryId, entry) = addEntryToTable(table.id, nome.trim(), choPer100g, grassiPer100g)
+        val (entryId, entry) = addEntryToTable(table.id, nome.trim(), choPer100g, grassiPer100g, proteinePer100g, indiceGlicemico)
         return FoodSearchResult(
             entryId = entryId,
             entry = entry,
@@ -494,7 +554,14 @@ class TableRepository @Inject constructor(
         )
     }
 
-    private suspend fun addEntryToTable(tableId: Long, nome: String, choPer100g: Double, grassiPer100g: Double): Pair<Long, NormalizedFoodEntry> {
+    private suspend fun addEntryToTable(
+        tableId: Long,
+        nome: String,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ): Pair<Long, NormalizedFoodEntry> {
         val nextOrder = (entryDao.maxRowOrder(tableId) ?: -1) + 1
         val entity = NormalizedFoodEntryEntity(
             tableId = tableId,
@@ -503,6 +570,8 @@ class TableRepository @Inject constructor(
             grassiPer100g = grassiPer100g,
             rowOrder = nextOrder,
             isManuallyEdited = true,
+            proteinePer100g = proteinePer100g,
+            indiceGlicemico = indiceGlicemico,
         )
         val id = entryDao.insert(entity)
         return id to mapEntryToDomain(entity)
@@ -529,7 +598,13 @@ class TableRepository @Inject constructor(
 }
 
 fun mapEntryToDomain(entity: NormalizedFoodEntryEntity): NormalizedFoodEntry =
-    NormalizedFoodEntry(entity.nome, entity.choPer100g, entity.grassiPer100g)
+    NormalizedFoodEntry(
+        nome = entity.nome,
+        choPer100g = entity.choPer100g,
+        grassiPer100g = entity.grassiPer100g,
+        proteinePer100g = entity.proteinePer100g,
+        indiceGlicemico = entity.indiceGlicemico,
+    )
 
 /** Un risultato della ricerca manuale tra tabelle (Pezzo A): l'alimento più la tabella da cui viene. */
 data class FoodSearchResult(

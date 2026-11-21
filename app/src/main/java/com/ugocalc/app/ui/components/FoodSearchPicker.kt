@@ -18,6 +18,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -126,7 +128,9 @@ fun FoodSearchPicker(
     var showCreateDialog by remember { mutableStateOf(false) }
     var newFoodName by remember { mutableStateOf("") }
     var newFoodCho by remember { mutableStateOf("") }
+    var newFoodProteine by remember { mutableStateOf("") }
     var newFoodGrassi by remember { mutableStateOf("") }
+    var newFoodGi by remember { mutableStateOf("") }
 
     Column(
         modifier = modifier
@@ -166,7 +170,9 @@ fun FoodSearchPicker(
                 onClick = {
                     newFoodName = query.trim()
                     newFoodCho = ""
+                    newFoodProteine = ""
                     newFoodGrassi = ""
+                    newFoodGi = ""
                     showCreateDialog = true
                 },
                 modifier = Modifier.size(50.dp),
@@ -319,7 +325,9 @@ fun FoodSearchPicker(
                     onAction = {
                         newFoodName = query.trim()
                         newFoodCho = ""
+                        newFoodProteine = ""
                         newFoodGrassi = ""
+                        newFoodGi = ""
                         showCreateDialog = true
                     },
                     modifier = resultsModifier.padding(vertical = 12.dp),
@@ -356,10 +364,15 @@ fun FoodSearchPicker(
     if (showCreateDialog) {
         val nameValid = newFoodName.isNotBlank()
         val choParsed = if (newFoodCho.isBlank()) 0.0 else newFoodCho.parseLocaleDoubleOrNull()
+        val protParsed = if (newFoodProteine.isBlank()) 0.0 else newFoodProteine.parseLocaleDoubleOrNull()
         val grassiParsed = if (newFoodGrassi.isBlank()) 0.0 else newFoodGrassi.parseLocaleDoubleOrNull()
+        val giTrimmed = newFoodGi.trim()
+        val giParsed = if (giTrimmed.isEmpty()) null else giTrimmed.toIntOrNull()
         val choValid = choParsed != null && choParsed >= 0.0
+        val protValid = protParsed != null && protParsed >= 0.0
         val grassiValid = grassiParsed != null && grassiParsed >= 0.0
-        val canSubmit = nameValid && choValid && grassiValid
+        val giValid = giTrimmed.isEmpty() || (giParsed != null && giParsed in 0..100)
+        val canSubmit = nameValid && choValid && protValid && grassiValid && giValid
 
         Dialog(onDismissRequest = { showCreateDialog = false }) {
             Surface(
@@ -372,7 +385,11 @@ fun FoodSearchPicker(
                 shadowElevation = 8.dp,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
             ) {
-                Column(modifier = Modifier.padding(22.dp)) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(22.dp),
+                ) {
                     Text(
                         text = "Crea nuovo alimento",
                         style = MaterialTheme.typography.titleLarge,
@@ -408,6 +425,21 @@ fun FoodSearchPicker(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     OutlinedTextField(
+                        value = newFoodProteine,
+                        onValueChange = { newFoodProteine = it },
+                        label = { Text("Proteine per 100g") },
+                        placeholder = { Text("0") },
+                        singleLine = true,
+                        isError = !protValid,
+                        supportingText = if (!protValid) {
+                            { Text("Inserisci un numero non negativo") }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
                         value = newFoodGrassi,
                         onValueChange = { newFoodGrassi = it },
                         label = { Text("Grassi per 100g") },
@@ -418,6 +450,21 @@ fun FoodSearchPicker(
                             { Text("Inserisci un numero non negativo") }
                         } else null,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = newFoodGi,
+                        onValueChange = { newFoodGi = it },
+                        label = { Text("Indice Glicemico (facoltativo, 0–100)") },
+                        placeholder = { Text("es. 49") },
+                        singleLine = true,
+                        isError = !giValid,
+                        supportingText = if (!giValid) {
+                            { Text("Inserisci un intero tra 0 e 100") }
+                        } else null,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                     )
@@ -435,8 +482,9 @@ fun FoodSearchPicker(
                             enabled = canSubmit,
                             onClick = {
                                 val cho = choParsed ?: 0.0
+                                val prot = protParsed ?: 0.0
                                 val grassi = grassiParsed ?: 0.0
-                                viewModel.createManualFood(newFoodName.trim(), cho, grassi) { created ->
+                                viewModel.createManualFood(newFoodName.trim(), cho, grassi, prot, giParsed) { created ->
                                     if (selectionMode) {
                                         onToggleSelect!!(created)
                                     } else {
@@ -521,12 +569,28 @@ private fun FoodResultRow(
                         containerColor = UgoSemanticColors.choContainer,
                         contentColor = UgoSemanticColors.onChoContainer,
                     )
+                    if (result.entry.proteinePer100g > 0.0) {
+                        MacroPill(
+                            label = "Prot",
+                            value = "${"%.1f".format(result.entry.proteinePer100g)}g",
+                            containerColor = UgoSemanticColors.proteinContainer,
+                            contentColor = UgoSemanticColors.onProteinContainer,
+                        )
+                    }
                     MacroPill(
                         label = "Grassi",
                         value = "${"%.1f".format(result.entry.grassiPer100g)}g",
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
                     )
+                    result.entry.indiceGlicemico?.let { gi ->
+                        MacroPill(
+                            label = "IG",
+                            value = "$gi",
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            contentColor = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
                 }
                 if (result.tableDisplayName.isNotBlank()) {
                     Spacer(modifier = Modifier.height(4.dp))
@@ -632,10 +696,12 @@ class FoodSearchPickerViewModel @Inject constructor(
         nome: String,
         cho: Double,
         grassi: Double,
+        proteine: Double = 0.0,
+        indiceGlicemico: Int? = null,
         onCreated: (FoodSearchResult) -> Unit,
     ) {
         viewModelScope.launch {
-            val created = tableRepository.addManualEntryWithResult(nome, cho, grassi)
+            val created = tableRepository.addManualEntryWithResult(nome, cho, grassi, proteine, indiceGlicemico)
             refreshBrowseEntries()
             if (_query.value.isNotBlank()) {
                 _results.value = tableRepository.searchEntries(_query.value)

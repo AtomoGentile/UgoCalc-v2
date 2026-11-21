@@ -145,11 +145,26 @@ class FoodHubViewModel @Inject constructor(
         sessionStore.setPendingManualEntry(entry)
     }
 
-    fun addComboFavorite(foodName: String, grams: Double?, choPer100g: Double, grassiPer100g: Double) {
+    fun addComboFavorite(
+        foodName: String,
+        grams: Double?,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        proteinePer100g: Double = 0.0,
+        indiceGlicemico: Int? = null,
+    ) {
         viewModelScope.launch {
             val nextOrder = _uiState.value.favoritesCount
             val label = if (grams != null) "$foodName (${grams.toInt()}g)" else foodName
-            favoritesRepository.addComboFavorite(label, grams, choPer100g, grassiPer100g, nextOrder)
+            favoritesRepository.addComboFavorite(
+                label = label,
+                grams = grams,
+                choPer100g = choPer100g,
+                grassiPer100g = grassiPer100g,
+                sortOrder = nextOrder,
+                proteinePer100g = proteinePer100g,
+                indiceGlicemico = indiceGlicemico,
+            )
         }
     }
 }
@@ -317,8 +332,9 @@ fun FoodHubScreen(
         AddComboFavoriteDialog(
             initialEntry = entry,
             onDismiss = { favoriteCandidate = null },
-            onConfirm = { foodName, grams, cho, grassi ->
-                viewModel.addComboFavorite(foodName, grams, cho, grassi)
+            onConfirm = { _, _, _, _ -> },
+            onConfirmFull = { foodName, grams, cho, grassi, prot, gi ->
+                viewModel.addComboFavorite(foodName, grams, cho, grassi, prot, gi)
                 favoriteCandidate = null
                 scope.launch {
                     snackbarHostState.showSnackbar("Aggiunto ai preferiti: $foodName")

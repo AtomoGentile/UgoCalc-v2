@@ -43,10 +43,14 @@ class AiDtosTest {
     }
 
     @Test
-    fun `NormalizationDto decodes cho_per_100g and grassi_per_100g`() {
+    fun `NormalizationDto decodes cho_per_100g, grassi_per_100g, optional protein and GI`() {
         val raw = """
             {
-              "alimenti": [{"nome": "Pasta di semola, secca, cruda", "cho_per_100g": 75.0, "grassi_per_100g": 1.5}],
+              "alimenti": [
+                {"nome": "Pasta di semola, secca, cruda", "cho_per_100g": 75.0, "grassi_per_100g": 1.5},
+                {"nome": "Petto di pollo", "cho_per_100g": 0.0, "grassi_per_100g": 1.5, "proteine_per_100g": 30.0, "indice_glicemico": 0},
+                {"nome": "Alimento con proteine null", "cho_per_100g": 10.0, "grassi_per_100g": 2.0, "proteine_per_100g": null, "indice_glicemico": null}
+              ],
               "righe_scartate": [{"contenuto_originale": "???", "motivo": "dati mancanti"}],
               "note_conversione": ""
             }
@@ -56,6 +60,11 @@ class AiDtosTest {
 
         assertEquals(75.0, domain.alimenti[0].choPer100g, 0.001)
         assertEquals(1.5, domain.alimenti[0].grassiPer100g, 0.001)
+        assertEquals(0.0, domain.alimenti[0].proteinePer100g, 0.001)
+        assertNull(domain.alimenti[0].indiceGlicemico)
+        assertEquals(30.0, domain.alimenti[1].proteinePer100g, 0.001)
+        assertEquals(0, domain.alimenti[1].indiceGlicemico)
+        assertEquals(0.0, domain.alimenti[2].proteinePer100g, 0.001)
         assertEquals(1, domain.righeScartate.size)
     }
 
@@ -94,5 +103,19 @@ class AiDtosTest {
 
         assertEquals(OnlineResearchReliability.SICURA, domain.affidabilita)
         assertTrue(domain.haDatiUtilizzabili)
+        assertNull(domain.proteinePer100g)
+    }
+
+    @Test
+    fun `OnlineFoodResearchDto decodes optional proteine_per_100g and indice_glicemico`() {
+        val raw = """
+            {"affidabilita": "sicura", "alimento": "pasta integrale", "cho_per_100g": 66.2, "grassi_per_100g": 2.5, "proteine_per_100g": 13.4, "indice_glicemico": 42, "fonte_nome": "CREA", "fonte_url": "https://crea.gov.it", "motivo_errore": ""}
+        """.trimIndent()
+
+        val domain = json.decodeFromString<OnlineFoodResearchDto>(raw).toDomain()
+
+        assertTrue(domain.haDatiUtilizzabili)
+        assertEquals(13.4, domain.proteinePer100g!!, 0.001)
+        assertEquals(42, domain.indiceGlicemico)
     }
 }

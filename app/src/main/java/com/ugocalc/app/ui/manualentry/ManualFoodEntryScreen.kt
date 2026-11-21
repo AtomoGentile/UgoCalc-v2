@@ -51,6 +51,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
+import com.ugocalc.app.domain.glycemic.GlycemicLoadLevel
 import com.ugocalc.app.ui.components.AnimatedMacroMetricTile
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.EmptyStateMessage
@@ -59,6 +61,7 @@ import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
+import java.util.Locale
 
 private val QUICK_PORTIONS_G = listOf(50, 80, 100, 150, 200)
 
@@ -351,8 +354,26 @@ private fun QuantityStep(
                 skipSelectStep = uiState.skipSelectStep,
             )
 
-            // Live CHO + Grassi preview total banner
+            // Live CHO + Proteine + Grassi + Carico Glicemico preview total banner
             if (uiState.rows.isNotEmpty()) {
+                val glLevel = GlycemicCurveCalculator.classifyGlycemicLoad(uiState.previewGlycemicLoad)
+                val (glBg, glFg, glLabel) = when (glLevel) {
+                    GlycemicLoadLevel.BASSO -> Triple(
+                        UgoSemanticColors.successContainer,
+                        UgoSemanticColors.onSuccessContainer,
+                        "Basso",
+                    )
+                    GlycemicLoadLevel.MEDIO -> Triple(
+                        UgoSemanticColors.warningContainer,
+                        UgoSemanticColors.onWarningContainer,
+                        "Medio",
+                    )
+                    GlycemicLoadLevel.ALTO -> Triple(
+                        MaterialTheme.colorScheme.errorContainer,
+                        MaterialTheme.colorScheme.onErrorContainer,
+                        "Alto",
+                    )
+                }
                 UgoCard(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -360,18 +381,36 @@ private fun QuantityStep(
                     borderColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f),
                     contentPadding = PaddingValues(12.dp),
                 ) {
-                    Text(
-                        text = "Anteprima totale",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = "Anteprima totale",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(50),
+                            color = glBg,
+                        ) {
+                            Text(
+                                text = "Carico Glicemico ${"%.1f".format(Locale.ITALIAN, uiState.previewGlycemicLoad)} · $glLabel",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = glFg,
+                                modifier = Modifier.padding(horizontal = 9.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
                         AnimatedMacroMetricTile(
-                            label = "CHO stimati",
+                            label = "CHO",
                             targetValue = uiState.previewChoG.toFloat(),
                             decimals = 1,
                             unit = "g",
@@ -379,7 +418,15 @@ private fun QuantityStep(
                             modifier = Modifier.weight(1f),
                         )
                         AnimatedMacroMetricTile(
-                            label = "Grassi stimati",
+                            label = "Proteine",
+                            targetValue = uiState.previewProteineG.toFloat(),
+                            decimals = 1,
+                            unit = "g",
+                            accentColor = UgoSemanticColors.protein,
+                            modifier = Modifier.weight(1f),
+                        )
+                        AnimatedMacroMetricTile(
+                            label = "Grassi",
                             targetValue = uiState.previewGrassiG.toFloat(),
                             decimals = 1,
                             unit = "g",
@@ -434,8 +481,15 @@ private fun QuantityStep(
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis,
                                     )
+                                    val giSuffix = row.resolvedGi.let { resolved ->
+                                        if (resolved.gi > 0) {
+                                            if (resolved.isEstimated) " · IG ~${resolved.gi}" else " · IG ${resolved.gi}"
+                                        } else {
+                                            ""
+                                        }
+                                    }
                                     Text(
-                                        text = "Per 100g: CHO ${"%.1f".format(row.entry.choPer100g)}g · Grassi ${"%.1f".format(row.entry.grassiPer100g)}g",
+                                        text = "Per 100g: CHO ${"%.1f".format(row.entry.choPer100g)}g · Prot ${"%.1f".format(row.entry.proteinePer100g)}g · Grassi ${"%.1f".format(row.entry.grassiPer100g)}g$giSuffix",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(top = 2.dp),
@@ -491,11 +545,25 @@ private fun QuantityStep(
                                         contentColor = UgoSemanticColors.onChoContainer,
                                     )
                                     MacroPill(
+                                        label = "Prot",
+                                        value = "${"%.1f".format(row.previewProteineG)} g",
+                                        containerColor = UgoSemanticColors.proteinContainer,
+                                        contentColor = UgoSemanticColors.onProteinContainer,
+                                    )
+                                    MacroPill(
                                         label = "Grassi",
                                         value = "${"%.1f".format(row.previewGrassiG)} g",
                                         containerColor = UgoSemanticColors.fatContainer,
                                         contentColor = UgoSemanticColors.onFatContainer,
                                     )
+                                    if (row.previewGlycemicLoad > 0.0) {
+                                        MacroPill(
+                                            label = "GL",
+                                            value = "%.1f".format(Locale.ITALIAN, row.previewGlycemicLoad),
+                                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                            contentColor = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
                                 }
                             } else {
                                 Text(

@@ -120,7 +120,9 @@ fun TableEditorScreen(
                                         row = row,
                                         onNomeChange = { viewModel.updateNome(row.localKey, it) },
                                         onChoChange = { viewModel.updateCho(row.localKey, it) },
+                                        onProteineChange = { viewModel.updateProteine(row.localKey, it) },
                                         onGrassiChange = { viewModel.updateGrassi(row.localKey, it) },
+                                        onGiChange = { viewModel.updateIndiceGlicemico(row.localKey, it) },
                                         onDelete = { viewModel.deleteRow(row.localKey) },
                                     )
                                 }
@@ -139,6 +141,7 @@ fun TableEditorScreen(
 
 private val NOME_COLUMN_WIDTH = 220.dp
 private val NUMERIC_COLUMN_WIDTH = 128.dp
+private val GI_COLUMN_WIDTH = 108.dp
 
 @Composable
 private fun HeaderRow() {
@@ -150,7 +153,9 @@ private fun HeaderRow() {
     ) {
         Text("Alimento", fontWeight = FontWeight.Bold, modifier = Modifier.width(NOME_COLUMN_WIDTH))
         Text("CHO/100g", fontWeight = FontWeight.Bold, modifier = Modifier.width(NUMERIC_COLUMN_WIDTH))
+        Text("Prot/100g", fontWeight = FontWeight.Bold, modifier = Modifier.width(NUMERIC_COLUMN_WIDTH))
         Text("Grassi/100g", fontWeight = FontWeight.Bold, modifier = Modifier.width(NUMERIC_COLUMN_WIDTH))
+        Text("IG (0–100)", fontWeight = FontWeight.Bold, modifier = Modifier.width(GI_COLUMN_WIDTH))
         Text("", modifier = Modifier.width(44.dp))
     }
 }
@@ -160,9 +165,14 @@ private fun EditableTableRow(
     row: EditableRow,
     onNomeChange: (String) -> Unit,
     onChoChange: (String) -> Unit,
+    onProteineChange: (String) -> Unit,
     onGrassiChange: (String) -> Unit,
+    onGiChange: (String) -> Unit,
     onDelete: () -> Unit,
 ) {
+    val parsedGi = row.indiceGlicemico.trim().toIntOrNull()
+    val giError = row.indiceGlicemico.isNotBlank() && (parsedGi == null || parsedGi !in 0..100)
+
     Row(
         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -184,12 +194,30 @@ private fun EditableTableRow(
             modifier = Modifier.width(NUMERIC_COLUMN_WIDTH),
         )
         OutlinedTextField(
+            value = row.proteinePer100g,
+            onValueChange = onProteineChange,
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.width(NUMERIC_COLUMN_WIDTH),
+        )
+        OutlinedTextField(
             value = row.grassiPer100g,
             onValueChange = onGrassiChange,
             singleLine = true,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             shape = RoundedCornerShape(10.dp),
             modifier = Modifier.width(NUMERIC_COLUMN_WIDTH),
+        )
+        OutlinedTextField(
+            value = row.indiceGlicemico,
+            onValueChange = onGiChange,
+            placeholder = { Text("—") },
+            singleLine = true,
+            isError = giError,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.width(GI_COLUMN_WIDTH),
         )
         IconButton(onClick = onDelete, modifier = Modifier.width(44.dp)) {
             Icon(

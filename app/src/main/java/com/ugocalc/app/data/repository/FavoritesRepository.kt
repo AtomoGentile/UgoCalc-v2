@@ -20,7 +20,15 @@ class FavoritesRepository @Inject constructor(
      * Preferito "da database" (§ richiesta utente), non legato a una voce di cronologia. Il peso è
      * facoltativo — l'utente decide se specificarlo o lasciare solo i valori per 100g.
      */
-    suspend fun addComboFavorite(label: String, grams: Double?, choPer100g: Double, grassiPer100g: Double, sortOrder: Int) =
+    suspend fun addComboFavorite(
+        label: String,
+        grams: Double?,
+        choPer100g: Double,
+        grassiPer100g: Double,
+        sortOrder: Int,
+        proteinePer100g: Double? = null,
+        indiceGlicemico: Int? = null,
+    ) =
         dao.insert(
             FavoriteShortcutEntity(
                 historyEntryId = null,
@@ -29,6 +37,8 @@ class FavoritesRepository @Inject constructor(
                 comboGrams = grams,
                 comboChoPer100g = choPer100g,
                 comboGrassiPer100g = grassiPer100g,
+                comboProteinePer100g = proteinePer100g,
+                comboIndiceGlicemico = indiceGlicemico,
             )
         )
 

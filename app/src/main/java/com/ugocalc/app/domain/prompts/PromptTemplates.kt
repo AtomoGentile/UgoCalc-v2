@@ -128,9 +128,10 @@ object PromptTemplates {
         Esegui questi passaggi:
 
         1. INTERPRETAZIONE: identifica quali colonne corrispondono a nome alimento,
-        contenuto di carboidrati e contenuto di grassi. Se i valori non sono espressi
-        per 100g, convertili a tale base quando possibile; se non è possibile la
-        conversione, segnalalo.
+        contenuto di carboidrati, contenuto di grassi, contenuto di proteine (se
+        presente, altrimenti 0) e indice glicemico (se presente, altrimenti null).
+        Se i valori non sono espressi per 100g, convertili a tale base quando
+        possibile; se non è possibile la conversione, segnalalo.
 
         2. NORMALIZZAZIONE NOMI: standardizza il nome di ciascun alimento mantenendo
         informazioni utili al riconoscimento (es. "Pasta di semola, secca, cruda"
@@ -157,7 +158,9 @@ object PromptTemplates {
             {
               "nome": "string",
               "cho_per_100g": number,
-              "grassi_per_100g": number
+              "grassi_per_100g": number,
+              "proteine_per_100g": number,
+              "indice_glicemico": number o null
             }
           ],
           "righe_scartate": [
@@ -256,6 +259,8 @@ object PromptTemplates {
         Trova, per 100g di prodotto:
         - contenuto di carboidrati (CHO) in grammi
         - contenuto di grassi in grammi
+        - contenuto di proteine in grammi
+        - indice glicemico (0–100, se noto da fonti autorevoli come tabelle internazionali Atkinson, altrimenti null)
 
         Classifica il risultato con un livello di affidabilità, seguendo ESATTAMENTE questo
         criterio:
@@ -281,6 +286,8 @@ object PromptTemplates {
           "alimento": "string (nome dell'alimento, in italiano)",
           "cho_per_100g": number o null,
           "grassi_per_100g": number o null,
+          "proteine_per_100g": number o null,
+          "indice_glicemico": number o null,
           "fonte_nome": "string (nome della fonte principale, es. \"USDA FoodData Central\", vuoto se nessuna)",
           "fonte_url": "string (URL della pagina consultata, vuoto se nessuna)",
           "motivo_errore": "string (solo se affidabilita è \"errore_dati\", altrimenti vuoto)"

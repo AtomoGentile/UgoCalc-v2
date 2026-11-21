@@ -25,4 +25,6 @@ data class NormalizedFoodEntryEntity(
     val grassiPer100g: Double,
     val rowOrder: Int,
     val isManuallyEdited: Boolean = false,
+    val proteinePer100g: Double = 0.0,
+    val indiceGlicemico: Int? = null,
 )

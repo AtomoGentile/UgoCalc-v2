@@ -9,7 +9,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Genera file XLSX con i dati normalizzati (nome, CHO/100g, grassi/100g).
+ * Genera file XLSX con i dati normalizzati (nome, CHO/100g, grassi/100g, proteine/100g, IG).
  * Usato dopo la normalizzazione AI per esportare/salvare i risultati.
  */
 @Singleton
@@ -24,6 +24,8 @@ class XlsxExporter @Inject constructor() {
             headerRow.createCell(0).setCellValue("Nome alimento")
             headerRow.createCell(1).setCellValue("CHO per 100g")
             headerRow.createCell(2).setCellValue("Grassi per 100g")
+            headerRow.createCell(3).setCellValue("Proteine per 100g")
+            headerRow.createCell(4).setCellValue("Indice Glicemico (IG)")
 
             // Dati
             entries.forEachIndexed { index, entry ->
@@ -31,12 +33,17 @@ class XlsxExporter @Inject constructor() {
                 row.createCell(0).setCellValue(entry.nome)
                 row.createCell(1).setCellValue(entry.choPer100g)
                 row.createCell(2).setCellValue(entry.grassiPer100g)
+                row.createCell(3).setCellValue(entry.proteinePer100g)
+                val giCell = row.createCell(4)
+                entry.indiceGlicemico?.let { giCell.setCellValue(it.toDouble()) } ?: giCell.setCellValue("")
             }
 
             // Larghezze fisse (autoSizeColumn non funziona su Android - dipende da java.awt)
             sheet.setColumnWidth(0, 7000)  // Nome: ~50 caratteri
             sheet.setColumnWidth(1, 4000)  // CHO: numerico
             sheet.setColumnWidth(2, 4000)  // Grassi: numerico
+            sheet.setColumnWidth(3, 4500)  // Proteine: numerico
+            sheet.setColumnWidth(4, 5200)  // Indice Glicemico: numerico opzionale
 
             outputFile.outputStream().use { workbook.write(it) }
         }

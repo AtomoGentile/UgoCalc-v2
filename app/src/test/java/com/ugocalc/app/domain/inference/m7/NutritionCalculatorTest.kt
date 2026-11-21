@@ -38,9 +38,9 @@ class NutritionCalculatorTest {
     )
 
     @Test
-    fun `computes CHO and fat contribution from grams and per-100g values`() {
+    fun `computes CHO, fat and protein contribution from grams and per-100g values`() {
         val estimates = listOf(estimate("riso in bianco", 165.0))
-        val matches = mapOf("riso in bianco" to NormalizedFoodEntry("riso in bianco", choPer100g = 28.0, grassiPer100g = 0.3))
+        val matches = mapOf("riso in bianco" to NormalizedFoodEntry("riso in bianco", choPer100g = 28.0, grassiPer100g = 0.3, proteinePer100g = 2.4))
 
         val report = NutritionCalculator.calculate(estimates, matches)
 
@@ -48,9 +48,11 @@ class NutritionCalculatorTest {
         val riga = report.righe.first()
         assertEquals(165.0 * 28.0 / 100.0, riga.choG!!, 1e-9)
         assertEquals(165.0 * 0.3 / 100.0, riga.grassiG!!, 1e-9)
+        assertEquals(165.0 * 2.4 / 100.0, riga.proteineG!!, 1e-9)
         assertTrue(riga.spiegazione.contains("spiegazione di prova"))
         assertEquals(riga.choG, report.choTotaleG, 1e-9)
         assertEquals(riga.grassiG, report.grassiTotaleG, 1e-9)
+        assertEquals(riga.proteineG, report.proteineTotaleG, 1e-9)
     }
 
     @Test
@@ -101,9 +103,9 @@ class NutritionCalculatorTest {
             ),
         )
         val tableByIngredient = mapOf(
-            "pasta all'uovo" to NormalizedFoodEntry("Pasta all'uovo", choPer100g = 70.0, grassiPer100g = 4.0),
-            "ragù di carne" to NormalizedFoodEntry("Ragù alla bolognese", choPer100g = 5.0, grassiPer100g = 10.0),
-            "besciamella" to NormalizedFoodEntry("Besciamella", choPer100g = 10.0, grassiPer100g = 12.0),
+            "pasta all'uovo" to NormalizedFoodEntry("Pasta all'uovo", choPer100g = 70.0, grassiPer100g = 4.0, proteinePer100g = 13.0, indiceGlicemico = 48),
+            "ragù di carne" to NormalizedFoodEntry("Ragù alla bolognese", choPer100g = 5.0, grassiPer100g = 10.0, proteinePer100g = 11.0, indiceGlicemico = 30),
+            "besciamella" to NormalizedFoodEntry("Besciamella", choPer100g = 10.0, grassiPer100g = 12.0, proteinePer100g = 3.0, indiceGlicemico = 55),
         )
 
         val matches = NutritionMatchStepAdapter.matchWith(
@@ -128,10 +130,13 @@ class NutritionCalculatorTest {
         assertFalse(riga.escluso)
         // Media ponderata: CHO/100g = 0.4*70 + 0.4*5 + 0.2*10 = 32.0 -> su 300g = 96.0g
         // Grassi/100g = 0.4*4 + 0.4*10 + 0.2*12 = 8.0 -> su 300g = 24.0g
+        // Proteine/100g = 0.4*13 + 0.4*11 + 0.2*3 = 10.2 -> su 300g = 30.6g
         assertEquals(96.0, riga.choG!!, 1e-9)
         assertEquals(24.0, riga.grassiG!!, 1e-9)
+        assertEquals(30.6, riga.proteineG!!, 1e-9)
         assertEquals(96.0, report.choTotaleG, 1e-9)
         assertEquals(24.0, report.grassiTotaleG, 1e-9)
+        assertEquals(30.6, report.proteineTotaleG, 1e-9)
     }
 
     @Test
