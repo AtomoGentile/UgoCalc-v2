@@ -40,6 +40,25 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.4.0",
+            categories = listOf("Account Cloudflare", "Home più chiara", "Barra flottante"),
+            highlights = listOf(
+                "Account su Cloudflare: registrazione, accesso, cambio email/password ed eliminazione account ora passano dal tuo backend Cloudflare (nessuna dipendenza da AWS Cognito). Non serve più il codice di verifica via email. Password protette con PBKDF2 e blocco temporaneo dopo troppi tentativi errati.",
+                "Home più chiara: in cima restano solo avvisi di configurazione, saluto, scatto foto AI e azioni rapide; il riepilogo di oggi segue subito dopo e la curva glicemica giornaliera parte compressa.",
+                "Barra di navigazione flottante: nuova barra a pillola staccata dai bordi, con etichetta solo sulla scheda attiva.",
+                "Rimosso l'accesso con Google (era legato a Cognito). Se avevi un account Cognito, crea un nuovo account con la stessa email.",
+            ),
+        ),        ChangelogEntry(
+            version = "4.3.0",
+            categories = listOf("Database CREA 600+", "Ricerca Smart", "Filtri Categoria"),
+            highlights = listOf(
+                "Database Italiano CREA 600+ in 14 categorie: catalogo ampliato a oltre 600 alimenti e piatti italiani tipici completi di CHO, Proteine, Grassi per 100g e Indice Glicemico (IG), organizzati in 14 categorie nutrizionali.",
+                "Sincronizzazione automatica non distruttiva (CATALOG_VERSION = 2): all'avvio gli utenti esistenti ricevono automaticamente tutti i nuovi alimenti CREA e i valori aggiornati senza perdere né sovrascrivere tabelle o modifiche personali.",
+                "Ricerca Smart senza accenti e multi-parola: ricerca tollerante ad accenti e ordine delle parole (es. \"caffe macchiato\", \"pasta tonno\") con ordinamento per pertinenza e navigazione completa su tutto il catalogo.",
+                "Filtri Categoria & Preferiti completi: nuovi chip di filtro rapido per categoria in Ricerca Alimenti con conteggio dinamico e salvataggio completo di Proteine e IG anche dalla ricerca database.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.2.0",
             categories = listOf("Proteine", "Curva Glicemica", "Carico Glicemico"),
             highlights = listOf(

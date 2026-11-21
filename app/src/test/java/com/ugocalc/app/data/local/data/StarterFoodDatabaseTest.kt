@@ -1,6 +1,8 @@
 package com.ugocalc.app.data.local.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.text.Normalizer
@@ -9,16 +11,56 @@ import java.util.Locale
 class StarterFoodDatabaseTest {
 
     @Test
-    fun `starter database exposes expected display name and around 180+ curated entries`() {
+    fun `starter database exposes expected display name, catalog version, and 600+ curated entries`() {
         assertEquals("Tabella Base Italiana (CREA)", StarterFoodDatabase.STARTER_TABLE_DISPLAY_NAME)
+        assertTrue("Expected CATALOG_VERSION >= 2", StarterFoodDatabase.CATALOG_VERSION >= 2)
         assertTrue(
-            "Expected at least 170 entries, got ${StarterFoodDatabase.ENTRIES.size}",
-            StarterFoodDatabase.ENTRIES.size >= 170,
+            "Expected at least 600 entries, got ${StarterFoodDatabase.ENTRIES.size}",
+            StarterFoodDatabase.ENTRIES.size >= 600,
+        )
+        assertEquals(
+            StarterFoodDatabase.CATEGORY_ENTRIES.values.sumOf { it.size },
+            StarterFoodDatabase.ENTRIES.size,
         )
     }
 
     @Test
-    fun `all entries have unique non-blank names and realistic non-negative macronutrients`() {
+    fun `all 14 ItalianFoodCategory entries are populated and resolve via categoryForFoodName`() {
+        assertEquals(14, StarterFoodDatabase.ItalianFoodCategory.entries.size)
+        for (category in StarterFoodDatabase.ItalianFoodCategory.entries) {
+            val items = StarterFoodDatabase.CATEGORY_ENTRIES[category]
+            assertNotNull("Missing category $category in CATEGORY_ENTRIES", items)
+            assertTrue(
+                "Expected category ${category.label} to have at least 15 entries, got ${items!!.size}",
+                items.size >= 15,
+            )
+            for (item in items) {
+                assertEquals(
+                    "categoryForFoodName mismatch for '${item.nome}'",
+                    category,
+                    StarterFoodDatabase.categoryForFoodName(item.nome),
+                )
+            }
+        }
+
+        // Fallback keyword classification for custom/imported foods + blank safety
+        assertEquals(
+            StarterFoodDatabase.ItalianFoodCategory.PRIMI_PIATTI,
+            StarterFoodDatabase.categoryForFoodName("Spaghetti alla Carbonara della casa"),
+        )
+        assertEquals(
+            StarterFoodDatabase.ItalianFoodCategory.PANE_PIZZA,
+            StarterFoodDatabase.categoryForFoodName("Pizza bufala e basilico"),
+        )
+        assertEquals(
+            StarterFoodDatabase.ItalianFoodCategory.UOVA_LATTICINI,
+            StarterFoodDatabase.categoryForFoodName("Skyr ai mirtilli artigianale"),
+        )
+        assertNull(StarterFoodDatabase.categoryForFoodName("   "))
+    }
+
+    @Test
+    fun `all entries have unique non-blank NFD names and realistic non-negative macronutrients`() {
         val normalizedNames = mutableSetOf<String>()
         for (entry in StarterFoodDatabase.ENTRIES) {
             assertTrue("Food name must not be blank", entry.nome.isNotBlank())
@@ -44,24 +86,43 @@ class StarterFoodDatabaseTest {
     }
 
     @Test
-    fun `starter database covers staples from all 12 Italian food categories`() {
+    fun `starter database covers staples and iconic Italian dishes across all 14 categories`() {
         val namesLower = StarterFoodDatabase.ENTRIES.map { it.nome.lowercase(Locale.ROOT) }
         val expectedKeywords = listOf(
             "pasta di semola (cotta)",       // Pasta e Cereali
-            "pane integrale",                // Pane e Prodotti da Forno
-            "pizza margherita",              // Pane e Prodotti da Forno
-            "patate bollite",                // Patate e Tuberi
-            "ceci bolliti",                  // Legumi
-            "petto di pollo",                // Carni e Salumi
-            "prosciutto crudo",              // Carni e Salumi
-            "salmone fresco",                // Pesce e Frutti di Mare
+            "riso basmati (cotto)",          // Pasta e Cereali
+            "pasta alla carbonara",          // Primi e Piatti Pronti
+            "pasta all'amatriciana",         // Primi e Piatti Pronti
+            "risotto alla milanese",         // Primi e Piatti Pronti
+            "pane integrale",                // Pane, Pizza e Forno
+            "pane carasau",                  // Pane, Pizza e Forno
+            "pizza margherita",              // Pane, Pizza e Forno
+            "pizza diavola",                 // Pane, Pizza e Forno
+            "patate bollite",                // Patate e Rustici
+            "arancino",                      // Patate e Rustici
+            "farinata di ceci",              // Patate e Rustici
+            "ceci bolliti",                  // Legumi e Veg
+            "lenticchie rosse",              // Legumi e Veg
+            "petto di pollo",                // Carni
+            "ossobuco",                      // Carni
+            "prosciutto crudo",              // Salumi
+            "guanciale",                     // Salumi
+            "salmone fresco",                // Pesce e Mare
+            "baccalà",                       // Pesce e Mare
             "mozzarella",                    // Uova e Latticini
-            "mela",                          // Frutta e Frutta Secca
-            "mandorle",                      // Frutta e Frutta Secca
+            "burrata",                       // Uova e Latticini
+            "skyr",                          // Uova e Latticini
+            "mela",                          // Frutta e Semi
+            "mandorle",                      // Frutta e Semi
+            "semi di chia",                  // Frutta e Semi
             "zucchine",                      // Verdure
+            "cime di rapa",                  // Verdure
             "olio extravergine",             // Condimenti e Salse
             "cioccolato fondente",           // Dolci e Colazione
+            "cannolo siciliano",             // Dolci e Colazione
+            "panettone",                     // Dolci e Colazione
             "cappuccino",                    // Bevande
+            "proteine whey",                 // Bevande
         )
         for (keyword in expectedKeywords) {
             assertTrue(

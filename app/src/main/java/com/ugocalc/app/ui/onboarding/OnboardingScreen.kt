@@ -65,6 +65,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.ugocalc.app.R
+import com.ugocalc.app.data.local.data.StarterFoodDatabase
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.isDarkSurfaceTheme
@@ -289,7 +290,7 @@ private fun OnboardingSlideTwo() {
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = "~200 alimenti italiani CREA precaricati",
+                    text = "${StarterFoodDatabase.ENTRIES.size} alimenti italiani CREA precaricati",
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Bold,
                 )
@@ -415,7 +416,7 @@ private fun OnboardingSlideThree() {
                     icon = Icons.Rounded.CheckCircle,
                     iconTint = UgoSemanticColors.success,
                     title = "Database locale pronto",
-                    subtitle = "~200 alimenti CREA attivi per ricerca, inserimento manuale, preferiti e barcode.",
+                    subtitle = "${StarterFoodDatabase.ENTRIES.size} alimenti CREA attivi per ricerca, inserimento manuale, preferiti e barcode.",
                 )
                 ChecklistRow(
                     icon = Icons.Rounded.Key,

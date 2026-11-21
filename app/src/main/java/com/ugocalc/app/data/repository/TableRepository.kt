@@ -33,6 +33,8 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.text.Normalizer
+import java.util.Locale
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -68,8 +70,9 @@ class TableRepository @Inject constructor(
 
     /**
      * Popola una tantum la tabella nutrizionale italiana base (CREA) se l'utente non ha ancora
-     * alcuna tabella nel database. Se l'utente possiede già tabelle importate, imposta comunque il
-     * flag `hasSeededStarterTable = true` senza sovrascrivere né aggiungere tabelle indesiderate.
+     * alcuna tabella nel database, e sincronizza in modo non distruttivo le nuove voci quando
+     * [StarterFoodDatabase.CATALOG_VERSION] aumenta (es. v4.2 -> v4.3). Non sovrascrive né elimina
+     * mai le personalizzazioni o le righe aggiunte dall'utente.
      */
     suspend fun ensureStarterTableSeeded(settingsRepository: SettingsRepository) = starterSeedMutex.withLock {
         val currentSettings = settingsRepository.settings.first()
@@ -79,14 +82,24 @@ class TableRepository @Inject constructor(
                 insertStarterTable(priorityOrder = 0)
             }
             settingsRepository.setHasSeededStarterTable(true)
+            settingsRepository.setStarterCatalogVersion(StarterFoodDatabase.CATALOG_VERSION)
+            backfillStarterProteinAndGi()
+        } else if (currentSettings.starterCatalogVersion < StarterFoodDatabase.CATALOG_VERSION) {
+            val existing = tableDao.getAllOrderedByPriority()
+                .firstOrNull { it.displayName == StarterFoodDatabase.STARTER_TABLE_DISPLAY_NAME }
+            if (existing != null) {
+                insertMissingStarterEntries(existing.id)
+                backfillStarterProteinAndGi(existing.id)
+            }
+            settingsRepository.setStarterCatalogVersion(StarterFoodDatabase.CATALOG_VERSION)
         }
-        backfillStarterProteinAndGi()
     }
 
     /**
      * Ripristina o reintegra la tabella base italiana (CREA): se assente la crea e la popola con
-     * tutte le voci; se già presente ma con voci mancanti, aggiunge quelle mancanti senza rimuovere
-     * eventuali personalizzazioni dell'utente. Restituisce l'ID della tabella.
+     * tutte le voci; se già presente ma con voci mancanti, aggiunge quelle mancanti (confronto
+     * case-insensitive e senza accenti NFD) senza rimuovere eventuali personalizzazioni dell'utente.
+     * Restituisce l'ID della tabella.
      */
     suspend fun restoreStarterTable(): Long = starterSeedMutex.withLock {
         val existing = tableDao.getAllOrderedByPriority()
@@ -95,15 +108,21 @@ class TableRepository @Inject constructor(
             val nextPriority = (tableDao.maxPriorityOrder() ?: -1) + 1
             return@withLock insertStarterTable(priorityOrder = nextPriority)
         }
-        val currentEntries = entryDao.getForTable(existing.id)
-        val existingNames = currentEntries.map { it.nome.trim().lowercase() }.toSet()
-        val missing = StarterFoodDatabase.ENTRIES.filter { it.nome.trim().lowercase() !in existingNames }
+        insertMissingStarterEntries(existing.id)
+        backfillStarterProteinAndGi(existing.id)
+        existing.id
+    }
+
+    private suspend fun insertMissingStarterEntries(tableId: Long) {
+        val currentEntries = entryDao.getForTable(tableId)
+        val existingKeys = currentEntries.map { normalizeStarterDedupKey(it.nome) }.toSet()
+        val missing = StarterFoodDatabase.ENTRIES.filter { normalizeStarterDedupKey(it.nome) !in existingKeys }
         if (missing.isNotEmpty()) {
-            val startOrder = (entryDao.maxRowOrder(existing.id) ?: -1) + 1
+            val startOrder = (entryDao.maxRowOrder(tableId) ?: -1) + 1
             entryDao.insertAll(
                 missing.mapIndexed { index, entry ->
                     NormalizedFoodEntryEntity(
-                        tableId = existing.id,
+                        tableId = tableId,
                         nome = entry.nome,
                         choPer100g = entry.choPer100g,
                         grassiPer100g = entry.grassiPer100g,
@@ -114,13 +133,11 @@ class TableRepository @Inject constructor(
                 }
             )
         }
-        backfillStarterProteinAndGi(existing.id)
-        existing.id
     }
 
     /**
-     * Backfill idempotente e non distruttivo per gli aggiornamenti alla v4.2.0: aggiorna proteine/100g
-     * e Indice Glicemico SOLO sulle righe non modificate manualmente della tabella base CREA.
+     * Backfill idempotente e non distruttivo: aggiorna proteine/100g e Indice Glicemico SOLO
+     * sulle righe non modificate manualmente della tabella base CREA.
      */
     private suspend fun backfillStarterProteinAndGi(starterTableId: Long? = null) {
         val tableId = starterTableId ?: tableDao.getAllOrderedByPriority()
@@ -128,10 +145,10 @@ class TableRepository @Inject constructor(
             ?.id ?: return
         val currentEntries = entryDao.getForTable(tableId)
         if (currentEntries.isEmpty()) return
-        val starterByName = StarterFoodDatabase.ENTRIES.associateBy { it.nome.trim().lowercase() }
+        val starterByName = StarterFoodDatabase.ENTRIES.associateBy { normalizeStarterDedupKey(it.nome) }
         for (entry in currentEntries) {
             if (!entry.isManuallyEdited && entry.proteinePer100g == 0.0 && entry.indiceGlicemico == null) {
-                val starter = starterByName[entry.nome.trim().lowercase()] ?: continue
+                val starter = starterByName[normalizeStarterDedupKey(entry.nome)] ?: continue
                 if (starter.proteinePer100g != 0.0 || starter.indiceGlicemico != null) {
                     entryDao.updateStarterNutrition(
                         id = entry.id,
@@ -175,7 +192,7 @@ class TableRepository @Inject constructor(
      * Restituisce fino a [limit] voci sfogliabili dalle tabelle normalizzate, in ordine di priorità,
      * così la ricerca mostra subito alimenti consultabili anche a campo di ricerca vuoto.
      */
-    suspend fun getBrowseEntries(limit: Int = 50): List<FoodSearchResult> {
+    suspend fun getBrowseEntries(limit: Int = 800): List<FoodSearchResult> {
         if (limit <= 0) return emptyList()
         val tables = tableDao.getAllOrderedByPriority()
             .filter { it.normalizationStatus == NormalizationStatus.DONE }
@@ -208,16 +225,39 @@ class TableRepository @Inject constructor(
     suspend fun getEntriesForTable(tableId: Long): List<NormalizedFoodEntryEntity> = entryDao.getForTable(tableId)
 
     /**
-     * Ricerca manuale tra tutte le tabelle dell'utente (composizione manuale del pasto, correzione
-     * di un abbinamento AI): restituisce anche il nome della tabella di provenienza, utile per
-     * distinguere in UI voci omonime importate da fonti diverse.
+     * Ricerca manuale intelligente tra tutte le tabelle dell'utente (composizione manuale del pasto,
+     * correzione di un abbinamento AI): insensibile ad accenti e maiuscole, supporta ricerche
+     * multi-parola in qualsiasi ordine (es. `"ragu"` -> `"Ragù alla bolognese"`, `"pasta carbonara"`
+     * -> `"Pasta alla carbonara"`, `"pollo petto"` -> `"Petto di pollo (cotto)"`) e ordina per
+     * rilevanza (esatta > prefisso > frase > tutti i token), poi per priorità tabella e nome più corto.
      */
     suspend fun searchEntries(query: String): List<FoodSearchResult> {
         if (query.isBlank()) return emptyList()
-        val matches = entryDao.searchByName(query.trim())
-        if (matches.isEmpty()) return emptyList()
-        val tableNames = tableDao.getAllOrderedByPriority().associateBy({ it.id }, { it.displayName })
-        return matches.map { FoodSearchResult(it.id, mapEntryToDomain(it), tableNames[it.tableId] ?: "?") }
+        val normalizedQuery = normalizeSearchText(query)
+        if (normalizedQuery.isEmpty()) return emptyList()
+
+        val tables = tableDao.getAllOrderedByPriority()
+        if (tables.isEmpty()) return emptyList()
+
+        val candidates = ArrayList<RankedFoodCandidate>()
+        for (table in tables) {
+            val entries = entryDao.getForTable(table.id)
+            for (entry in entries) {
+                candidates += RankedFoodCandidate(
+                    result = FoodSearchResult(
+                        entryId = entry.id,
+                        entry = mapEntryToDomain(entry),
+                        tableDisplayName = table.displayName,
+                    ),
+                    tablePriority = table.priorityOrder,
+                )
+            }
+        }
+        return rankFoodSearchCandidates(query = query, candidates = candidates, limit = SEARCH_RESULTS_LIMIT)
+    }
+
+    companion object {
+        private const val SEARCH_RESULTS_LIMIT = 60
     }
 
     /**
@@ -613,3 +653,100 @@ data class FoodSearchResult(
     val tableDisplayName: String,
     val pinned: Boolean = false,
 )
+
+private val SEARCH_DIACRITICS_REGEX = Regex("\\p{InCombiningDiacriticalMarks}+")
+private val SEARCH_NON_ALNUM_REGEX = Regex("[^a-z0-9]+")
+private val SEARCH_WHITESPACE_REGEX = Regex("\\s+")
+
+/**
+ * Chiave NFD senza diacritici e in minuscolo usata per deduplicare le voci della tabella base CREA
+ * durante la sincronizzazione versionata e il ripristino non distruttivo.
+ */
+internal fun normalizeStarterDedupKey(raw: String): String =
+    Normalizer.normalize(raw.trim().lowercase(Locale.ROOT), Normalizer.Form.NFD)
+        .replace(SEARCH_DIACRITICS_REGEX, "")
+
+/**
+ * Normalizza un testo per la ricerca alimentare intelligente: rimuove diacritici (NFD), converte in
+ * minuscolo, sostituisce apostrofi e punteggiatura con spazi e compatta gli spazi multipli.
+ */
+fun normalizeSearchText(text: String): String {
+    val decomposed = Normalizer.normalize(text.lowercase(Locale.ROOT), Normalizer.Form.NFD)
+    return decomposed
+        .replace(SEARCH_DIACRITICS_REGEX, "")
+        .replace(SEARCH_NON_ALNUM_REGEX, " ")
+        .trim()
+        .replace(SEARCH_WHITESPACE_REGEX, " ")
+}
+
+internal data class RankedFoodCandidate(
+    val result: FoodSearchResult,
+    val tablePriority: Int,
+)
+
+/**
+ * Calcola il livello di pertinenza di [candidateName] rispetto alla query già normalizzata:
+ * 0 = esatta, 1 = prefisso di parola, 2 = prefisso, 3 = sottostringa frase,
+ * 4 = tutti i token come prefisso di parola (qualsiasi ordine), 5 = tutti i token come sottostringa.
+ */
+internal fun computeFoodSearchRank(
+    candidateName: String,
+    normalizedQuery: String,
+    queryTokens: List<String>,
+): Int? {
+    if (normalizedQuery.isEmpty() || queryTokens.isEmpty()) return null
+    val normName = normalizeSearchText(candidateName)
+    if (normName.isEmpty()) return null
+
+    if (normName == normalizedQuery) return 0
+    if (normName.startsWith("$normalizedQuery ")) return 1
+    if (normName.startsWith(normalizedQuery)) return 2
+    if (normName.contains(normalizedQuery)) return 3
+
+    val nameWords = normName.split(' ')
+    if (queryTokens.all { token -> nameWords.any { word -> word.startsWith(token) } }) return 4
+    if (queryTokens.all { token -> normName.contains(token) }) return 5
+    return null
+}
+
+private data class ScoredFoodCandidate(
+    val candidate: RankedFoodCandidate,
+    val rank: Int,
+    val normalizedName: String,
+)
+
+internal fun rankFoodSearchCandidates(
+    query: String,
+    candidates: List<RankedFoodCandidate>,
+    limit: Int = 60,
+): List<FoodSearchResult> {
+    if (limit <= 0) return emptyList()
+    val normalizedQuery = normalizeSearchText(query)
+    if (normalizedQuery.isEmpty()) return emptyList()
+    val queryTokens = normalizedQuery.split(' ').filter { it.isNotEmpty() }
+
+    val scored = ArrayList<ScoredFoodCandidate>()
+    for (candidate in candidates) {
+        val rank = computeFoodSearchRank(
+            candidateName = candidate.result.entry.nome,
+            normalizedQuery = normalizedQuery,
+            queryTokens = queryTokens,
+        ) ?: continue
+        scored += ScoredFoodCandidate(
+            candidate = candidate,
+            rank = rank,
+            normalizedName = normalizeSearchText(candidate.result.entry.nome),
+        )
+    }
+
+    scored.sortWith(
+        compareBy<ScoredFoodCandidate>(
+            { it.rank },
+            { it.candidate.tablePriority },
+            { it.candidate.result.entry.nome.length },
+            { it.normalizedName },
+        )
+    )
+
+    return scored.take(limit).map { it.candidate.result }
+}

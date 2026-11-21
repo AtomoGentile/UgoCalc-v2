@@ -2,6 +2,31 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.4.0] - 2026-11-21
+
+### Changed
+- **Accounts moved to Cloudflare**: new `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/me`, `/auth/password`, `/auth/email`, `/auth/delete` endpoints in the Worker (D1 `users` table, PBKDF2-SHA256 password hashing, per-account lockout, HMAC session tokens). The app talks to them through the new `CloudflareAuthClient`; AWS Cognito / Amplify were removed.
+- **Home screen**: setup banner, greeting, Photo AI hero and quick actions come first, then today's summary; the daily glycemic timeline is collapsed by default.
+- **Floating bottom navigation bar**: pill-shaped bar detached from the screen edges, label only on the active tab.
+
+### Removed
+- "Continue with Google" sign-in and the e-mail confirmation-code step (no longer needed).
+
+### Migration notes
+- Run `schema.sql` again on D1 (`CREATE TABLE IF NOT EXISTS users`) and make sure the Worker `AUTH_SECRET` secret is set before publishing.
+- Existing Cognito accounts are not migrated: users must register again.
+## [4.3.0] - 2026-11-21
+
+### Added
+- **Expanded Italian CREA Nutrition Database (600+ Foods across 14 Categories)**: Expanded `StarterFoodDatabase` from ~200 to 600+ Italian foods and dishes with CREA nutritional values (CHO, Protein, Fat per 100g) and Atkinson 2021 Glycemic Index (`IG`), organized into 14 `ItalianFoodCategory` groups (`Pasta e Cereali`, `Primi e Piatti Pronti`, `Pane, Pizza e Forno`, `Patate e Rustici`, `Legumi e Veg`, `Carni`, `Salumi`, `Pesce e Mare`, `Uova e Latticini`, `Frutta e Semi`, `Verdure`, `Condimenti e Salse`, `Dolci e Colazione`, `Bevande`), plus enriched Italian dish keywords in `GlycemicIndexResolver`.
+- **Automatic Non-Destructive Starter Catalog Sync (`CATALOG_VERSION = 2`)**: Added versioned catalog synchronization so existing users automatically receive all 600+ new CREA entries and updated macro/GI data on launch without overwriting or losing custom tables or user-edited foods.
+- **Category Filter Chips in Food Search**: Added a compact horizontal `LazyRow` of `FilterChip`s (`Tutti` + all 14 categories) with dynamic section item counts in `FoodSearchPicker` across Food Hub, Database Search, Manual Entry, Final Result, and Favorites.
+
+### Changed
+- **Smart Accent-Insensitive Multi-Token Search**: Improved `TableRepository` food search with Unicode accent stripping (`café`/`caffè` -> `caffe`), multi-token order-independent matching, and relevance ranking, plus expanded browse capacity (`limit = 1000`) to explore the full 600+ food catalog.
+- **Database Search Favorite Propagation**: Updated `DatabaseSearchScreen` to forward `proteinePer100g` and `indiceGlicemico` when saving a favorite from Database Search.
+- **CI Artifact Versioning**: Updated `.github/workflows/android-ci.yml` debug APK artifact name to `UgoCalc-4.3.0-debug-apk`.
+
 ## [4.2.0] - 2026-11-21
 
 ### Added

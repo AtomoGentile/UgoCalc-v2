@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PushPin
@@ -35,6 +37,8 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -61,6 +65,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.viewModelScope
+import com.ugocalc.app.data.local.data.StarterFoodDatabase
 import com.ugocalc.app.data.repository.FoodSearchResult
 import com.ugocalc.app.data.repository.TableRepository
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
@@ -104,25 +109,21 @@ fun FoodSearchPicker(
     val mostSearched by viewModel.mostSearched.collectAsState()
     val browseEntries by viewModel.browseEntries.collectAsState()
     val choRange by viewModel.choRange.collectAsState()
+    val selectedCategory by viewModel.selectedCategory.collectAsState()
 
-    val filteredResults = if (showChoFilter) {
-        results.filter { it.entry.choPer100g.toFloat() in choRange }
-    } else {
-        results
+    val matchesFilters: (FoodSearchResult) -> Boolean = { result ->
+        (!showChoFilter || result.entry.choPer100g.toFloat() in choRange) &&
+            (selectedCategory == null || StarterFoodDatabase.categoryForFoodName(result.entry.nome) == selectedCategory)
     }
-    val filteredMostSearched = if (showChoFilter) {
-        mostSearched.filter { it.entry.choPer100g.toFloat() in choRange }
-    } else {
-        mostSearched
+    val filteredResults = remember(results, showChoFilter, choRange, selectedCategory) {
+        results.filter(matchesFilters)
+    }
+    val filteredMostSearched = remember(mostSearched, showChoFilter, choRange, selectedCategory) {
+        mostSearched.filter(matchesFilters)
     }
     val recentIds = remember(filteredMostSearched) { filteredMostSearched.map { it.entryId }.toSet() }
-    val filteredBrowseEntries = remember(browseEntries, showChoFilter, choRange, recentIds) {
-        val base = if (showChoFilter) {
-            browseEntries.filter { it.entry.choPer100g.toFloat() in choRange }
-        } else {
-            browseEntries
-        }
-        base.filter { it.entryId !in recentIds }
+    val filteredBrowseEntries = remember(browseEntries, showChoFilter, choRange, selectedCategory, recentIds) {
+        browseEntries.filter { it.entryId !in recentIds && matchesFilters(it) }
     }
 
     var showCreateDialog by remember { mutableStateOf(false) }
@@ -216,20 +217,33 @@ fun FoodSearchPicker(
             }
         }
 
+        Spacer(modifier = Modifier.height(8.dp))
+        CategoryFilterChipsRow(
+            selectedCategory = selectedCategory,
+            onSelectCategory = viewModel::setCategory,
+        )
+
         val resultsModifier = if (fillAvailableHeight) {
             Modifier.fillMaxWidth().weight(1f)
         } else {
             Modifier.fillMaxWidth().heightIn(max = 320.dp)
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
         if (query.isBlank()) {
             if (filteredMostSearched.isEmpty() && filteredBrowseEntries.isEmpty()) {
+                val activeCat = selectedCategory
                 EmptyStateMessage(
                     icon = Icons.Default.Restaurant,
-                    title = "Nessun alimento disponibile",
-                    message = "Tocca + per inserire un alimento manuale oppure importa una tabella nelle Impostazioni.",
+                    title = if (activeCat != null) "Nessun alimento in ${activeCat.label}" else "Nessun alimento disponibile",
+                    message = if (activeCat != null) {
+                        "Prova a selezionare \"Tutti\" o a cambiare fascia CHO, oppure tocca + per crearne uno."
+                    } else {
+                        "Tocca + per inserire un alimento manuale oppure importa una tabella nelle Impostazioni."
+                    },
+                    actionLabel = if (activeCat != null) "Mostra tutti" else null,
+                    onAction = if (activeCat != null) { { viewModel.setCategory(null) } } else null,
                     modifier = resultsModifier.padding(vertical = 12.dp),
                 )
             } else {
@@ -288,8 +302,11 @@ fun FoodSearchPicker(
 
                     if (filteredBrowseEntries.isNotEmpty()) {
                         item(key = "__header_browse__") {
+                            val browseTitle = selectedCategory?.let {
+                                "${it.label} (${filteredBrowseEntries.size})"
+                            } ?: "Esplora alimenti (${filteredBrowseEntries.size})"
                             UgoSectionHeader(
-                                title = "Esplora alimenti",
+                                title = browseTitle,
                                 subtitle = "Dalle tue tabelle nutrizionali",
                                 modifier = Modifier.padding(top = if (filteredMostSearched.isNotEmpty()) 8.dp else 2.dp),
                             )
@@ -317,10 +334,15 @@ fun FoodSearchPicker(
             }
         } else {
             if (filteredResults.isEmpty()) {
+                val activeCat = selectedCategory
                 EmptyStateMessage(
                     icon = Icons.Default.SearchOff,
                     title = "Nessun risultato",
-                    message = "Nessun alimento trovato per \"$query\". Puoi crearlo con il pulsante +.",
+                    message = if (activeCat != null) {
+                        "Nessun alimento trovato per \"$query\" in ${activeCat.label}. Puoi cambiare categoria o crearlo con +."
+                    } else {
+                        "Nessun alimento trovato per \"$query\". Puoi crearlo con il pulsante +."
+                    },
                     actionLabel = "Crea \"$query\"",
                     onAction = {
                         newFoodName = query.trim()
@@ -338,6 +360,15 @@ fun FoodSearchPicker(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 4.dp),
                 ) {
+                    item(key = "__header_search_results__") {
+                        val resultsTitle = selectedCategory?.let {
+                            "${it.label} (${filteredResults.size})"
+                        } ?: "Risultati (${filteredResults.size})"
+                        UgoSectionHeader(
+                            title = resultsTitle,
+                            modifier = Modifier.padding(top = 2.dp),
+                        )
+                    }
                     items(filteredResults, key = { "search_${it.entryId}" }) { result ->
                         FoodResultRow(
                             result = result,
@@ -506,6 +537,65 @@ fun FoodSearchPicker(
     }
 }
 
+@Composable
+private fun CategoryFilterChipsRow(
+    selectedCategory: StarterFoodDatabase.ItalianFoodCategory?,
+    onSelectCategory: (StarterFoodDatabase.ItalianFoodCategory?) -> Unit,
+) {
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        contentPadding = PaddingValues(horizontal = 2.dp),
+    ) {
+        item(key = "__all__") {
+            val isSelected = selectedCategory == null
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSelectCategory(null) },
+                leadingIcon = if (isSelected) {
+                    {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                        )
+                    }
+                } else null,
+                label = {
+                    Text(
+                        text = "Tutti",
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                },
+            )
+        }
+        items(StarterFoodDatabase.ItalianFoodCategory.entries, key = { it.name }) { category ->
+            val isSelected = selectedCategory == category
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSelectCategory(if (isSelected) null else category) },
+                leadingIcon = if (isSelected) {
+                    {
+                        Icon(
+                            imageVector = Icons.Filled.Check,
+                            contentDescription = null,
+                            modifier = Modifier.size(FilterChipDefaults.IconSize),
+                        )
+                    }
+                } else null,
+                label = {
+                    Text(
+                        text = category.label,
+                        maxLines = 1,
+                        softWrap = false,
+                    )
+                },
+            )
+        }
+    }
+}
+
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FoodResultRow(
@@ -646,8 +736,15 @@ class FoodSearchPickerViewModel @Inject constructor(
     private val _choRange = MutableStateFlow(0f..FOOD_SEARCH_CHO_FILTER_MAX)
     val choRange: StateFlow<ClosedFloatingPointRange<Float>> = _choRange
 
+    private val _selectedCategory = MutableStateFlow<StarterFoodDatabase.ItalianFoodCategory?>(null)
+    val selectedCategory: StateFlow<StarterFoodDatabase.ItalianFoodCategory?> = _selectedCategory
+
     fun setChoRange(range: ClosedFloatingPointRange<Float>) {
         _choRange.value = range
+    }
+
+    fun setCategory(category: StarterFoodDatabase.ItalianFoodCategory?) {
+        _selectedCategory.value = category
     }
 
     init {
@@ -724,6 +821,6 @@ class FoodSearchPickerViewModel @Inject constructor(
     }
 
     private suspend fun refreshBrowseEntries() {
-        _browseEntries.value = tableRepository.getBrowseEntries()
+        _browseEntries.value = tableRepository.getBrowseEntries(limit = 1000)
     }
 }

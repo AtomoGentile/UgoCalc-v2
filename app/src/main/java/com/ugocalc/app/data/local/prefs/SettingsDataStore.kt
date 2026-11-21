@@ -98,6 +98,7 @@ data class UserSettings(
     val globalBiasEnabled: Boolean = false,
     val hasCompletedOnboarding: Boolean = false,
     val hasSeededStarterTable: Boolean = false,
+    val starterCatalogVersion: Int = 0,
     val angleOverlayEnabled: Boolean = false,
     val glycemicProfilePreset: String = "STANDARD",
     val baselineGlucoseMgDl: Int = 90,
@@ -152,6 +153,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val GLOBAL_BIAS_ENABLED = booleanPreferencesKey("global_bias_enabled")
         val HAS_COMPLETED_ONBOARDING = booleanPreferencesKey("has_completed_onboarding")
         val HAS_SEEDED_STARTER_TABLE = booleanPreferencesKey("has_seeded_starter_table")
+        val STARTER_CATALOG_VERSION = intPreferencesKey("starter_catalog_version")
         val ANGLE_OVERLAY_ENABLED = booleanPreferencesKey("angle_overlay_enabled")
         val GLYCEMIC_PROFILE_PRESET = stringPreferencesKey("glycemic_profile_preset")
         val BASELINE_GLUCOSE_MG_DL = intPreferencesKey("baseline_glucose_mg_dl")
@@ -193,6 +195,7 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             globalBiasEnabled = prefs[Keys.GLOBAL_BIAS_ENABLED] ?: false,
             hasCompletedOnboarding = prefs[Keys.HAS_COMPLETED_ONBOARDING] ?: false,
             hasSeededStarterTable = prefs[Keys.HAS_SEEDED_STARTER_TABLE] ?: false,
+            starterCatalogVersion = prefs[Keys.STARTER_CATALOG_VERSION] ?: 0,
             angleOverlayEnabled = prefs[Keys.ANGLE_OVERLAY_ENABLED] ?: false,
             glycemicProfilePreset = prefs[Keys.GLYCEMIC_PROFILE_PRESET] ?: GlycemicProfilePreset.STANDARD.name,
             baselineGlucoseMgDl = prefs[Keys.BASELINE_GLUCOSE_MG_DL] ?: 90,
@@ -279,6 +282,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         context.dataStore.edit { it[Keys.HAS_COMPLETED_ONBOARDING] = completed }
     suspend fun setHasSeededStarterTable(seeded: Boolean) =
         context.dataStore.edit { it[Keys.HAS_SEEDED_STARTER_TABLE] = seeded }
+    suspend fun setStarterCatalogVersion(version: Int) =
+        context.dataStore.edit { it[Keys.STARTER_CATALOG_VERSION] = version }
     suspend fun setAngleOverlayEnabled(enabled: Boolean) =
         context.dataStore.edit { it[Keys.ANGLE_OVERLAY_ENABLED] = enabled }
     suspend fun setGlycemicProfilePreset(preset: String) =

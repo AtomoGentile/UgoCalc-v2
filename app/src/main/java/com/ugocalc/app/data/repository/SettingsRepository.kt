@@ -50,6 +50,7 @@ class SettingsRepository @Inject constructor(
     suspend fun setGlobalBiasEnabled(enabled: Boolean) = dataStore.setGlobalBiasEnabled(enabled)
     suspend fun setHasCompletedOnboarding(completed: Boolean) = dataStore.setHasCompletedOnboarding(completed)
     suspend fun setHasSeededStarterTable(seeded: Boolean) = dataStore.setHasSeededStarterTable(seeded)
+    suspend fun setStarterCatalogVersion(version: Int) = dataStore.setStarterCatalogVersion(version)
     suspend fun setAngleOverlayEnabled(enabled: Boolean) = dataStore.setAngleOverlayEnabled(enabled)
     suspend fun setGlycemicProfilePreset(preset: String) = dataStore.setGlycemicProfilePreset(preset)
     suspend fun setBaselineGlucoseMgDl(mgDl: Int) = dataStore.setBaselineGlucoseMgDl(mgDl)

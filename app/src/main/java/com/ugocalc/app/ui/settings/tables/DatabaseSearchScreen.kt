@@ -65,7 +65,7 @@ fun DatabaseSearchScreen(
             StatusBanner(
                 icon = Icons.Default.Search,
                 title = "Consulta tabelle nutrizionali",
-                subtitle = "Cerca per nome o filtra per fascia CHO. Tocca la stella su un alimento per salvarlo nei preferiti.",
+                subtitle = "Consulta CHO, Proteine, Grassi e IG per 100g, filtra per categoria o fascia CHO. Tocca la stella per salvare nei preferiti.",
                 tone = BannerTone.INFO,
                 modifier = Modifier.padding(bottom = 12.dp),
             )
@@ -90,7 +90,28 @@ fun DatabaseSearchScreen(
             initialEntry = entry,
             onDismiss = { favoriteCandidate = null },
             onConfirm = { foodName, grams, cho, grassi ->
-                viewModel.addComboFavorite(foodName, grams, cho, grassi)
+                viewModel.addComboFavorite(
+                    foodName = foodName,
+                    grams = grams,
+                    choPer100g = cho,
+                    grassiPer100g = grassi,
+                    proteinePer100g = entry.proteinePer100g,
+                    indiceGlicemico = entry.indiceGlicemico,
+                )
+                favoriteCandidate = null
+                scope.launch {
+                    snackbarHostState.showSnackbar("\"$foodName\" aggiunto ai preferiti")
+                }
+            },
+            onConfirmFull = { foodName, grams, cho, grassi, proteine, gi ->
+                viewModel.addComboFavorite(
+                    foodName = foodName,
+                    grams = grams,
+                    choPer100g = cho,
+                    grassiPer100g = grassi,
+                    proteinePer100g = proteine,
+                    indiceGlicemico = gi,
+                )
                 favoriteCandidate = null
                 scope.launch {
                     snackbarHostState.showSnackbar("\"$foodName\" aggiunto ai preferiti")
