@@ -24,7 +24,7 @@ sealed class AuthResult {
 }
 
 /**
- * Client degli account UgoCalc sul Worker Cloudflare (`/auth/*`).
+ * Client degli account UgoCalc sul Worker Cloudflare (`/auth/...`).
  *
  * Usa `HttpURLConnection` (non OkHttp) di proposito: l'`AuthInterceptor` di OkHttp dipende
  * da `AuthRepository`, che dipende da questo client — così si evitano cicli e ricorsioni.
