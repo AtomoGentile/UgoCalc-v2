@@ -3,7 +3,30 @@ package com.ugocalc.app.ui.navigation
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Column
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,12 +36,8 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.RestaurantMenu
 import androidx.compose.material.icons.rounded.Settings
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -509,54 +528,92 @@ private fun UgoBottomNavigationBar(
     val haptic = LocalHapticFeedback.current
     val isDark = isDarkSurfaceTheme()
     val containerColor = if (isDark) {
-        MaterialTheme.colorScheme.surfaceContainerLow
+        MaterialTheme.colorScheme.surfaceContainerHigh
     } else {
         MaterialTheme.colorScheme.surfaceContainerLowest
     }
+    val barShape = RoundedCornerShape(28.dp)
 
-    Column {
-        HorizontalDivider(
-            thickness = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-        )
-        NavigationBar(
-            containerColor = containerColor,
-            tonalElevation = 0.dp,
+    // Barra flottante: pillola staccata dai bordi, con ombra e bordo sottile.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp),
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = 12.dp,
+                    shape = barShape,
+                    ambientColor = Color.Black.copy(alpha = 0.25f),
+                    spotColor = Color.Black.copy(alpha = 0.25f),
+                ),
+            shape = barShape,
+            color = containerColor,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
         ) {
-            TOP_LEVEL_DESTINATIONS.forEach { destination ->
-                val selected = currentRoute == destination.route
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = {
-                        if (!selected) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        }
-                        onSelectRoute(destination.route)
-                    },
-                    icon = {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TOP_LEVEL_DESTINATIONS.forEach { destination ->
+                    val selected = currentRoute == destination.route
+                    val bg by animateColorAsState(
+                        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                        animationSpec = tween(220),
+                        label = "nav_bg_${destination.route}",
+                    )
+                    val fg by animateColorAsState(
+                        targetValue = if (selected) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        animationSpec = tween(220),
+                        label = "nav_fg_${destination.route}",
+                    )
+                    Row(
+                        modifier = Modifier
+                            .weight(if (selected) 1.6f else 1f)
+                            .heightIn(min = 48.dp)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(bg)
+                            .semantics { role = Role.Tab; this.selected = selected }
+                            .clickable {
+                                if (!selected) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelectRoute(destination.route)
+                            }
+                            .padding(horizontal = 8.dp, vertical = 10.dp)
+                            .animateContentSize(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
                         Icon(
                             imageVector = destination.icon,
                             contentDescription = destination.label,
+                            tint = fg,
+                            modifier = Modifier.size(24.dp),
                         )
-                    },
-                    label = {
-                        Text(
-                            text = destination.label,
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                            maxLines = 1,
-                            softWrap = false,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    },
-                    colors = NavigationBarItemDefaults.colors(
-                        selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    ),
-                )
+                        // Solo la tab attiva mostra l'etichetta: meno rumore visivo.
+                        if (selected) {
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = destination.label,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = fg,
+                                maxLines = 1,
+                                softWrap = false,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

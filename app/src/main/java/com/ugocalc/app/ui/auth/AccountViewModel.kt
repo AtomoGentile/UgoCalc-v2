@@ -44,6 +44,8 @@ data class AccountUiState(
     val approvalResult: Boolean? = null,       // true=approvato, false=negato, null=nessuno
     val isLoading: Boolean = false,
     val newEmail: String = "",
+    val emailPassword: String = "",
+    val deletePassword: String = "",
     val oldPassword: String = "",
     val newPassword: String = "",
     val confirmNewPassword: String = "",
@@ -219,6 +221,8 @@ class AccountViewModel @Inject constructor(
     }
 
     fun setNewEmail(value: String) { _uiState.value = _uiState.value.copy(newEmail = value) }
+    fun setEmailPassword(value: String) { _uiState.value = _uiState.value.copy(emailPassword = value) }
+    fun setDeletePassword(value: String) { _uiState.value = _uiState.value.copy(deletePassword = value) }
     fun setOldPassword(value: String) { _uiState.value = _uiState.value.copy(oldPassword = value) }
     fun setNewPassword(value: String) { _uiState.value = _uiState.value.copy(newPassword = value) }
     fun setConfirmNewPassword(value: String) { _uiState.value = _uiState.value.copy(confirmNewPassword = value) }
@@ -229,10 +233,11 @@ class AccountViewModel @Inject constructor(
         if (email.isBlank()) return
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            val result = authRepository.updateEmail(email)
+            val result = authRepository.updateEmail(email, _uiState.value.emailPassword)
             _uiState.value = _uiState.value.copy(
                 isLoading = false,
                 newEmail = "",
+                emailPassword = "",
                 accountActionResult = when (result) {
                     is AuthResult.Success -> AccountActionResult.EmailUpdated
                     else -> AccountActionResult.Error((result as? AuthResult.Error)?.message ?: "Errore")
@@ -266,8 +271,8 @@ class AccountViewModel @Inject constructor(
     fun deleteUser(onDeleted: () -> Unit) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true)
-            val result = authRepository.deleteUser()
-            _uiState.value = _uiState.value.copy(isLoading = false)
+            val result = authRepository.deleteUser(_uiState.value.deletePassword)
+            _uiState.value = _uiState.value.copy(isLoading = false, deletePassword = "")
             if (result is AuthResult.Success) {
                 onDeleted()
             } else {

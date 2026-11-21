@@ -61,3 +61,14 @@ VALUES ('global', 'v1', 30, 0, '', '');
 
 INSERT OR IGNORE INTO versions (pk, latest_version, min_required_version, changelog, apk_url, mandatory)
 VALUES ('android', '3.0.4', '3.0.4', 'Local-First & Free Backend', '', 0);
+
+CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    email TEXT NOT NULL UNIQUE,
+    pw_hash TEXT NOT NULL,
+    pw_salt TEXT NOT NULL,
+    failed_attempts INTEGER NOT NULL DEFAULT 0,
+    locked_until INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+

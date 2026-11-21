@@ -235,19 +235,45 @@ fun AccountSettingsScreen(
     }
 
     if (showDeleteDialog) {
-        UgoConfirmDialog(
-            title = "Elimina account",
-            message = "Questa azione è irreversibile. Il tuo account cloud e tutti i dati sincronizzati verranno eliminati definitivamente. Sei sicuro?",
-            confirmLabel = "Elimina definitivamente",
-            isDestructive = true,
-            onConfirm = {
-                showDeleteDialog = false
-                viewModel.deleteUser(onDeleted = onSignedOut)
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false; viewModel.setDeletePassword("") },
+            shape = RoundedCornerShape(24.dp),
+            title = { Text("Elimina account", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "Questa azione è irreversibile. Il tuo account cloud e tutti i dati sincronizzati verranno eliminati definitivamente. Inserisci la password per confermare.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = uiState.deletePassword,
+                        onValueChange = viewModel::setDeletePassword,
+                        label = { Text("Password") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             },
-            onDismiss = { showDeleteDialog = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        viewModel.deleteUser(onDeleted = onSignedOut)
+                    },
+                    enabled = uiState.deletePassword.isNotBlank(),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp),
+                ) { Text("Elimina definitivamente") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false; viewModel.setDeletePassword("") }) { Text("Annulla") }
+            },
         )
     }
-
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         topBar = {
@@ -382,9 +408,19 @@ fun AccountSettingsScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = uiState.emailPassword,
+                        onValueChange = viewModel::setEmailPassword,
+                        label = { Text("Password attuale") },
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                    )                    Spacer(Modifier.height(10.dp))
                     Button(
                         onClick = viewModel::updateEmail,
-                        enabled = !uiState.isLoading && uiState.newEmail.isNotBlank(),
+                        enabled = !uiState.isLoading && uiState.newEmail.isNotBlank() && uiState.emailPassword.isNotBlank(),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                     ) {

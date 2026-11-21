@@ -1,6 +1,5 @@
 package com.ugocalc.app.data.repository
 
-import android.app.Activity
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
@@ -14,12 +13,13 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import com.ugocalc.app.data.auth.AuthResult
 import com.ugocalc.app.data.auth.AuthUser
-import com.ugocalc.app.data.auth.CognitoAuthManager
+import com.ugocalc.app.data.auth.CloudflareAuthClient
 import com.ugocalc.app.data.local.db.dao.CloudSyncQueueDao
 import com.ugocalc.app.sync.CloudSyncManager
 import com.ugocalc.app.workers.InferencePullWorker
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -32,7 +32,12 @@ class AuthRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val cloudSyncQueueDao: CloudSyncQueueDao,
     private val workManager: WorkManager,
+    private val authClient: CloudflareAuthClient,
 ) {
+    private companion object {
+        const val REFRESH_WINDOW_SECONDS = 7L * 24 * 60 * 60
+    }
+
     private object PreferencesKeys {
         val USER_ID = stringPreferencesKey("user_id")
         val USER_EMAIL = stringPreferencesKey("user_email")
@@ -65,51 +70,46 @@ class AuthRepository @Inject constructor(
         }
 
     suspend fun signUp(email: String, password: String): AuthResult {
-        val result = CognitoAuthManager.signUp(email, password)
-        if (result is AuthResult.Success) {
-            saveUser(result.user)
-        }
-        return result
-    }
-
-    suspend fun confirmSignUp(email: String, code: String): AuthResult {
-        return CognitoAuthManager.confirmSignUp(email, code)
-    }
-
-    suspend fun signIn(email: String, password: String): AuthResult {
-        val result = CognitoAuthManager.signIn(email, password)
-        if (result is AuthResult.Success) {
-            saveUser(result.user)
-        }
-        return result
-    }
-
-    suspend fun signInWithGoogle(activity: Activity): AuthResult {
-        val result = CognitoAuthManager.signInWithGoogle(activity)
+        val result = authClient.register(email.trim(), password)
         if (result is AuthResult.Success) saveUser(result.user)
         return result
     }
 
-    suspend fun updateEmail(newEmail: String): AuthResult {
-        return CognitoAuthManager.updateEmail(newEmail)
+    /** Con gli account Cloudflare non serve conferma via codice: l'account è subito attivo. */
+    suspend fun confirmSignUp(email: String, code: String): AuthResult =
+        AuthResult.Error("La conferma via codice non è più richiesta: accedi con email e password.")
+
+    suspend fun signIn(email: String, password: String): AuthResult {
+        val result = authClient.login(email.trim(), password)
+        if (result is AuthResult.Success) saveUser(result.user)
+        return result
+    }
+
+    suspend fun updateEmail(newEmail: String, password: String): AuthResult {
+        val token = currentToken() ?: return AuthResult.Error("Non sei connesso")
+        val result = authClient.changeEmail(token, password, newEmail.trim())
+        if (result is AuthResult.Success) {
+            context.dataStore.edit { it[PreferencesKeys.USER_EMAIL] = newEmail.trim().lowercase() }
+        }
+        return result
     }
 
     suspend fun updatePassword(oldPassword: String, newPassword: String): AuthResult {
-        return CognitoAuthManager.updatePassword(oldPassword, newPassword)
+        val token = currentToken() ?: return AuthResult.Error("Non sei connesso")
+        return authClient.changePassword(token, oldPassword, newPassword)
     }
 
-    suspend fun deleteUser(): AuthResult {
-        val result = CognitoAuthManager.deleteUser()
+    suspend fun deleteUser(password: String): AuthResult {
+        val token = currentToken() ?: return AuthResult.Error("Non sei connesso")
+        val result = authClient.deleteAccount(token, password)
         if (result is AuthResult.Success) clearUser()
         return result
     }
 
     suspend fun signOut(): AuthResult {
-        val result = CognitoAuthManager.signOut()
         clearUser()
-        return result
+        return AuthResult.Success(AuthUser("", "", ""))
     }
-
     suspend fun enableLocalMode() {
         runCatching { cloudSyncQueueDao.deleteByUserId(CloudSyncManager.DEFAULT_USER_ID) }
         context.dataStore.edit { preferences ->
@@ -117,15 +117,32 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    /**
+     * Restituisce l'utente salvato; se il token scade entro 7 giorni lo rinnova in silenzio.
+     * Se il server rifiuta il token (account eliminato / segreto ruotato) l'utente resta loggato
+     * in locale: la sync fallirà finché non si rifà il login.
+     */
     suspend fun getCurrentUser(): AuthUser? {
-        val user = runCatching { CognitoAuthManager.getCurrentUser() }.getOrNull()
-        if (user != null && user.accessToken.isNotEmpty()) {
-            // Aggiorna la cache locale se abbiamo un token fresco
-            saveUser(user)
+        val user = currentUserFlow.first() ?: return null
+        val expiresAt = tokenExpiryEpochSeconds(user.accessToken)
+        val now = System.currentTimeMillis() / 1000
+        if (expiresAt != null && expiresAt - now < REFRESH_WINDOW_SECONDS) {
+            val refreshed = authClient.refresh(user.accessToken)
+            if (refreshed is AuthResult.Success) {
+                saveUser(refreshed.user)
+                return refreshed.user
+            }
         }
         return user
     }
 
+    private suspend fun currentToken(): String? = currentUserFlow.first()?.accessToken?.takeIf { it.isNotEmpty() }
+
+    private fun tokenExpiryEpochSeconds(token: String): Long? = runCatching {
+        val payload = token.split('.')[1]
+        val json = String(android.util.Base64.decode(payload, android.util.Base64.URL_SAFE or android.util.Base64.NO_WRAP))
+        org.json.JSONObject(json).optLong("exp").takeIf { it > 0 }
+    }.getOrNull()
     private suspend fun saveUser(user: AuthUser) {
         cloudSyncQueueDao.deleteByUserId(CloudSyncManager.DEFAULT_USER_ID)
         context.dataStore.edit { preferences ->

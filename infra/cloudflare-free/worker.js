@@ -77,6 +77,10 @@ export default {
       if (method === 'POST' && path === '/auth/token') {
         return handleIssueLightweightToken(request, env);
       }
+      if (path.startsWith('/auth/') && path !== '/auth/token') {
+        const authResponse = await routeAccountAuth(request, env, method, path);
+        if (authResponse) return authResponse;
+      }
 
       return jsonResponse(404, { error: 'Not found' });
     } catch (err) {
@@ -703,4 +707,194 @@ function jsonResponse(status, body) {
       'Access-Control-Allow-Origin': '*',
     },
   });
+}
+
+// ─────────────────────────────────────────────
+// Account nativi (email + password) su D1 — sostituiscono Cognito
+//   POST /auth/register   { email, password }            -> { token, userId, email, expiresAtEpochSeconds }
+//   POST /auth/login      { email, password }            -> idem
+//   POST /auth/refresh    (Bearer)                       -> idem, token rinnovato
+//   GET  /auth/me         (Bearer)                       -> { userId, email }
+//   POST /auth/password   (Bearer) { oldPassword, newPassword }
+//   POST /auth/email      (Bearer) { password, newEmail }
+//   POST /auth/delete     (Bearer) { password }          -> elimina account e dati
+// Password: PBKDF2-SHA256 (100k iterazioni, massimo supportato da Workers) con salt casuale.
+// Token: "ug1.<payload>.<hmac>" firmato con AUTH_SECRET (secret Worker), validità 30 giorni.
+// ─────────────────────────────────────────────
+
+const PBKDF2_ITERATIONS = 100000;
+const MAX_FAILED_LOGINS = 8;
+const LOCKOUT_SECONDS = 15 * 60;
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+async function routeAccountAuth(request, env, method, path) {
+  if (!env.AUTH_SECRET) return jsonResponse(503, { error: 'AUTH_SECRET not configured' });
+  if (method === 'POST' && path === '/auth/register') return handleRegister(request, env);
+  if (method === 'POST' && path === '/auth/login') return handleLogin(request, env);
+  if (method === 'POST' && path === '/auth/refresh') return handleRefresh(request, env);
+  if (method === 'GET' && path === '/auth/me') return handleMe(request, env);
+  if (method === 'POST' && path === '/auth/password') return handleChangePassword(request, env);
+  if (method === 'POST' && path === '/auth/email') return handleChangeEmail(request, env);
+  if (method === 'POST' && path === '/auth/delete') return handleDeleteAccount(request, env);
+  return null;
+}
+
+function normalizeEmail(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+async function pbkdf2Hash(password, saltBytes) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: saltBytes, iterations: PBKDF2_ITERATIONS },
+    key,
+    256,
+  );
+  return base64UrlEncodeBytes(new Uint8Array(bits));
+}
+
+async function issueSessionToken(env, user) {
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { sub: user.id, iat: now, exp: now + DEFAULT_TOKEN_TTL_SECONDS };
+  const encoded = base64UrlEncodeString(JSON.stringify(payload));
+  const sig = await hmacSign(encoded, env.AUTH_SECRET);
+  return jsonResponse(200, {
+    token: `ug1.${encoded}.${sig}`,
+    userId: user.id,
+    email: user.email,
+    expiresAtEpochSeconds: payload.exp,
+  });
+}
+
+async function handleRegister(request, env) {
+  const body = await safeParseJson(request);
+  const email = normalizeEmail(body?.email);
+  const password = typeof body?.password === 'string' ? body.password : '';
+  if (!EMAIL_RE.test(email) || email.length > 254) return jsonResponse(400, { error: 'Email non valida' });
+  if (password.length < 8 || password.length > 128) {
+    return jsonResponse(400, { error: 'La password deve avere almeno 8 caratteri' });
+  }
+  const existing = await env.DB.prepare('SELECT id FROM users WHERE email = ?').bind(email).first();
+  if (existing) return jsonResponse(409, { error: 'Esiste già un account con questa email' });
+
+  const id = crypto.randomUUID();
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await pbkdf2Hash(password, salt);
+  try {
+    await env.DB.prepare('INSERT INTO users (id, email, pw_hash, pw_salt) VALUES (?, ?, ?, ?)')
+      .bind(id, email, hash, base64UrlEncodeBytes(salt))
+      .run();
+  } catch {
+    return jsonResponse(409, { error: 'Esiste già un account con questa email' });
+  }
+  return issueSessionToken(env, { id, email });
+}
+
+async function verifyCredentials(env, email, password) {
+  const user = await env.DB.prepare(
+    'SELECT id, email, pw_hash, pw_salt, failed_attempts, locked_until FROM users WHERE email = ?',
+  ).bind(email).first();
+  const now = Math.floor(Date.now() / 1000);
+  if (!user) {
+    // Costo costante: evita di rivelare se l'email esiste.
+    await pbkdf2Hash(password, new Uint8Array(16));
+    return { error: jsonResponse(401, { error: 'Credenziali non valide' }) };
+  }
+  if (user.locked_until && user.locked_until > now) {
+    return { error: jsonResponse(429, { error: 'Troppi tentativi. Riprova tra qualche minuto.' }) };
+  }
+  const hash = await pbkdf2Hash(password, base64UrlDecodeToBytes(user.pw_salt));
+  if (!timingSafeEqual(hash, user.pw_hash)) {
+    const attempts = (user.failed_attempts || 0) + 1;
+    const lockedUntil = attempts >= MAX_FAILED_LOGINS ? now + LOCKOUT_SECONDS : 0;
+    await env.DB.prepare('UPDATE users SET failed_attempts = ?, locked_until = ? WHERE id = ?')
+      .bind(lockedUntil ? 0 : attempts, lockedUntil, user.id)
+      .run();
+    return { error: jsonResponse(401, { error: 'Credenziali non valide' }) };
+  }
+  if (user.failed_attempts || user.locked_until) {
+    await env.DB.prepare('UPDATE users SET failed_attempts = 0, locked_until = 0 WHERE id = ?').bind(user.id).run();
+  }
+  return { user };
+}
+
+async function handleLogin(request, env) {
+  const body = await safeParseJson(request);
+  const email = normalizeEmail(body?.email);
+  const password = typeof body?.password === 'string' ? body.password : '';
+  if (!email || !password) return jsonResponse(400, { error: 'Email e password richieste' });
+  const result = await verifyCredentials(env, email, password);
+  if (result.error) return result.error;
+  return issueSessionToken(env, result.user);
+}
+
+async function currentUser(request, env) {
+  const authHeader = request.headers.get('Authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
+  if (!token.startsWith('ug1.')) return null;
+  const userId = await verifyLightweightHmacToken(token, env.AUTH_SECRET);
+  if (!userId) return null;
+  return env.DB.prepare('SELECT id, email, pw_hash, pw_salt FROM users WHERE id = ?').bind(userId).first();
+}
+
+async function handleRefresh(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse(401, { error: 'Unauthorized' });
+  return issueSessionToken(env, user);
+}
+
+async function handleMe(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse(401, { error: 'Unauthorized' });
+  return jsonResponse(200, { userId: user.id, email: user.email });
+}
+
+async function handleChangePassword(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse(401, { error: 'Unauthorized' });
+  const body = await safeParseJson(request);
+  const oldPassword = typeof body?.oldPassword === 'string' ? body.oldPassword : '';
+  const newPassword = typeof body?.newPassword === 'string' ? body.newPassword : '';
+  if (newPassword.length < 8 || newPassword.length > 128) {
+    return jsonResponse(400, { error: 'La nuova password deve avere almeno 8 caratteri' });
+  }
+  const check = await verifyCredentials(env, user.email, oldPassword);
+  if (check.error) return jsonResponse(403, { error: 'Password attuale errata' });
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const hash = await pbkdf2Hash(newPassword, salt);
+  await env.DB.prepare('UPDATE users SET pw_hash = ?, pw_salt = ? WHERE id = ?')
+    .bind(hash, base64UrlEncodeBytes(salt), user.id)
+    .run();
+  return jsonResponse(200, { ok: true });
+}
+
+async function handleChangeEmail(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse(401, { error: 'Unauthorized' });
+  const body = await safeParseJson(request);
+  const newEmail = normalizeEmail(body?.newEmail);
+  const password = typeof body?.password === 'string' ? body.password : '';
+  if (!EMAIL_RE.test(newEmail) || newEmail.length > 254) return jsonResponse(400, { error: 'Email non valida' });
+  const check = await verifyCredentials(env, user.email, password);
+  if (check.error) return jsonResponse(403, { error: 'Password errata' });
+  const taken = await env.DB.prepare('SELECT id FROM users WHERE email = ? AND id != ?').bind(newEmail, user.id).first();
+  if (taken) return jsonResponse(409, { error: 'Email già in uso' });
+  await env.DB.prepare('UPDATE users SET email = ? WHERE id = ?').bind(newEmail, user.id).run();
+  return jsonResponse(200, { ok: true, email: newEmail });
+}
+
+async function handleDeleteAccount(request, env) {
+  const user = await currentUser(request, env);
+  if (!user) return jsonResponse(401, { error: 'Unauthorized' });
+  const body = await safeParseJson(request);
+  const password = typeof body?.password === 'string' ? body.password : '';
+  const check = await verifyCredentials(env, user.email, password);
+  if (check.error) return jsonResponse(403, { error: 'Password errata' });
+  await env.DB.batch([
+    env.DB.prepare('DELETE FROM events WHERE account_id = ?').bind(user.id),
+    env.DB.prepare('DELETE FROM invites WHERE owner_login_id = ? OR guest_login_id = ?').bind(user.id, user.id),
+    env.DB.prepare('DELETE FROM accounts WHERE login_id = ? OR account_id = ?').bind(user.id, user.id),
+    env.DB.prepare('DELETE FROM users WHERE id = ?').bind(user.id),
+  ]);
+  return jsonResponse(200, { ok: true });
 }

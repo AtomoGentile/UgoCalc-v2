@@ -11,9 +11,6 @@ import dagger.hilt.android.HiltAndroidApp
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import javax.inject.Inject
-import com.amplifyframework.AmplifyException
-import com.amplifyframework.auth.cognito.AWSCognitoAuthPlugin
-import com.amplifyframework.core.Amplify
 
 @HiltAndroidApp
 class UgoCalcApplication : Application(), Configuration.Provider {
@@ -39,17 +36,6 @@ class UgoCalcApplication : Application(), Configuration.Provider {
         if (anthropicModels.isNotEmpty()) AiModelCatalog.setAnthropicModels(anthropicModels)
         createNotificationChannel()
         scheduleBenchmarkWorker()
-        initializeAmplify()
-    }
-
-    private fun initializeAmplify() {
-        try {
-            Amplify.addPlugin(AWSCognitoAuthPlugin())
-            Amplify.configure(applicationContext)
-            Log.i("UgoCalcApplication", "Amplify initialized successfully")
-        } catch (error: AmplifyException) {
-            Log.e("UgoCalcApplication", "Failed to initialize Amplify", error)
-        }
     }
 
     override val workManagerConfiguration: Configuration
