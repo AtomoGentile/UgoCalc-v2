@@ -417,7 +417,8 @@ fun AccountSettingsScreen(
                         visualTransformation = PasswordVisualTransformation(),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
-                    )                    Spacer(Modifier.height(10.dp))
+                    )
+                    Spacer(Modifier.height(10.dp))
                     Button(
                         onClick = viewModel::updateEmail,
                         enabled = !uiState.isLoading && uiState.newEmail.isNotBlank() && uiState.emailPassword.isNotBlank(),
