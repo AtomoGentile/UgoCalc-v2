@@ -17,8 +17,8 @@ android {
         applicationId = "com.ugocalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "4.4.0"
+        versionCode = 8
+        versionName = "4.3.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -182,6 +182,9 @@ dependencies {
     implementation("androidx.hilt:hilt-work:1.2.0")
     ksp("androidx.hilt:hilt-compiler:1.2.0")
 
+    // AWS Amplify for Cognito authentication
+    implementation("com.amplifyframework:core:2.13.2")
+    implementation("com.amplifyframework:aws-auth-cognito:2.13.2")
 
     // Tests
     testImplementation("junit:junit:4.13.2")
