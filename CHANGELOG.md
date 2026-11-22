@@ -2,6 +2,19 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.4.0] - 2026-11-21
+
+### Changed
+- **Accounts moved to Cloudflare**: new `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/me`, `/auth/password`, `/auth/email`, `/auth/delete` endpoints in the Worker (D1 `users` table, PBKDF2-SHA256 password hashing, per-account lockout, HMAC session tokens). The app talks to them through the new `CloudflareAuthClient`; AWS Cognito / Amplify were removed.
+- **Home screen**: setup banner, greeting, Photo AI hero and quick actions come first, then today's summary; the daily glycemic timeline is collapsed by default.
+- **Floating bottom navigation bar**: pill-shaped bar detached from the screen edges, label only on the active tab.
+
+### Removed
+- "Continue with Google" sign-in and the e-mail confirmation-code step (no longer needed).
+
+### Migration notes
+- Run `schema.sql` again on D1 (`CREATE TABLE IF NOT EXISTS users`) and make sure the Worker `AUTH_SECRET` secret is set before publishing.
+- Existing Cognito accounts are not migrated: users must register again.
 ## [4.3.0] - 2026-11-21
 
 ### Added

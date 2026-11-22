@@ -1,7 +1,5 @@
 package com.ugocalc.app.data.auth
 
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.HttpUrl
@@ -28,30 +26,13 @@ class AuthInterceptor private constructor(
     ) : this(
         awsBaseUrl = awsBaseUrl,
         userResolver = AwsAuthUserResolver {
-            var user = try {
-                withTimeoutOrNull(300L) {
-                    CognitoAuthManager.getCurrentUser()
-                }
+            try {
+                withTimeoutOrNull(3_000L) { authRepositoryProvider.get().getCurrentUser() }
             } catch (_: Exception) {
                 null
             }
-
-            if (user?.accessToken.isNullOrEmpty()) {
-                val diskUser = withTimeoutOrNull(200L) {
-                    try {
-                        authRepositoryProvider.get().currentUserFlow
-                            .filter { it != null && it.accessToken.isNotEmpty() }
-                            .first()
-                    } catch (_: Exception) {
-                        null
-                    }
-                }
-                if (diskUser is AuthUser) user = diskUser
-            }
-            user
         },
     )
-
     internal constructor(
         awsBaseUrl: String,
         resolveUser: suspend () -> AuthUser?,
@@ -109,7 +90,7 @@ class AuthInterceptor private constructor(
         private const val CACHE_TTL_MS = 60_000L
 
         /**
-         * Allega il token Cognito SOLO alle chiamate dirette all'host del backend AWS configurato
+         * Allega il token di sessione UgoCalc SOLO alle chiamate dirette all'host del backend AWS configurato
          * (escludendo `/version` che è pubblico). Evita blocchi `runBlocking` e leak del token
          * verso endpoint terzi (GitHub Releases, OpenFoodFacts, Vertex AI OAuth).
          */

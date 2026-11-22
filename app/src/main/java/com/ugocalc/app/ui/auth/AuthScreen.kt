@@ -93,19 +93,10 @@ fun AuthScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
-    var confirmationCode by remember { mutableStateOf("") }
-    var pendingEmail by remember { mutableStateOf("") }
 
     LaunchedEffect(authState) {
         when (val state = authState) {
             is AuthState.Success, is AuthState.LocalMode -> onAuthenticated()
-            is AuthState.NeedsConfirmation -> pendingEmail = state.email
-            is AuthState.ConfirmationComplete -> {
-                snackbarHostState.showSnackbar("Account confermato! Accedi ora.")
-                selectedTab = 0
-                confirmationCode = ""
-                pendingEmail = ""
-            }
             is AuthState.Error -> snackbarHostState.showSnackbar(state.message)
             else -> {}
         }
@@ -145,74 +136,7 @@ fun AuthScreen(
                 tone = BannerTone.INFO,
             )
 
-            if (pendingEmail.isNotBlank()) {
-                UgoCard(
-                    modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(20.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(52.dp)
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(MaterialTheme.colorScheme.primaryContainer),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.MarkEmailRead,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(28.dp),
-                            )
-                        }
-                        Spacer(Modifier.height(14.dp))
-                        Text(
-                            text = "Verifica email",
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = "Abbiamo inviato un codice a $pendingEmail. Inseriscilo qui sotto.",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        OutlinedTextField(
-                            value = confirmationCode,
-                            onValueChange = { confirmationCode = it.trim() },
-                            label = { Text("Codice di verifica") },
-                            singleLine = true,
-                            shape = RoundedCornerShape(12.dp),
-                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        Spacer(Modifier.height(20.dp))
-                        Button(
-                            onClick = { viewModel.confirmSignUp(pendingEmail, confirmationCode) },
-                            enabled = !isLoading && confirmationCode.isNotBlank(),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(48.dp),
-                        ) {
-                            if (isLoading) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Text("Conferma account")
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        TextButton(onClick = { pendingEmail = "" }) {
-                            Text("Torna al login")
-                        }
-                    }
-                }
-            } else {
+            run {
                 UgoCard(
                     modifier = Modifier.fillMaxWidth(),
                     contentPadding = PaddingValues(20.dp),
@@ -317,42 +241,6 @@ fun AuthScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        HorizontalDivider(modifier = Modifier.weight(1f))
-                        Text(
-                            text = "  oppure  ",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        HorizontalDivider(modifier = Modifier.weight(1f))
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    OutlinedButton(
-                        onClick = {
-                            val activity = context.findActivity()
-                            if (activity != null) {
-                                viewModel.signInWithGoogle(activity)
-                            } else {
-                                viewModel.setError("Impossibile avviare l'accesso Google in questo contesto.")
-                            }
-                        },
-                        enabled = !isLoading,
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                    ) {
-                        Text("G", fontWeight = FontWeight.Bold)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Continua con Google")
-                    }
 
                     if (selectedTab == 0) {
                         Spacer(Modifier.height(8.dp))

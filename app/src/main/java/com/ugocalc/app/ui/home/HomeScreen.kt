@@ -131,7 +131,7 @@ fun HomeScreen(
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var showAiSetupDialog by remember { mutableStateOf(false) }
     var showOfflineAiDialog by remember { mutableStateOf(false) }
-    var timelineExpanded by remember { mutableStateOf(true) }
+    var timelineExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -298,6 +298,18 @@ fun HomeScreen(
                 contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
+                // 1) Avviso di configurazione (se serve): è ciò che blocca l'azione principale.
+                if (shouldShowHomeBanner(uiState)) {
+                    item(key = "status_banner") {
+                        HomeStatusBanner(
+                            uiState = uiState,
+                            onOpenApiSettings = onNavigateToApiSettings,
+                            onOpenTables = onNavigateToTables,
+                        )
+                    }
+                }
+
+                // 2) Saluto + azione principale: subito visibili, senza scorrere.
                 item(key = "greeting") {
                     HomeGreetingRow(
                         greeting = uiState.greeting,
@@ -305,6 +317,22 @@ fun HomeScreen(
                     )
                 }
 
+                item(key = "hero_photo_ai") {
+                    PhotoAiHeroCard(
+                        uiState = uiState,
+                        onClick = onLaunchPhotoAi,
+                    )
+                }
+
+                item(key = "quick_actions") {
+                    QuickActionsRow(
+                        enabled = uiState.tableCount > 0,
+                        onBarcodeClick = onNavigateToBarcodeScan,
+                        onManualClick = onLaunchManual,
+                    )
+                }
+
+                // 3) Riepilogo di oggi.
                 item(key = "today_summary") {
                     TodayNutritionCard(
                         mealsCount = uiState.todayMealsCount,
@@ -327,31 +355,7 @@ fun HomeScreen(
                     }
                 }
 
-                if (shouldShowHomeBanner(uiState)) {
-                    item(key = "status_banner") {
-                        HomeStatusBanner(
-                            uiState = uiState,
-                            onOpenApiSettings = onNavigateToApiSettings,
-                            onOpenTables = onNavigateToTables,
-                        )
-                    }
-                }
-
-                item(key = "hero_photo_ai") {
-                    PhotoAiHeroCard(
-                        uiState = uiState,
-                        onClick = onLaunchPhotoAi,
-                    )
-                }
-
-                item(key = "quick_actions") {
-                    QuickActionsRow(
-                        enabled = uiState.tableCount > 0,
-                        onBarcodeClick = onNavigateToBarcodeScan,
-                        onManualClick = onLaunchManual,
-                    )
-                }
-
+                // 4) Scorciatoie e storico recente.
                 if (uiState.favoritesEnabled) {
                     item(key = "favorites_section") {
                         FavoritesSection(
@@ -361,7 +365,6 @@ fun HomeScreen(
                         )
                     }
                 }
-
                 item(key = "recent_meals_section") {
                     RecentMealsSection(
                         recentMeals = uiState.recentMeals,
