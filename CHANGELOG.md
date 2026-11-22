@@ -2,7 +2,7 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
-## [4.4.0] - 2026-11-21
+## [4.4.1] - 2026-11-22
 
 ### Changed
 - **Accounts moved to Cloudflare**: new `/auth/register`, `/auth/login`, `/auth/refresh`, `/auth/me`, `/auth/password`, `/auth/email`, `/auth/delete` endpoints in the Worker (D1 `users` table, PBKDF2-SHA256 password hashing, per-account lockout, HMAC session tokens). The app talks to them through the new `CloudflareAuthClient`; AWS Cognito / Amplify were removed.

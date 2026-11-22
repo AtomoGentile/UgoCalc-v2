@@ -40,7 +40,7 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
-            version = "4.4.0",
+            version = "4.4.1",
             categories = listOf("Account Cloudflare", "Home più chiara", "Barra flottante"),
             highlights = listOf(
                 "Account su Cloudflare: registrazione, accesso, cambio email/password ed eliminazione account ora passano dal tuo backend Cloudflare (nessuna dipendenza da AWS Cognito). Non serve più il codice di verifica via email. Password protette con PBKDF2 e blocco temporaneo dopo troppi tentativi errati.",
@@ -48,7 +48,8 @@ object Changelog {
                 "Barra di navigazione flottante: nuova barra a pillola staccata dai bordi, con etichetta solo sulla scheda attiva.",
                 "Rimosso l'accesso con Google (era legato a Cognito). Se avevi un account Cognito, crea un nuovo account con la stessa email.",
             ),
-        ),        ChangelogEntry(
+        ),
+        ChangelogEntry(
             version = "4.3.0",
             categories = listOf("Database CREA 600+", "Ricerca Smart", "Filtri Categoria"),
             highlights = listOf(
