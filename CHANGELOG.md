@@ -2,6 +2,12 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.4.2] - 2026-11-23
+
+### Changed
+- **Pre-meal blood glucose moved to AI analysis flow**: added a **Pre-pasto** pill (`40–400 mg/dL`) in `CameraXStudioView` and direct tap-to-edit input in `GlycemicCurveCard` (shared via `AnalysisSessionStore`); removed the static pre-meal baseline slider from `Profilo Glicemico` settings.
+- **Glycemic curve based on real CHO**: `GlycemicCurveCalculator` now scales wave amplitude from total `CHO` instead of `GL`, using `IG` only for peak timing and curve sharpness; clarified in the UI that the curve models meal absorption without insulin/bolus.
+
 ## [4.4.1] - 2026-11-22
 
 ### Changed

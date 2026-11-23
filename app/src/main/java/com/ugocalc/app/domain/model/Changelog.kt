@@ -40,6 +40,14 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.4.2",
+            categories = listOf("Glicemia Pre-pasto", "Curva CHO Reali"),
+            highlights = listOf(
+                "Glicemia pre-pasto in Analisi AI: nuovo pulsante \"Pre-pasto\" (40–400 mg/dL) direttamente nella schermata fotocamera/analisi e modifica rapida toccando il valore nella card del risultato, rimosso dalle Impostazioni fisse.",
+                "Curva glicemica basata sui CHO reali: l'ampiezza della curva ora usa i carboidrati totali effettivi del pasto, mentre l'Indice Glicemico modula velocità e forma del picco (curva di assorbimento senza insulina/bolo).",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.4.1",
             categories = listOf("Account Cloudflare", "Home più chiara", "Barra flottante"),
             highlights = listOf(
