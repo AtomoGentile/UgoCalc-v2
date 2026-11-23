@@ -2,6 +2,17 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.5.0] - 2026-11-23
+
+### Added
+- **AI Reasoning Effort (`Rapido` / `Bilanciato` / `Preciso`)**: Added an `AiEffort` selector in both `ModelSelectionScreen` and `PreferredModelSettingsScreen`, wired to provider thinking/reasoning parameters (`thinkingBudget` for Gemini/Vertex, `reasoning_effort` for OpenAI, `thinking.budget_tokens` for Anthropic).
+- **Guided Model Selection**: Replaced the dense 2-column grid with a single-column guided list showing recommendation tiers (`Consigliato`, `Veloce`, `Alta precisione`) and a quick *Consigliato* action.
+
+### Changed
+- **Cleaner Home & Settings**: Removed redundant greeting and daily glycemic timeline clutter from `HomeScreen`; reorganized `SettingsScreen` into 2 focused main sections (`Account & AI`, `Aspetto & Dati`) and moved secondary/advanced tools under `Avanzate`.
+- **Optional Glycemic Curve**: Disabled `showGlycemicCurve` by default in meal results (toggleable in `Profilo Glicemico`) so insulin users get a cleaner summary of CHO, Fat, Protein, kcal, and GL.
+- **Automated Tag Releases**: Pushing a `v*` tag now automatically publishes a GitHub Release with the signed debug APK attached.
+
 ## [4.4.2] - 2026-11-23
 
 ### Changed

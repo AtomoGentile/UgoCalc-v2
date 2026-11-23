@@ -40,6 +40,16 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.5.0",
+            categories = listOf("Effort AI", "Scelta Modelli", "UI Pulita"),
+            highlights = listOf(
+                "Effort AI (Rapido · Bilanciato · Preciso): nuovo selettore per regolare il ragionamento dell'AI su Gemini, OpenAI e Anthropic, sia alla scelta del modello sia in Impostazioni.",
+                "Selezione modelli guidata: lista a colonna singola con badge Consigliato / Veloce / Alta precisione e selezione rapida del modello consigliato.",
+                "Home e Impostazioni più ordinate: rimossi gli elementi superflui dalla Home e raggruppate le Impostazioni in due sezioni principali più Avanzate.",
+                "Curva glicemica opzionale: disattivata di default nei risultati (riattivabile in Profilo Glicemico).",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.4.2",
             categories = listOf("Glicemia Pre-pasto", "Curva CHO Reali"),
             highlights = listOf(
