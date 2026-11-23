@@ -250,7 +250,7 @@ fun FoodSearchPicker(
                 LazyColumn(
                     modifier = resultsModifier,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                 ) {
                     if (filteredMostSearched.isNotEmpty()) {
                         item(key = "__header_recent__") {
@@ -358,7 +358,7 @@ fun FoodSearchPicker(
                 LazyColumn(
                     modifier = resultsModifier,
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(vertical = 4.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                 ) {
                     item(key = "__header_search_results__") {
                         val resultsTitle = selectedCategory?.let {

@@ -69,25 +69,29 @@ class HistoryDetailViewModel @Inject constructor(
 
         combine(
             loadedEntryFlow,
-            settingsRepository.settings.map { it.toGlycemicProfile() }.distinctUntilChanged(),
+            settingsRepository.settings.map { it.toGlycemicProfile() to it.showGlycemicCurve }.distinctUntilChanged(),
             baselineOverrideFlow,
-        ) { loaded, profile, overrideMgDl ->
+        ) { loaded, (profile, showCurve), overrideMgDl ->
             val (entry, lines, v2Record) = loaded ?: return@combine null
             val effectiveProfile = if (overrideMgDl != null) {
                 profile.copy(baselineGlucoseMgDl = overrideMgDl.toDouble())
             } else {
                 profile
             }
-            val sim = if (lines.any { !it.isExcluded }) {
-                GlycemicCurveCalculator.simulateMeal(lines, effectiveProfile)
+            val sim = if (showCurve) {
+                if (lines.any { !it.isExcluded }) {
+                    GlycemicCurveCalculator.simulateMeal(lines, effectiveProfile)
+                } else {
+                    GlycemicCurveCalculator.simulateFromTotals(
+                        choG = entry.totalChoG,
+                        grassiG = entry.totalGrassiG,
+                        proteineG = entry.totalProteineG,
+                        glycemicLoad = entry.glycemicLoad.takeIf { it > 0.0 },
+                        profile = effectiveProfile,
+                    )
+                }
             } else {
-                GlycemicCurveCalculator.simulateFromTotals(
-                    choG = entry.totalChoG,
-                    grassiG = entry.totalGrassiG,
-                    proteineG = entry.totalProteineG,
-                    glycemicLoad = entry.glycemicLoad.takeIf { it > 0.0 },
-                    profile = effectiveProfile,
-                )
+                null
             }
             HistoryDetailUiState(
                 foodTitle = entry.foodTitle,
@@ -96,7 +100,7 @@ class HistoryDetailViewModel @Inject constructor(
                 totalChoG = entry.totalChoG,
                 totalProteineG = entry.totalProteineG,
                 totalGrassiG = entry.totalGrassiG,
-                glycemicLoad = entry.glycemicLoad.takeIf { it > 0.0 } ?: sim.totalGlycemicLoad,
+                glycemicLoad = entry.glycemicLoad.takeIf { it > 0.0 } ?: sim?.totalGlycemicLoad ?: 0.0,
                 modelNames = runCatching {
                     json.decodeFromString<List<String>>(entry.modelDisplayNamesJson)
                 }.getOrDefault(emptyList()),

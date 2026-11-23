@@ -66,8 +66,9 @@ import com.ugocalc.app.R
 import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelTier
+import com.ugocalc.app.domain.model.effectiveEffort
 import com.ugocalc.app.domain.model.recommendedTier
-import com.ugocalc.app.domain.model.supportsEffort
+import com.ugocalc.app.domain.model.supportedEfforts
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.BrandFilterRow
@@ -130,6 +131,14 @@ fun ModelSelectionScreen(
     }
 
     val selectedCount = uiState.selectedModelUids.size
+    val selectedModels = remember(uiState.availableModels, uiState.selectedModelUids) {
+        uiState.availableModels.filter { it.uid in uiState.selectedModelUids }
+    }
+    val supportedEfforts = remember(selectedModels, uiState.availableModels) {
+        val pool = selectedModels.ifEmpty { uiState.availableModels }
+        val union = pool.flatMap { it.supportedEfforts() }.toSet()
+        AiEffort.entries.filter { it in union }
+    }
     val canProceed = selectedCount > 0 && !isSavingCredentials && !uiState.isOffline
 
     Scaffold(
@@ -158,9 +167,10 @@ fun ModelSelectionScreen(
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                             .height(52.dp),
                     ) {
-                        val ctaLabel = when (selectedCount) {
-                            0 -> "Seleziona almeno 1 modello"
-                            1 -> "Continua · ${uiState.effort.label}"
+                        val ctaLabel = when {
+                            selectedCount == 0 -> "Seleziona almeno 1 modello"
+                            supportedEfforts.isEmpty() -> if (selectedCount == 1) "Continua" else "Continua ($selectedCount modelli)"
+                            selectedCount == 1 -> "Continua · ${selectedModels.firstOrNull()?.effectiveEffort(uiState.effort)?.label ?: uiState.effort.label}"
                             else -> "Continua ($selectedCount modelli) · ${uiState.effort.label}"
                         }
                         Text(
@@ -213,6 +223,7 @@ fun ModelSelectionScreen(
             } else {
                 AiEffortSelectorCard(
                     effort = uiState.effort,
+                    supportedEfforts = supportedEfforts,
                     onSelectEffort = viewModel::setEffort,
                 )
 
@@ -327,9 +338,46 @@ fun ModelSelectionScreen(
 fun AiEffortSelectorCard(
     effort: AiEffort,
     onSelectEffort: (AiEffort) -> Unit,
+    supportedEfforts: List<AiEffort> = AiEffort.entries,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
+    if (supportedEfforts.isEmpty()) {
+        Surface(
+            modifier = modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceContainerLow,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)),
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Bolt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(16.dp),
+                )
+                Text(
+                    text = "I modelli selezionati non supportano la regolazione dell'effort.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        return
+    }
+
+    val activeEffort = if (effort in supportedEfforts) {
+        effort
+    } else when (effort) {
+        AiEffort.OFF, AiEffort.LOW -> supportedEfforts.first()
+        AiEffort.HIGH, AiEffort.MAX -> supportedEfforts.last()
+        AiEffort.MEDIUM -> supportedEfforts[supportedEfforts.size / 2]
+    }
+
     UgoCard(
         modifier = modifier.fillMaxWidth(),
         contentPadding = PaddingValues(12.dp),
@@ -350,13 +398,13 @@ fun AiEffortSelectorCard(
                     modifier = Modifier.size(18.dp),
                 )
                 Text(
-                    text = "Effort di ragionamento",
+                    text = "Effort AI",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )
             }
             Text(
-                text = effort.description,
+                text = activeEffort.description,
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
@@ -372,16 +420,16 @@ fun AiEffortSelectorCard(
                 .padding(3.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            AiEffort.entries.forEach { option ->
-                val selected = effort == option
+            supportedEfforts.forEach { option ->
+                val selected = activeEffort == option
                 val bg by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    animationSpec = tween(180),
+                    animationSpec = tween(120),
                     label = "effort_bg_${option.name}",
                 )
                 val fg by animateColorAsState(
                     targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(180),
+                    animationSpec = tween(120),
                     label = "effort_fg_${option.name}",
                 )
                 Box(
@@ -412,13 +460,16 @@ fun AiEffortSelectorCard(
 }
 
 @Composable
-private fun ModelGuidanceRow(
+fun ModelGuidanceRow(
     model: AiModel,
     isSelected: Boolean,
     onClick: () -> Unit,
 ) {
     val tier = remember(model.id) { model.recommendedTier() }
-    val supportsEffort = remember(model.id, model.provider) { model.supportsEffort() }
+    val efforts = remember(model.id, model.provider) { model.supportedEfforts() }
+    val effortHint = remember(efforts) {
+        if (efforts.isEmpty()) null else "Effort: ${efforts.first().label}–${efforts.last().label}"
+    }
     val (badgeBg, badgeFg) = when (tier) {
         AiModelTier.RECOMMENDED -> UgoSemanticColors.successContainer to UgoSemanticColors.onSuccessContainer
         AiModelTier.FAST -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
@@ -490,7 +541,10 @@ private fun ModelGuidanceRow(
                             append(" · ")
                         }
                         append(tier.hint)
-                        if (supportsEffort) append(" · Effort")
+                        if (effortHint != null) {
+                            append(" · ")
+                            append(effortHint)
+                        }
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

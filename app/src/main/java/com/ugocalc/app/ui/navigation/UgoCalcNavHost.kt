@@ -1,36 +1,25 @@
 package com.ugocalc.app.ui.navigation
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
@@ -38,19 +27,28 @@ import androidx.compose.material.icons.rounded.RestaurantMenu
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -166,27 +164,17 @@ fun UgoCalcNavHost(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        contentWindowInsets = WindowInsets(0, 0, 0, 0),
-        bottomBar = {
-            if (showBottomBar) {
-                UgoBottomNavigationBar(
-                    currentRoute = currentRoute,
-                    onSelectRoute = navigateTopLevel,
-                )
-            }
-        },
-    ) { innerPadding ->
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         NavHost(
             navController = navController,
             startDestination = startDestination,
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(bottom = innerPadding.calculateBottomPadding())
-                .consumeWindowInsets(innerPadding),
-            enterTransition = { fadeIn(animationSpec = tween(200)) },
-            exitTransition = { fadeOut(animationSpec = tween(200)) },
+            modifier = Modifier.fillMaxSize(),
+            enterTransition = { fadeIn(animationSpec = tween(90)) },
+            exitTransition = { fadeOut(animationSpec = tween(60)) },
         ) {
 
             composable(Routes.ONBOARDING) {
@@ -517,6 +505,14 @@ fun UgoCalcNavHost(
                 )
             }
         }
+
+        if (showBottomBar) {
+            UgoBottomNavigationBar(
+                currentRoute = currentRoute,
+                onSelectRoute = navigateTopLevel,
+                modifier = Modifier.align(Alignment.BottomCenter),
+            )
+        }
     }
 }
 
@@ -524,95 +520,89 @@ fun UgoCalcNavHost(
 private fun UgoBottomNavigationBar(
     currentRoute: String?,
     onSelectRoute: (String) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
     val isDark = isDarkSurfaceTheme()
     val containerColor = if (isDark) {
-        MaterialTheme.colorScheme.surfaceContainerHigh
+        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
     } else {
-        MaterialTheme.colorScheme.surfaceContainerLowest
+        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.96f)
     }
     val barShape = RoundedCornerShape(28.dp)
 
-    // Barra flottante: pillola staccata dai bordi, con ombra e bordo sottile.
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
+    // Barra davvero flottante in overlay trasparente: zero banda opaca dietro, larghezze fisse (zero lag).
+    Surface(
+        modifier = modifier
             .navigationBarsPadding()
-            .padding(start = 16.dp, end = 16.dp, top = 6.dp, bottom = 12.dp),
+            .padding(horizontal = 24.dp, vertical = 10.dp)
+            .fillMaxWidth()
+            .height(56.dp),
+        shape = barShape,
+        color = containerColor,
+        shadowElevation = 6.dp,
+        tonalElevation = 2.dp,
+        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
     ) {
-        Surface(
+        Row(
             modifier = Modifier
-                .fillMaxWidth()
-                .shadow(
-                    elevation = 12.dp,
-                    shape = barShape,
-                    ambientColor = Color.Black.copy(alpha = 0.25f),
-                    spotColor = Color.Black.copy(alpha = 0.25f),
-                ),
-            shape = barShape,
-            color = containerColor,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                .fillMaxSize()
+                .padding(horizontal = 6.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 6.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TOP_LEVEL_DESTINATIONS.forEach { destination ->
-                    val selected = currentRoute == destination.route
-                    val bg by animateColorAsState(
-                        targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                        animationSpec = tween(220),
-                        label = "nav_bg_${destination.route}",
-                    )
-                    val fg by animateColorAsState(
-                        targetValue = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                        animationSpec = tween(220),
-                        label = "nav_fg_${destination.route}",
-                    )
-                    Row(
-                        modifier = Modifier
-                            .weight(if (selected) 1.6f else 1f)
-                            .heightIn(min = 48.dp)
-                            .clip(RoundedCornerShape(22.dp))
-                            .background(bg)
-                            .semantics { role = Role.Tab; this.selected = selected }
-                            .clickable {
-                                if (!selected) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelectRoute(destination.route)
-                            }
-                            .padding(horizontal = 8.dp, vertical = 10.dp)
-                            .animateContentSize(),
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = destination.icon,
-                            contentDescription = destination.label,
-                            tint = fg,
-                            modifier = Modifier.size(24.dp),
-                        )
-                        // Solo la tab attiva mostra l'etichetta: meno rumore visivo.
-                        if (selected) {
-                            Spacer(Modifier.width(6.dp))
-                            Text(
-                                text = destination.label,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                                color = fg,
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+            TOP_LEVEL_DESTINATIONS.forEach { destination ->
+                val selected = currentRoute == destination.route
+                val pillBg by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+                    animationSpec = tween(110),
+                    label = "nav_bg_${destination.route}",
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    animationSpec = tween(110),
+                    label = "nav_fg_${destination.route}",
+                )
+                val interactionSource = remember { MutableInteractionSource() }
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .clip(RoundedCornerShape(22.dp))
+                        .background(pillBg)
+                        .semantics {
+                            role = Role.Tab
+                            this.selected = selected
                         }
-                    }
+                        .clickable(
+                            interactionSource = interactionSource,
+                            indication = null,
+                        ) {
+                            if (!selected) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onSelectRoute(destination.route)
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(
+                        imageVector = destination.icon,
+                        contentDescription = destination.label,
+                        tint = fg,
+                        modifier = Modifier.size(20.dp),
+                    )
+                    Text(
+                        text = destination.label,
+                        fontSize = 10.sp,
+                        lineHeight = 12.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = fg,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
             }
         }

@@ -115,6 +115,7 @@ class HistoryViewModel @Inject constructor(
         historyRepository.observeHistory(),
         settingsRepository.settings,
     ) { allEntries, settings ->
+        if (!settings.showGlycemicCurve) return@combine null
         val todayStart = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)

@@ -8,6 +8,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.addJsonObject
 import kotlinx.serialization.json.booleanOrNull
@@ -264,6 +265,106 @@ private fun selectPreferredTextBlock(textBlocks: List<String>): String {
 /** Una singola immagine allegata a una chiamata AI (già codificata in base64). */
 data class ImagePart(val base64: String, val mimeType: String)
 
+private fun JsonObjectBuilder.putOpenAiEffort(modelId: String, effort: AiEffort) {
+    val lower = modelId.lowercase()
+    val value = when {
+        "gpt-5.2" in lower || "gpt-5.3" in lower || "gpt-5.4" in lower || "gpt-5-pro" in lower || "o3-pro" in lower -> when (effort) {
+            AiEffort.OFF -> "none"
+            AiEffort.LOW -> "low"
+            AiEffort.MEDIUM -> "medium"
+            AiEffort.HIGH -> "high"
+            AiEffort.MAX -> "xhigh"
+        }
+        "gpt-5" in lower -> when (effort) {
+            AiEffort.OFF -> "minimal"
+            AiEffort.LOW -> "low"
+            AiEffort.MEDIUM -> "medium"
+            AiEffort.HIGH, AiEffort.MAX -> "high"
+        }
+        "o1" in lower || "o3" in lower || "o4" in lower -> when (effort) {
+            AiEffort.OFF, AiEffort.LOW -> "low"
+            AiEffort.MEDIUM -> "medium"
+            AiEffort.HIGH, AiEffort.MAX -> "high"
+        }
+        else -> null
+    }
+    if (value != null) {
+        put("reasoning_effort", value)
+    }
+}
+
+private fun JsonObjectBuilder.putClaudeEffortAndMaxTokens(modelId: String, baseMaxTokens: Int, effort: AiEffort) {
+    val lower = modelId.lowercase()
+    val is46 = "4-6" in lower || "4.6" in lower
+    val supportsThinking = is46 || "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
+        "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
+        "3-7" in lower || "3.7" in lower
+    when {
+        is46 -> {
+            put("max_tokens", baseMaxTokens)
+            putJsonObject("thinking") { put("type", "adaptive") }
+            putJsonObject("output_config") {
+                put(
+                    "effort",
+                    when (effort) {
+                        AiEffort.OFF, AiEffort.LOW -> "low"
+                        AiEffort.MEDIUM -> "medium"
+                        AiEffort.HIGH -> "high"
+                        AiEffort.MAX -> "max"
+                    },
+                )
+            }
+        }
+        supportsThinking && effort != AiEffort.OFF -> {
+            val budget = when (effort) {
+                AiEffort.LOW -> 1024
+                AiEffort.MEDIUM -> 4096
+                AiEffort.HIGH, AiEffort.MAX -> 16384
+                AiEffort.OFF -> 0
+            }
+            put("max_tokens", baseMaxTokens + budget)
+            putJsonObject("thinking") {
+                put("type", "enabled")
+                put("budget_tokens", budget)
+            }
+        }
+        else -> put("max_tokens", baseMaxTokens)
+    }
+}
+
+private fun JsonObjectBuilder.putGeminiThinkingConfig(modelId: String, effort: AiEffort) {
+    val lower = modelId.lowercase()
+    when {
+        "gemini-4" in lower -> {
+            val level = when (effort) {
+                AiEffort.OFF, AiEffort.LOW -> "low"
+                AiEffort.MEDIUM -> "medium"
+                AiEffort.HIGH -> "high"
+                AiEffort.MAX -> "xhigh"
+            }
+            putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
+        }
+        "gemini-3" in lower -> {
+            val level = when (effort) {
+                AiEffort.OFF -> if ("pro" in lower) "low" else "minimal"
+                AiEffort.LOW -> "low"
+                AiEffort.MEDIUM -> "medium"
+                AiEffort.HIGH, AiEffort.MAX -> "high"
+            }
+            putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
+        }
+        "2.5" in lower -> {
+            val budget = when (effort) {
+                AiEffort.OFF -> if ("pro" in lower) 1024 else 0
+                AiEffort.LOW -> 1024
+                AiEffort.MEDIUM -> 8192
+                AiEffort.HIGH, AiEffort.MAX -> 24576
+            }
+            putJsonObject("thinkingConfig") { put("thinkingBudget", budget) }
+        }
+    }
+}
+
 interface AiTextCompletionClient {
     suspend fun completeJson(
         apiKey: String,
@@ -333,10 +434,7 @@ class OpenAiCompletionClient @Inject constructor(
             }
         }
         putJsonObject("response_format") { put("type", "json_object") }
-        val lower = modelId.lowercase()
-        if ("o1" in lower || "o3" in lower || "o4" in lower || "gpt-5" in lower) {
-            put("reasoning_effort", when (effort) { AiEffort.LOW -> "low"; AiEffort.MEDIUM -> "medium"; AiEffort.HIGH -> "high" })
-        }
+        putOpenAiEffort(modelId, effort)
     }
 
     private fun extractText(rawResponseBody: String): String =
@@ -385,19 +483,7 @@ class AnthropicCompletionClient @Inject constructor(
 
     private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
-        val lower = modelId.lowercase()
-        val supportsThinking = "3-7" in lower || "3.7" in lower || "-4" in lower || "4-" in lower
-        val thinkingBudget = if (supportsThinking && effort != AiEffort.LOW) {
-            if (effort == AiEffort.HIGH) 4096 else 1536
-        } else 0
-        // A differenza di OpenAI/Gemini, dove è opzionale, Claude richiede max_tokens obbligatorio (> budget_tokens se thinking attivo).
-        put("max_tokens", MAX_OUTPUT_TOKENS + thinkingBudget)
-        if (thinkingBudget > 0) {
-            putJsonObject("thinking") {
-                put("type", "enabled")
-                put("budget_tokens", thinkingBudget)
-            }
-        }
+        putClaudeEffortAndMaxTokens(modelId, MAX_OUTPUT_TOKENS, effort)
         putJsonArray("messages") {
             addJsonObject {
                 put("role", "user")
@@ -497,7 +583,7 @@ class BedrockMantleClaudeClient @Inject constructor(
         effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (mantleKey, projectId, region) = parseCredentials(apiKey)
-        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val bodyBytes = buildRequestBody(modelId, userText, images, effort).toString().toByteArray()
         val request = Request.Builder()
             .url("https://bedrock-mantle.$region.api.aws/anthropic/v1/messages")
             .header("Content-Type", "application/json")
@@ -518,7 +604,7 @@ class BedrockMantleClaudeClient @Inject constructor(
 
     private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
-        put("max_tokens", MAX_OUTPUT_TOKENS)
+        putClaudeEffortAndMaxTokens(modelId, MAX_OUTPUT_TOKENS, effort)
         putJsonArray("messages") {
             addJsonObject {
                 put("role", "user")
@@ -580,7 +666,7 @@ class BedrockMantleGptClient @Inject constructor(
         effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (mantleKey, projectId, region) = BedrockMantleClaudeClient.parseCredentials(apiKey)
-        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val bodyBytes = buildRequestBody(modelId, userText, images, effort).toString().toByteArray()
         val request = Request.Builder()
             .url("https://bedrock-mantle.$region.api.aws/v1/chat/completions")
             .header("Content-Type", "application/json")
@@ -615,6 +701,7 @@ class BedrockMantleGptClient @Inject constructor(
             }
         }
         put("max_tokens", MAX_OUTPUT_TOKENS)
+        putOpenAiEffort(modelId, effort)
     }
 
     private fun extractText(rawResponseBody: String): String =
@@ -697,7 +784,7 @@ class BedrockIamClaudeClient @Inject constructor(
 
     private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("anthropic_version", "bedrock-2023-05-31")
-        put("max_tokens", MAX_OUTPUT_TOKENS)
+        putClaudeEffortAndMaxTokens(modelId, MAX_OUTPUT_TOKENS, effort)
         putJsonArray("messages") {
             addJsonObject {
                 put("role", "user")
@@ -981,7 +1068,7 @@ class BedrockIamGptClient @Inject constructor(
         effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = BedrockIamClaudeClient.parseCredentials(apiKey)
-        val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
+        val bodyBytes = buildRequestBody(modelId, userText, images, effort).toString().toByteArray()
         val candidates = BedrockIamClaudeClient.generateCandidateInvocations(modelId, configuredRegion)
 
         var lastException: Exception? = null
@@ -1043,6 +1130,7 @@ class BedrockIamGptClient @Inject constructor(
                 }
             }
         }
+        putOpenAiEffort(modelId, effort)
     }
 
     private fun extractText(rawResponseBody: String): String =
@@ -1112,17 +1200,7 @@ class GeminiCompletionClient @Inject constructor(
         }
         putJsonObject("generationConfig") {
             put("responseMimeType", "application/json")
-            val lower = modelId.lowercase()
-            if ("2.5" in lower || "3." in lower || "thinking" in lower) {
-                val budget = when (effort) {
-                    AiEffort.LOW -> if ("pro" in lower) 128 else 0
-                    AiEffort.MEDIUM -> 2048
-                    AiEffort.HIGH -> 8192
-                }
-                putJsonObject("thinkingConfig") {
-                    put("thinkingBudget", budget)
-                }
-            }
+            putGeminiThinkingConfig(modelId, effort)
         }
         // Disabilita i filtri di sicurezza per evitare falsi positivi sulle foto di cibo 
         // (es. coltelli o forme ambigue) che bloccano l'intera risposta (§5 M1).
@@ -1254,17 +1332,7 @@ class VertexAiCompletionClient @Inject constructor(
         }
         putJsonObject("generationConfig") {
             put("responseMimeType", "application/json")
-            val lower = modelId.lowercase()
-            if ("2.5" in lower || "3." in lower || "thinking" in lower) {
-                val budget = when (effort) {
-                    AiEffort.LOW -> if ("pro" in lower) 128 else 0
-                    AiEffort.MEDIUM -> 2048
-                    AiEffort.HIGH -> 8192
-                }
-                putJsonObject("thinkingConfig") {
-                    put("thinkingBudget", budget)
-                }
-            }
+            putGeminiThinkingConfig(modelId, effort)
         }
         putJsonArray("safetySettings") {
             val categories = listOf(

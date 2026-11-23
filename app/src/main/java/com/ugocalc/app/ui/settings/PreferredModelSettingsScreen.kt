@@ -17,9 +17,12 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.ugocalc.app.domain.model.AiEffort
+import com.ugocalc.app.domain.model.supportedEfforts
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.StatusBanner
@@ -40,6 +43,12 @@ fun PreferredModelSettingsScreen(
     val state by viewModel.state.collectAsState()
     val availableModels by viewModel.availableModels.collectAsState()
     val selectedIds = state.userSettings.preferredModelIds
+    val supportedEfforts = remember(availableModels, selectedIds) {
+        val selected = availableModels.filter { it.uid in selectedIds || it.id in selectedIds }
+        val pool = selected.ifEmpty { availableModels }
+        val union = pool.flatMap { it.supportedEfforts() }.toSet()
+        AiEffort.entries.filter { it in union }
+    }
 
     Scaffold(
         topBar = {
@@ -76,6 +85,7 @@ fun PreferredModelSettingsScreen(
 
             AiEffortSelectorCard(
                 effort = state.userSettings.aiEffort,
+                supportedEfforts = supportedEfforts,
                 onSelectEffort = viewModel::setAiEffort,
             )
 

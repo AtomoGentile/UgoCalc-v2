@@ -7,9 +7,8 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -29,9 +28,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.ugocalc.app.R
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.AiModelTier
+import com.ugocalc.app.domain.model.recommendedTier
 import com.ugocalc.app.ui.components.BrandFilterRow
 import com.ugocalc.app.ui.components.EmptyStateMessage
-import com.ugocalc.app.ui.components.ModernModelCard
+import com.ugocalc.app.ui.modelselect.ModelGuidanceRow
 
 fun modelMatchesQuery(model: AiModel, query: String): Boolean {
     if (query.isBlank()) return true
@@ -134,6 +135,14 @@ internal fun BrandFilteredModelGrid(
     val filteredModels = remember(models, searchQuery, effectiveBrand) {
         val base = if (effectiveBrand == null) models else groupedByBrand[effectiveBrand].orEmpty()
         base.filter { modelMatchesQuery(it, searchQuery) }
+            .sortedBy {
+                when (it.recommendedTier()) {
+                    AiModelTier.RECOMMENDED -> 0
+                    AiModelTier.FAST -> 1
+                    AiModelTier.ACCURATE -> 2
+                    AiModelTier.STANDARD -> 3
+                }
+            }
     }
 
     Column(modifier = modifier) {
@@ -156,27 +165,29 @@ internal fun BrandFilteredModelGrid(
                 counts = brandCounts,
                 onSelect = { selectedBrand = it },
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            placeholder = { Text("Cerca modello…") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(onClick = { searchQuery = "" }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Cancella")
+        if (models.size > 5) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = { Text("Cerca modello…") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Filled.Close, contentDescription = "Cancella")
+                        }
                     }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth(),
-        )
+                },
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth(),
+            )
 
-        Spacer(modifier = Modifier.height(12.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+        }
 
         if (filteredModels.isEmpty()) {
             EmptyStateMessage(
@@ -193,16 +204,14 @@ internal fun BrandFilteredModelGrid(
                     .padding(vertical = 16.dp),
             )
         } else {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 8.dp),
+            LazyColumn(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                contentPadding = PaddingValues(bottom = 12.dp),
                 modifier = gridModifier.fillMaxWidth(),
             ) {
-                items(filteredModels, key = { it.uid }, contentType = { "model_card" }) { model ->
+                items(filteredModels, key = { it.uid }, contentType = { "model_row" }) { model ->
                     val isSelected = model.uid in selectedIds || model.id in selectedIds
-                    ModernModelCard(
+                    ModelGuidanceRow(
                         model = model,
                         isSelected = isSelected,
                         onClick = { onToggleModel(model) },

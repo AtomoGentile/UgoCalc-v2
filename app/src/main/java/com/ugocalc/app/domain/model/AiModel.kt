@@ -36,10 +36,12 @@ data class AiModel(
     val uid: String get() = "${provider.name}::$id"
 }
 
-enum class AiEffort(val label: String, val description: String) {
-    LOW("Rapido", "Immediato · consumo minimo"),
-    MEDIUM("Bilanciato", "Consigliato · buon equilibrio"),
-    HIGH("Preciso", "Ragionamento profondo · più lento"),
+enum class AiEffort(val label: String, val apiValue: String, val description: String) {
+    OFF("Off", "none", "Nessun ragionamento · immediato"),
+    LOW("Low", "low", "Ragionamento minimo · veloce"),
+    MEDIUM("Medium", "medium", "Bilanciato · standard"),
+    HIGH("High", "high", "Ragionamento profondo"),
+    MAX("Max", "max", "Massimo (Opus 4.6 / GPT-5 / Gemini 4)"),
 }
 
 enum class AiModelTier(val badge: String, val hint: String) {
@@ -62,15 +64,60 @@ fun AiModel.recommendedTier(): AiModelTier {
     }
 }
 
-fun AiModel.supportsEffort(): Boolean {
+/**
+ * Restituisce i livelli di effort reali supportati dall'API del modello.
+ * Lista vuota = il modello non supporta ragionamento/effort configurabile (es. GPT-4o, GPT-4.1, Gemini 2.0).
+ */
+fun AiModel.supportedEfforts(): List<AiEffort> {
     val lower = id.lowercase()
     return when (provider) {
-        AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> "2.5" in lower || "3." in lower || "thinking" in lower
-        AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT ->
-            "o1" in lower || "o3" in lower || "o4" in lower || "gpt-5" in lower
-        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE ->
-            "3-7" in lower || "3.7" in lower || "-4" in lower || "4-" in lower
-        AiProviderType.BEDROCK_IAM_AMAZON -> false
+        AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> when {
+            "gemini-4" in lower -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
+            "gemini-3" in lower -> if ("pro" in lower) {
+                listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            } else {
+                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            }
+            "2.5" in lower -> if ("pro" in lower) {
+                listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            } else {
+                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            }
+            else -> emptyList()
+        }
+        AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT -> when {
+            "gpt-5.2" in lower || "gpt-5.3" in lower || "gpt-5.4" in lower || "gpt-5-pro" in lower || "o3-pro" in lower ->
+                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
+            "gpt-5" in lower -> listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            "o1" in lower || "o3" in lower || "o4" in lower -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            else -> emptyList()
+        }
+        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE -> when {
+            "4-6" in lower || "4.6" in lower ->
+                listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
+            "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
+                "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
+                "3-7" in lower || "3.7" in lower ->
+                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            else -> emptyList()
+        }
+        AiProviderType.BEDROCK_IAM_AMAZON -> emptyList()
+    }
+}
+
+fun AiModel.supportsEffort(): Boolean = supportedEfforts().isNotEmpty()
+
+/** Adatta l'effort scelto dall'utente al livello più vicino realmente supportato dal modello. */
+fun AiModel.effectiveEffort(requested: AiEffort): AiEffort? {
+    val supported = supportedEfforts()
+    if (supported.isEmpty()) return null
+    if (requested in supported) return requested
+    return when (requested) {
+        AiEffort.OFF -> supported.first()
+        AiEffort.MAX -> supported.last()
+        AiEffort.LOW -> supported.first()
+        AiEffort.HIGH -> supported.last()
+        AiEffort.MEDIUM -> supported[supported.size / 2]
     }
 }
 

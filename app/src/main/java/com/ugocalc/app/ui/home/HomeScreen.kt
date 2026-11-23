@@ -210,7 +210,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     item(key = "hero") {
@@ -242,7 +242,7 @@ fun HomeScreen(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
-                    contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
+                    contentPadding = PaddingValues(top = 8.dp, bottom = 96.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
                     if (shouldShowHomeBanner(uiState)) {
@@ -278,8 +278,8 @@ fun HomeScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+                contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
                 // 1) Avviso di configurazione (se serve): è ciò che blocca l'azione principale.
                 if (shouldShowHomeBanner(uiState)) {
@@ -965,68 +965,18 @@ private fun PhotoAiHeroCard(
                     }
                 }
 
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = contentColor.copy(alpha = 0.14f),
-                        border = BorderStroke(0.5.dp, contentColor.copy(alpha = 0.24f)),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.CenterFocusStrong,
-                                contentDescription = null,
-                                tint = contentColor,
-                                modifier = Modifier.size(13.dp),
-                            )
-                            Text(
-                                text = "CameraX Pro · Telemetria 3D",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                color = contentColor,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Text(
-                        text = "Analizza Piatto con Foto AI",
-                        style = MaterialTheme.typography.headlineSmall,
+                        text = "Analizza piatto",
+                        style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = contentColor,
                     )
                     Text(
-                        text = subtitleText,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = contentColor.copy(alpha = 0.88f),
+                        text = ctaText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = contentColor.copy(alpha = 0.85f),
                     )
-                }
-
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = contentColor.copy(alpha = 0.18f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(
-                            text = ctaText,
-                            style = MaterialTheme.typography.labelLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = contentColor,
-                        )
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
-                            contentDescription = null,
-                            tint = contentColor,
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
                 }
             }
         }
