@@ -40,6 +40,15 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.5.1",
+            categories = listOf("Barra Flottante", "Effort Reali", "UI & Modelli"),
+            highlights = listOf(
+                "Corretto: barra flottante ora in vero overlay trasparente (niente banda di sfondo dietro), più compatta (56dp) e senza lag al cambio scheda.",
+                "Effort AI reali per ogni modello (Off / Low / Medium / High / Max): collegati ai parametri ufficiali di Gemini 2.5/3/4, Claude 3.7–4.6, OpenAI e Bedrock, mostrando solo i livelli effettivamente supportati dal modello scelto.",
+                "Lista modelli guidata estesa a tutti i selettori (inclusi Modelli preferiti e Impostazioni), hero card Home più essenziale e curva glicemica nascosta ovunque quando disattivata.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.5.0",
             categories = listOf("Effort AI", "Scelta Modelli", "UI Pulita"),
             highlights = listOf(

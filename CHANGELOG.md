@@ -2,6 +2,14 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.5.1] - 2026-11-23
+
+### Fixed
+- **Floating Bottom Bar**: Moved to a true transparent overlay (`Box` + `Alignment.BottomCenter`) with fixed-width 56dp layout, eliminating the opaque background band behind the bar and removing tab-switch layout lag (`animateContentSize`/dynamic weights removed). Added 96dp scroll clearance on top-level lists.
+- **Real Per-Model AI Effort Levels**: Replaced generic effort labels with real provider tiers (`Off`, `Low`, `Medium`, `High`, `Max`) and per-model capability mapping (`thinkingLevel` for Gemini 3/4, `thinkingBudget` for Gemini 2.5, `thinking: adaptive` + `output_config.effort` for Claude 4.6, `thinking.budget_tokens` for Claude 3.7–4.5, and `reasoning_effort` for OpenAI/Bedrock GPT). Models without effort support no longer display fake effort toggles.
+- **Consistent Guided Model Pickers**: Upgraded `BrandFilteredModelGrid` (used by Preferred Models, Normalization, Shadow, and All Models Picker) to the single-column guided list with recommendation tiers and effort ranges.
+- **Home & Glycemic Curve Cleanup**: Slimmed down the Home `PhotoAiHeroCard` and ensured `showGlycemicCurve = false` hides glycemic curves consistently across Home, Results, History, and History Detail.
+
 ## [4.5.0] - 2026-11-23
 
 ### Added
