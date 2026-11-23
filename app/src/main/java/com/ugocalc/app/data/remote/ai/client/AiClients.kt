@@ -650,7 +650,7 @@ class BedrockIamClaudeClient @Inject constructor(
         effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = parseCredentials(apiKey)
-        val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
+        val bodyBytes = buildRequestBody(modelId, userText, images, effort).toString().toByteArray()
         val candidates = generateCandidateInvocations(modelId, configuredRegion)
 
         var lastException: Exception? = null
@@ -878,7 +878,7 @@ class BedrockIamAmazonClient @Inject constructor(
         effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = BedrockIamClaudeClient.parseCredentials(apiKey)
-        val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
+        val bodyBytes = buildRequestBody(modelId, userText, images, effort).toString().toByteArray()
         val candidates = BedrockIamClaudeClient.generateCandidateInvocations(modelId, configuredRegion)
 
         var lastException: Exception? = null
