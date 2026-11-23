@@ -1,5 +1,7 @@
 package com.ugocalc.app.data.remote.ai.client
 
+import com.ugocalc.app.domain.model.AiEffort
+
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -268,6 +270,7 @@ interface AiTextCompletionClient {
         modelId: String,
         userText: String,
         images: List<ImagePart> = emptyList(),
+        effort: AiEffort = AiEffort.MEDIUM,
     ): String
 
     /**
@@ -296,11 +299,12 @@ class OpenAiCompletionClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("https://api.openai.com/v1/chat/completions")
             .header("Authorization", "Bearer $apiKey")
-            .post(buildRequestBody(modelId, userText, images).toString().toRequestBody("application/json".toMediaType()))
+            .post(buildRequestBody(modelId, userText, images, effort).toString().toRequestBody("application/json".toMediaType()))
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -312,7 +316,7 @@ class OpenAiCompletionClient @Inject constructor(
         }
     }
 
-    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
         putJsonArray("messages") {
             addJsonObject {
@@ -329,6 +333,10 @@ class OpenAiCompletionClient @Inject constructor(
             }
         }
         putJsonObject("response_format") { put("type", "json_object") }
+        val lower = modelId.lowercase()
+        if ("o1" in lower || "o3" in lower || "o4" in lower || "gpt-5" in lower) {
+            put("reasoning_effort", when (effort) { AiEffort.LOW -> "low"; AiEffort.MEDIUM -> "medium"; AiEffort.HIGH -> "high" })
+        }
     }
 
     private fun extractText(rawResponseBody: String): String =
@@ -357,12 +365,13 @@ class AnthropicCompletionClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val request = Request.Builder()
             .url("https://api.anthropic.com/v1/messages")
             .header("x-api-key", apiKey)
             .header("anthropic-version", ANTHROPIC_API_VERSION)
-            .post(buildRequestBody(modelId, userText, images).toString().toRequestBody("application/json".toMediaType()))
+            .post(buildRequestBody(modelId, userText, images, effort).toString().toRequestBody("application/json".toMediaType()))
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -374,10 +383,21 @@ class AnthropicCompletionClient @Inject constructor(
         }
     }
 
-    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
-        // A differenza di OpenAI/Gemini, dove è opzionale, Claude richiede max_tokens obbligatorio.
-        put("max_tokens", MAX_OUTPUT_TOKENS)
+        val lower = modelId.lowercase()
+        val supportsThinking = "3-7" in lower || "3.7" in lower || "-4" in lower || "4-" in lower
+        val thinkingBudget = if (supportsThinking && effort != AiEffort.LOW) {
+            if (effort == AiEffort.HIGH) 4096 else 1536
+        } else 0
+        // A differenza di OpenAI/Gemini, dove è opzionale, Claude richiede max_tokens obbligatorio (> budget_tokens se thinking attivo).
+        put("max_tokens", MAX_OUTPUT_TOKENS + thinkingBudget)
+        if (thinkingBudget > 0) {
+            putJsonObject("thinking") {
+                put("type", "enabled")
+                put("budget_tokens", thinkingBudget)
+            }
+        }
         putJsonArray("messages") {
             addJsonObject {
                 put("role", "user")
@@ -474,6 +494,7 @@ class BedrockMantleClaudeClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (mantleKey, projectId, region) = parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
@@ -495,7 +516,7 @@ class BedrockMantleClaudeClient @Inject constructor(
         }
     }
 
-    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
         put("max_tokens", MAX_OUTPUT_TOKENS)
         putJsonArray("messages") {
@@ -556,6 +577,7 @@ class BedrockMantleGptClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (mantleKey, projectId, region) = BedrockMantleClaudeClient.parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
@@ -576,7 +598,7 @@ class BedrockMantleGptClient @Inject constructor(
         }
     }
 
-    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
         putJsonArray("messages") {
             addJsonObject {
@@ -625,6 +647,7 @@ class BedrockIamClaudeClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
@@ -672,7 +695,7 @@ class BedrockIamClaudeClient @Inject constructor(
         throw lastException ?: AiCallException("Chiamata Bedrock Runtime IAM (Claude) fallita per il modello $modelId")
     }
 
-    private fun buildRequestBody(userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("anthropic_version", "bedrock-2023-05-31")
         put("max_tokens", MAX_OUTPUT_TOKENS)
         putJsonArray("messages") {
@@ -852,6 +875,7 @@ class BedrockIamAmazonClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = BedrockIamClaudeClient.parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(userText, images).toString().toByteArray()
@@ -899,7 +923,7 @@ class BedrockIamAmazonClient @Inject constructor(
         throw lastException ?: AiCallException("Chiamata Bedrock Runtime IAM (Amazon) fallita per il modello $modelId")
     }
 
-    private fun buildRequestBody(userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         putJsonArray("messages") {
             addJsonObject {
                 put("role", "user")
@@ -954,6 +978,7 @@ class BedrockIamGptClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (accessKey, secretKey, configuredRegion) = BedrockIamClaudeClient.parseCredentials(apiKey)
         val bodyBytes = buildRequestBody(modelId, userText, images).toString().toByteArray()
@@ -1001,7 +1026,7 @@ class BedrockIamGptClient @Inject constructor(
         throw lastException ?: AiCallException("Chiamata Bedrock Runtime IAM (GPT) fallita per il modello $modelId")
     }
 
-    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         put("model", modelId)
         put("max_tokens", MAX_OUTPUT_TOKENS)
         putJsonArray("messages") {
@@ -1048,6 +1073,7 @@ class GeminiCompletionClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         // La API key va nell'header (non nella query string): l'interceptor OkHttp logga la riga
         // della richiesta (URL incluso) anche a livello BASIC, esporrebbe la chiave in Logcat.
@@ -1055,7 +1081,7 @@ class GeminiCompletionClient @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .header("x-goog-api-key", apiKey)
-            .post(buildRequestBody(userText, images).toString().toRequestBody("application/json".toMediaType()))
+            .post(buildRequestBody(modelId, userText, images, effort).toString().toRequestBody("application/json".toMediaType()))
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -1067,7 +1093,7 @@ class GeminiCompletionClient @Inject constructor(
         }
     }
 
-    private fun buildRequestBody(userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         putJsonArray("contents") {
             addJsonObject {
                 put("role", "user")
@@ -1086,6 +1112,17 @@ class GeminiCompletionClient @Inject constructor(
         }
         putJsonObject("generationConfig") {
             put("responseMimeType", "application/json")
+            val lower = modelId.lowercase()
+            if ("2.5" in lower || "3." in lower || "thinking" in lower) {
+                val budget = when (effort) {
+                    AiEffort.LOW -> if ("pro" in lower) 128 else 0
+                    AiEffort.MEDIUM -> 2048
+                    AiEffort.HIGH -> 8192
+                }
+                putJsonObject("thinkingConfig") {
+                    put("thinkingBudget", budget)
+                }
+            }
         }
         // Disabilita i filtri di sicurezza per evitare falsi positivi sulle foto di cibo 
         // (es. coltelli o forme ambigue) che bloccano l'intera risposta (§5 M1).
@@ -1172,6 +1209,7 @@ class VertexAiCompletionClient @Inject constructor(
         modelId: String,
         userText: String,
         images: List<ImagePart>,
+        effort: AiEffort,
     ): String = withContext(Dispatchers.IO) {
         val (token, projectId, region) = parseCredentials(apiKey)
         val url = "https://$region-aiplatform.googleapis.com/v1/projects/$projectId/locations/$region/publishers/google/models/$modelId:generateContent"
@@ -1179,7 +1217,7 @@ class VertexAiCompletionClient @Inject constructor(
         val request = Request.Builder()
             .url(url)
             .header("Authorization", "Bearer $token")
-            .post(buildRequestBody(userText, images).toString().toRequestBody("application/json".toMediaType()))
+            .post(buildRequestBody(modelId, userText, images, effort).toString().toRequestBody("application/json".toMediaType()))
             .build()
 
         okHttpClient.newCall(request).execute().use { response ->
@@ -1197,7 +1235,7 @@ class VertexAiCompletionClient @Inject constructor(
         return Triple(parts[0], parts[1], parts[2])
     }
 
-    private fun buildRequestBody(userText: String, images: List<ImagePart>): JsonObject = buildJsonObject {
+    private fun buildRequestBody(modelId: String, userText: String, images: List<ImagePart>, effort: AiEffort = AiEffort.MEDIUM): JsonObject = buildJsonObject {
         putJsonArray("contents") {
             addJsonObject {
                 put("role", "user")
@@ -1216,6 +1254,17 @@ class VertexAiCompletionClient @Inject constructor(
         }
         putJsonObject("generationConfig") {
             put("responseMimeType", "application/json")
+            val lower = modelId.lowercase()
+            if ("2.5" in lower || "3." in lower || "thinking" in lower) {
+                val budget = when (effort) {
+                    AiEffort.LOW -> if ("pro" in lower) 128 else 0
+                    AiEffort.MEDIUM -> 2048
+                    AiEffort.HIGH -> 8192
+                }
+                putJsonObject("thinkingConfig") {
+                    put("thinkingBudget", budget)
+                }
+            }
         }
         putJsonArray("safetySettings") {
             val categories = listOf(

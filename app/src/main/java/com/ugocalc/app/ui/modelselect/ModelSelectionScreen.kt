@@ -1,6 +1,12 @@
 package com.ugocalc.app.ui.modelselect
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -10,16 +16,21 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -43,20 +54,31 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.R
+import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.AiModelTier
+import com.ugocalc.app.domain.model.recommendedTier
+import com.ugocalc.app.domain.model.supportsEffort
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.BrandFilterRow
 import com.ugocalc.app.ui.components.EmptyStateMessage
-import com.ugocalc.app.ui.components.ModernModelCard
+import com.ugocalc.app.ui.components.ModelLogoBox
 import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.theme.UgoSemanticColors
 
-/** Schermata di selezione modello (§2.4 punto 1): griglia theme-aware con filtro brand e ricerca. */
+/** Schermata di selezione modello ed effort AI: lista guidata con badge Consigliato / Veloce / Preciso. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ModelSelectionScreen(
@@ -113,7 +135,7 @@ fun ModelSelectionScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Scegli i modelli") },
+                title = { Text("Modello ed Effort AI") },
                 navigationIcon = { BackIconButton(onBack) },
                 colors = ugoTopAppBarColors(),
             )
@@ -138,8 +160,8 @@ fun ModelSelectionScreen(
                     ) {
                         val ctaLabel = when (selectedCount) {
                             0 -> "Seleziona almeno 1 modello"
-                            1 -> "Continua (1 modello)"
-                            else -> "Continua ($selectedCount modelli)"
+                            1 -> "Continua · ${uiState.effort.label}"
+                            else -> "Continua ($selectedCount modelli) · ${uiState.effort.label}"
                         }
                         Text(
                             text = ctaLabel,
@@ -155,13 +177,13 @@ fun ModelSelectionScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 16.dp, vertical = 10.dp),
         ) {
             if (uiState.isRefreshing) {
                 LinearProgressIndicator(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 10.dp),
+                        .padding(bottom = 8.dp),
                 )
             }
 
@@ -189,42 +211,44 @@ fun ModelSelectionScreen(
                     modifier = Modifier.fillMaxSize(),
                 )
             } else {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Cerca modello o provider…") },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Search,
-                            contentDescription = null,
-                        )
-                    },
-                    trailingIcon = if (searchQuery.isNotEmpty()) {
-                        {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = "Pulisci ricerca",
-                                )
-                            }
-                        }
-                    } else null,
-                    singleLine = true,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.fillMaxWidth(),
+                AiEffortSelectorCard(
+                    effort = uiState.effort,
+                    onSelectEffort = viewModel::setEffort,
                 )
 
+                Spacer(Modifier.height(10.dp))
+
+                if (uiState.availableModels.size > 5) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        placeholder = { Text("Cerca modello o provider…") },
+                        leadingIcon = {
+                            Icon(imageVector = Icons.Filled.Search, contentDescription = null)
+                        },
+                        trailingIcon = if (searchQuery.isNotEmpty()) {
+                            {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Pulisci ricerca")
+                                }
+                            }
+                        } else null,
+                        singleLine = true,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
+
                 if (activeBrands.size > 1) {
-                    Spacer(Modifier.height(10.dp))
                     BrandFilterRow(
                         brands = activeBrands,
                         selectedBrand = selectedBrand,
                         counts = brandCounts,
                         onSelect = { selectedBrand = it },
                     )
+                    Spacer(Modifier.height(6.dp))
                 }
-
-                Spacer(Modifier.height(6.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -232,27 +256,34 @@ fun ModelSelectionScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Text(
-                        text = "$selectedCount di ${uiState.availableModels.size} selezionati",
+                        text = if (selectedCount == 1) "1 modello attivo" else "$selectedCount modelli attivi",
                         style = MaterialTheme.typography.labelLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        horizontalArrangement = Arrangement.spacedBy(2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         TextButton(
-                            onClick = { viewModel.selectOnlyOne() },
-                            enabled = uiState.availableModels.isNotEmpty(),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            onClick = { viewModel.selectRecommended() },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                         ) {
-                            Text("Solo 1")
+                            Icon(
+                                imageVector = Icons.Rounded.AutoAwesome,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            Text("Consigliato")
                         }
-                        TextButton(
-                            onClick = { viewModel.selectAll() },
-                            enabled = selectedCount < uiState.availableModels.size,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        ) {
-                            Text("Seleziona tutti")
+                        if (uiState.availableModels.size > 1) {
+                            TextButton(
+                                onClick = { viewModel.selectAll() },
+                                enabled = selectedCount < uiState.availableModels.size,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            ) {
+                                Text("Tutti")
+                            }
                         }
                     }
                 }
@@ -272,22 +303,217 @@ fun ModelSelectionScreen(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
+                    LazyColumn(
                         modifier = Modifier.weight(1f),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(top = 4.dp, bottom = 12.dp),
                     ) {
-                        items(filteredModels, key = { it.uid }, contentType = { "model_card" }) { model ->
+                        items(filteredModels, key = { it.uid }, contentType = { "model_row" }) { model ->
                             val onClick = remember(model.uid) { { viewModel.toggleModel(model.uid) } }
-                            ModernModelCard(
+                            ModelGuidanceRow(
                                 model = model,
                                 isSelected = model.uid in uiState.selectedModelUids,
                                 onClick = onClick,
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AiEffortSelectorCard(
+    effort: AiEffort,
+    onSelectEffort: (AiEffort) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val haptic = LocalHapticFeedback.current
+    UgoCard(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(12.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Bolt,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    text = "Effort di ragionamento",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            Text(
+                text = effort.description,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            AiEffort.entries.forEach { option ->
+                val selected = effort == option
+                val bg by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    animationSpec = tween(180),
+                    label = "effort_bg_${option.name}",
+                )
+                val fg by animateColorAsState(
+                    targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    animationSpec = tween(180),
+                    label = "effort_fg_${option.name}",
+                )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(bg)
+                        .clickable {
+                            if (!selected) {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                onSelectEffort(option)
+                            }
+                        }
+                        .padding(vertical = 8.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        text = option.label,
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        color = fg,
+                        maxLines = 1,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModelGuidanceRow(
+    model: AiModel,
+    isSelected: Boolean,
+    onClick: () -> Unit,
+) {
+    val tier = remember(model.id) { model.recommendedTier() }
+    val supportsEffort = remember(model.id, model.provider) { model.supportsEffort() }
+    val (badgeBg, badgeFg) = when (tier) {
+        AiModelTier.RECOMMENDED -> UgoSemanticColors.successContainer to UgoSemanticColors.onSuccessContainer
+        AiModelTier.FAST -> MaterialTheme.colorScheme.secondaryContainer to MaterialTheme.colorScheme.onSecondaryContainer
+        AiModelTier.ACCURATE -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.onTertiaryContainer
+        AiModelTier.STANDARD -> MaterialTheme.colorScheme.surfaceContainerHigh to MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        },
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+            },
+        ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            ModelLogoBox(
+                logoRes = model.logoRes,
+                displayName = model.displayName,
+                subtitle = model.subtitle,
+                modifier = Modifier.size(40.dp),
+            )
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        text = model.displayName,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (tier != AiModelTier.STANDARD) {
+                        Surface(shape = RoundedCornerShape(50), color = badgeBg) {
+                            Text(
+                                text = tier.badge,
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.SemiBold,
+                                color = badgeFg,
+                                maxLines = 1,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    text = buildString {
+                        if (model.subtitle.isNotBlank()) {
+                            append(model.subtitle)
+                            append(" · ")
+                        }
+                        append(tier.hint)
+                        if (supportsEffort) append(" · Effort")
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .size(24.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Filled.Check,
+                        contentDescription = "Selezionato",
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(16.dp),
+                    )
                 }
             }
         }

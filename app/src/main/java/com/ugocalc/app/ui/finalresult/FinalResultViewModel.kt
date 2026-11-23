@@ -125,10 +125,10 @@ class FinalResultViewModel @Inject constructor(
 
         combine(
             sessionStore.session.map { it.totals }.distinctUntilChanged(),
-            settingsRepository.settings.map { it.toGlycemicProfile() }.distinctUntilChanged(),
+            settingsRepository.settings.map { it.toGlycemicProfile() to it.showGlycemicCurve }.distinctUntilChanged(),
             sessionStore.session.map { it.preMealGlucoseMgDl }.distinctUntilChanged(),
-        ) { totals, profile, overrideMgDl ->
-            val sim = simulateMealWithOverride(totals, profile, overrideMgDl)
+        ) { totals, (profile, showCurve), overrideMgDl ->
+            val sim = if (showCurve) simulateMealWithOverride(totals, profile, overrideMgDl) else null
             Triple(sim, profile.targetPostPrandialMaxMgDl, overrideMgDl)
         }
             .onEach { (simulation, targetMax, overrideMgDl) ->

@@ -6,6 +6,9 @@ import android.graphics.Matrix
 import android.util.Base64
 import androidx.exifinterface.media.ExifInterface
 import com.ugocalc.app.data.local.prefs.SecureApiKeyStore
+import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.domain.model.AiEffort
+import kotlinx.coroutines.flow.first
 import com.ugocalc.app.data.remote.ai.auth.VertexAiTokenProvider
 import com.ugocalc.app.data.remote.ai.client.AiCallException
 import com.ugocalc.app.data.remote.ai.client.AiTextCompletionClient
@@ -56,6 +59,7 @@ class AiCallExecutor @Inject constructor(
     private val vertexAiClient: VertexAiCompletionClient,
     private val vertexAiTokenProvider: VertexAiTokenProvider,
     private val apiKeyStore: SecureApiKeyStore,
+    private val settingsRepository: SettingsRepository,
     internal val json: Json,
 ) {
 
@@ -404,8 +408,15 @@ class AiCallExecutor @Inject constructor(
     ): T {
         val client = clientFor(model.provider)
         val apiKey = apiKeyFor(model)
+        val effort = runCatching { settingsRepository.settings.first().aiEffort }.getOrDefault(AiEffort.MEDIUM)
         return withRetry {
-            val raw = client.completeJson(apiKey = apiKey, modelId = model.id, userText = userText, images = images)
+            val raw = client.completeJson(
+                apiKey = apiKey,
+                modelId = model.id,
+                userText = userText,
+                images = images,
+                effort = effort,
+            )
             decodeDto(raw)
         }
     }

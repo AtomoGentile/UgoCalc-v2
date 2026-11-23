@@ -131,7 +131,6 @@ fun HomeScreen(
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var showAiSetupDialog by remember { mutableStateOf(false) }
     var showOfflineAiDialog by remember { mutableStateOf(false) }
-    var timelineExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -214,12 +213,6 @@ fun HomeScreen(
                     contentPadding = PaddingValues(top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    item(key = "greeting") {
-                        HomeGreetingRow(
-                            greeting = uiState.greeting,
-                            weekMealsCount = uiState.weekMealsCount,
-                        )
-                    }
                     item(key = "hero") {
                         PhotoAiHeroCard(
                             uiState = uiState,
@@ -242,16 +235,6 @@ fun HomeScreen(
                             glycemicLoad = uiState.todayGlycemicLoad,
                             onClick = onNavigateToHistory,
                         )
-                    }
-                    uiState.todayGlycemicTimeline?.takeIf { uiState.todayMealsCount > 0 }?.let { timeline ->
-                        item(key = "today_glycemic_timeline") {
-                            CollapsibleDailyTimelineSection(
-                                timeline = timeline,
-                                expanded = timelineExpanded,
-                                onToggleExpand = { timelineExpanded = !timelineExpanded },
-                                onOpenSettings = onOpenGlycemicSettings,
-                            )
-                        }
                     }
                 }
 
@@ -309,14 +292,7 @@ fun HomeScreen(
                     }
                 }
 
-                // 2) Saluto + azione principale: subito visibili, senza scorrere.
-                item(key = "greeting") {
-                    HomeGreetingRow(
-                        greeting = uiState.greeting,
-                        weekMealsCount = uiState.weekMealsCount,
-                    )
-                }
-
+                // 2) Azione principale: subito visibile, senza rumore.
                 item(key = "hero_photo_ai") {
                     PhotoAiHeroCard(
                         uiState = uiState,
@@ -342,17 +318,6 @@ fun HomeScreen(
                         glycemicLoad = uiState.todayGlycemicLoad,
                         onClick = onNavigateToHistory,
                     )
-                }
-
-                uiState.todayGlycemicTimeline?.takeIf { uiState.todayMealsCount > 0 }?.let { timeline ->
-                    item(key = "today_glycemic_timeline") {
-                        CollapsibleDailyTimelineSection(
-                            timeline = timeline,
-                            expanded = timelineExpanded,
-                            onToggleExpand = { timelineExpanded = !timelineExpanded },
-                            onOpenSettings = onOpenGlycemicSettings,
-                        )
-                    }
                 }
 
                 // 4) Scorciatoie e storico recente.

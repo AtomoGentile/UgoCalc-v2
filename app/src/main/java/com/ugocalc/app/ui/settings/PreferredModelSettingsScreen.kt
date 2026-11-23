@@ -25,6 +25,7 @@ import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.modelselect.AiEffortSelectorCard
 
 /**
  * Impostazioni > Modelli preferiti (§2.2): se ne selezioni almeno uno, "Analizza" in Home salta
@@ -43,7 +44,7 @@ fun PreferredModelSettingsScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Modelli preferiti") },
+                title = { Text("Modelli preferiti & Effort") },
                 navigationIcon = { BackIconButton(onBack) },
                 colors = ugoTopAppBarColors(),
             )
@@ -70,6 +71,13 @@ fun PreferredModelSettingsScreen(
                     tone = if (selectedIds.isEmpty()) BannerTone.INFO else BannerTone.SUCCESS,
                 )
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            AiEffortSelectorCard(
+                effort = state.userSettings.aiEffort,
+                onSelectEffort = viewModel::setAiEffort,
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 

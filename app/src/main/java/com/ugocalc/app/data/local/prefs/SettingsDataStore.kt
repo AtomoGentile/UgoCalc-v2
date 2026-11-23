@@ -104,6 +104,8 @@ data class UserSettings(
     val baselineGlucoseMgDl: Int = 90,
     val carbSensitivityMgDlPer10g: Int = 18,
     val targetPostPrandialMaxMgDl: Int = 140,
+    val aiEffort: com.ugocalc.app.domain.model.AiEffort = com.ugocalc.app.domain.model.AiEffort.MEDIUM,
+    val showGlycemicCurve: Boolean = false,
 ) {
     fun toGlycemicProfile(): GlycemicProfile {
         val preset = runCatching { GlycemicProfilePreset.valueOf(glycemicProfilePreset) }
@@ -159,6 +161,8 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         val BASELINE_GLUCOSE_MG_DL = intPreferencesKey("baseline_glucose_mg_dl")
         val CARB_SENSITIVITY_MG_DL_PER_10G = intPreferencesKey("carb_sensitivity_mg_dl_per_10g")
         val TARGET_POST_PRANDIAL_MAX_MG_DL = intPreferencesKey("target_post_prandial_max_mg_dl")
+        val AI_EFFORT = stringPreferencesKey("ai_effort")
+        val SHOW_GLYCEMIC_CURVE = booleanPreferencesKey("show_glycemic_curve")
     }
 
     val settingsFlow: Flow<UserSettings> = context.dataStore.data.map { prefs ->
@@ -201,6 +205,10 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
             baselineGlucoseMgDl = prefs[Keys.BASELINE_GLUCOSE_MG_DL] ?: 90,
             carbSensitivityMgDlPer10g = prefs[Keys.CARB_SENSITIVITY_MG_DL_PER_10G] ?: 18,
             targetPostPrandialMaxMgDl = prefs[Keys.TARGET_POST_PRANDIAL_MAX_MG_DL] ?: 140,
+            aiEffort = prefs[Keys.AI_EFFORT]?.let {
+                runCatching { com.ugocalc.app.domain.model.AiEffort.valueOf(it) }.getOrNull()
+            } ?: com.ugocalc.app.domain.model.AiEffort.MEDIUM,
+            showGlycemicCurve = prefs[Keys.SHOW_GLYCEMIC_CURVE] ?: false,
         )
     }.distinctUntilChanged()
 
@@ -300,6 +308,10 @@ class SettingsDataStore @Inject constructor(@param:ApplicationContext private va
         it[Keys.CARB_SENSITIVITY_MG_DL_PER_10G] = preset.defaultCarbSensitivity
         it[Keys.TARGET_POST_PRANDIAL_MAX_MG_DL] = preset.defaultTargetMaxMgDl
     }
+    suspend fun setAiEffort(effort: com.ugocalc.app.domain.model.AiEffort) =
+        context.dataStore.edit { it[Keys.AI_EFFORT] = effort.name }
+    suspend fun setShowGlycemicCurve(enabled: Boolean) =
+        context.dataStore.edit { it[Keys.SHOW_GLYCEMIC_CURVE] = enabled }
 
     suspend fun clearAll() = context.dataStore.edit { it.clear() }
 }

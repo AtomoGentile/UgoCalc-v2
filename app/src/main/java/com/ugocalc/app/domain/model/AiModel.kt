@@ -36,6 +36,44 @@ data class AiModel(
     val uid: String get() = "${provider.name}::$id"
 }
 
+enum class AiEffort(val label: String, val description: String) {
+    LOW("Rapido", "Immediato · consumo minimo"),
+    MEDIUM("Bilanciato", "Consigliato · buon equilibrio"),
+    HIGH("Preciso", "Ragionamento profondo · più lento"),
+}
+
+enum class AiModelTier(val badge: String, val hint: String) {
+    RECOMMENDED("Consigliato", "Miglior equilibrio tra precisione e velocità"),
+    FAST("Veloce", "Economico, ideale per piatti semplici"),
+    ACCURATE("Alta precisione", "Ottimo per piatti complessi e multi-ingrediente"),
+    STANDARD("Standard", "Modello generico"),
+}
+
+fun AiModel.recommendedTier(): AiModelTier {
+    val lower = id.lowercase()
+    return when {
+        "lite" in lower || "mini" in lower || "nano" in lower || "micro" in lower || "haiku" in lower ->
+            AiModelTier.FAST
+        "pro" in lower || "opus" in lower || "o1" in lower || "o3" in lower || "o4" in lower || "gpt-5" in lower ->
+            AiModelTier.ACCURATE
+        "flash" in lower || "sonnet" in lower || "gpt-4o" in lower || "gpt-4.1" in lower ->
+            AiModelTier.RECOMMENDED
+        else -> AiModelTier.STANDARD
+    }
+}
+
+fun AiModel.supportsEffort(): Boolean {
+    val lower = id.lowercase()
+    return when (provider) {
+        AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> "2.5" in lower || "3." in lower || "thinking" in lower
+        AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT ->
+            "o1" in lower || "o3" in lower || "o4" in lower || "gpt-5" in lower
+        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE ->
+            "3-7" in lower || "3.7" in lower || "-4" in lower || "4-" in lower
+        AiProviderType.BEDROCK_IAM_AMAZON -> false
+    }
+}
+
 object AiModelCatalog {
     private val _catalogVersion = MutableStateFlow(0)
     val catalogVersion: StateFlow<Int> = _catalogVersion.asStateFlow()

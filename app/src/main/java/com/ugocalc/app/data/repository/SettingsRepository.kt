@@ -57,6 +57,8 @@ class SettingsRepository @Inject constructor(
     suspend fun setCarbSensitivityMgDlPer10g(mgDlPer10g: Int) = dataStore.setCarbSensitivityMgDlPer10g(mgDlPer10g)
     suspend fun setTargetPostPrandialMaxMgDl(mgDl: Int) = dataStore.setTargetPostPrandialMaxMgDl(mgDl)
     suspend fun applyGlycemicProfilePreset(preset: GlycemicProfilePreset) = dataStore.applyGlycemicProfilePreset(preset)
+    suspend fun setAiEffort(effort: com.ugocalc.app.domain.model.AiEffort) = dataStore.setAiEffort(effort)
+    suspend fun setShowGlycemicCurve(enabled: Boolean) = dataStore.setShowGlycemicCurve(enabled)
 
     fun getApiKey(provider: AiProviderType): String? = apiKeyStore.getApiKey(provider)
     fun setApiKey(provider: AiProviderType, key: String) = apiKeyStore.setApiKey(provider, key)

@@ -188,6 +188,14 @@ class SettingsViewModel @Inject constructor(
     fun applyGlycemicProfilePreset(preset: GlycemicProfilePreset) {
         viewModelScope.launch { settingsRepository.applyGlycemicProfilePreset(preset) }
     }
+
+    fun setAiEffort(effort: com.ugocalc.app.domain.model.AiEffort) {
+        viewModelScope.launch { settingsRepository.setAiEffort(effort) }
+    }
+
+    fun setShowGlycemicCurve(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowGlycemicCurve(enabled) }
+    }
     fun setBaselineGlucoseMgDl(mgDl: Int) {
         viewModelScope.launch { settingsRepository.setBaselineGlucoseMgDl(mgDl.coerceIn(65, 180)) }
     }

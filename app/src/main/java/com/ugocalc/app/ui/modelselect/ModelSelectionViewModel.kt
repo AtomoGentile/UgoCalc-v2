@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.data.remote.ai.client.AwsSigV4Signer
 import com.ugocalc.app.data.repository.SettingsRepository
+import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
+import com.ugocalc.app.domain.model.AiModelTier
 import com.ugocalc.app.domain.model.AiProviderType
+import com.ugocalc.app.domain.model.recommendedTier
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.util.ConnectivityObserver
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -29,6 +32,7 @@ import javax.inject.Named
 data class ModelSelectionUiState(
     val availableModels: List<AiModel> = emptyList(),
     val selectedModelUids: Set<String> = emptySet(),
+    val effort: AiEffort = AiEffort.MEDIUM,
     val isOffline: Boolean = false,
     val isRefreshing: Boolean = false,
 )
@@ -74,9 +78,20 @@ class ModelSelectionViewModel @Inject constructor(
                     }
                 }
             }
-            models to isOffline
+            Triple(
+                models.sortedBy {
+                    when (it.recommendedTier()) {
+                        AiModelTier.RECOMMENDED -> 0
+                        AiModelTier.FAST -> 1
+                        AiModelTier.ACCURATE -> 2
+                        AiModelTier.STANDARD -> 3
+                    }
+                },
+                isOffline,
+                userSettings.aiEffort,
+            )
         }
-            .onEach { (models, isOffline) ->
+            .onEach { (models, isOffline, effort) ->
                 val availableUids = models.map { it.uid }.toSet()
                 _uiState.update { state ->
                     val nextSelection = when {
@@ -84,13 +99,17 @@ class ModelSelectionViewModel @Inject constructor(
                         models.isEmpty() -> emptySet()
                         !hasInitializedSelection -> {
                             hasInitializedSelection = true
-                            availableUids
+                            val rec = models.firstOrNull { it.recommendedTier() == AiModelTier.RECOMMENDED }
+                                ?: models.firstOrNull { it.recommendedTier() == AiModelTier.FAST }
+                                ?: models.firstOrNull()
+                            if (rec != null) setOf(rec.uid) else emptySet()
                         }
                         else -> state.selectedModelUids.intersect(availableUids)
                     }
                     state.copy(
                         availableModels = models,
                         selectedModelUids = nextSelection,
+                        effort = effort,
                         isOffline = isOffline,
                     )
                 }
@@ -255,6 +274,20 @@ class ModelSelectionViewModel @Inject constructor(
                 ?: state.availableModels.firstOrNull()
             state.copy(selectedModelUids = if (preferred != null) setOf(preferred.uid) else emptySet())
         }
+    }
+
+    fun selectRecommended() {
+        _uiState.update { state ->
+            val best = state.availableModels.firstOrNull { it.recommendedTier() == AiModelTier.RECOMMENDED }
+                ?: state.availableModels.firstOrNull { it.recommendedTier() == AiModelTier.FAST }
+                ?: state.availableModels.firstOrNull()
+            state.copy(selectedModelUids = if (best != null) setOf(best.uid) else emptySet())
+        }
+    }
+
+    fun setEffort(effort: AiEffort) {
+        _uiState.update { it.copy(effort = effort) }
+        viewModelScope.launch { settingsRepository.setAiEffort(effort) }
     }
 
     fun confirmSelectionAndProceed(): List<String> {

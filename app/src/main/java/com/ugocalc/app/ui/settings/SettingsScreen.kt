@@ -133,7 +133,7 @@ fun SettingsScreen(
 
     val mainSections = listOf(
         SettingsSectionData(
-            title = "Account & API",
+            title = "Account & AI",
             items = listOf(
                 SettingsMenuItemData(
                     id = "account",
@@ -155,110 +155,56 @@ fun SettingsScreen(
                     badgePositive = configuredCount > 0,
                     onClick = onOpenApi,
                 ),
-            ),
-        ),
-        SettingsSectionData(
-            title = "Preferenze",
-            items = listOf(
-                SettingsMenuItemData(
-                    id = "glycemic_profile",
-                    icon = Icons.Outlined.ShowChart,
-                    title = "Profilo Glicemico",
-                    subtitle = "${settings.toGlycemicProfile().preset.label} · +${settings.carbSensitivityMgDlPer10g} mg/dL / 10g CHO",
-                    badgeText = "≤${settings.targetPostPrandialMaxMgDl}",
-                    badgePositive = true,
-                    onClick = onOpenGlycemicProfile,
-                ),
-                SettingsMenuItemData(
-                    id = "favorites",
-                    icon = Icons.Outlined.StarOutline,
-                    title = "Preferiti",
-                    subtitle = "Scorciatoie mostrate in Homepage",
-                    badgeText = if (settings.favoritesEnabled) "Attivi" else "Disattivi",
-                    badgePositive = settings.favoritesEnabled,
-                    onClick = onOpenFavorites,
-                ),
-                SettingsMenuItemData(
-                    id = "permissions",
-                    icon = Icons.Outlined.Security,
-                    title = "Permessi",
-                    subtitle = "Fotocamera e notifiche in background",
-                    onClick = onOpenPermissions,
-                ),
-                SettingsMenuItemData(
-                    id = "accessibility",
-                    icon = Icons.Outlined.Palette,
-                    title = "Accessibilità e tema",
-                    subtitle = "Tema $activeThemeLabel · Testo ${(settings.textScale * 100).toInt()}%",
-                    onClick = onOpenAccessibility,
-                ),
-            ),
-        ),
-        SettingsSectionData(
-            title = "Modelli & Analisi",
-            items = listOf(
                 SettingsMenuItemData(
                     id = "preferred_models",
                     icon = Icons.Outlined.AutoAwesome,
-                    title = "Modelli preferiti",
+                    title = "Modelli preferiti & Effort",
                     subtitle = if (settings.preferredModelIds.isEmpty()) {
-                        "Scelta manuale ad ogni analisi"
+                        "Scelta manuale · Effort: ${settings.aiEffort.label}"
                     } else {
-                        "Avvio rapido con ${settings.preferredModelIds.size} modelli"
+                        "${settings.preferredModelIds.size} preferiti · Effort: ${settings.aiEffort.label}"
                     },
-                    badgeText = if (settings.preferredModelIds.isNotEmpty()) "${settings.preferredModelIds.size}" else null,
+                    badgeText = settings.aiEffort.label,
                     onClick = onOpenPreferredModel,
-                ),
-                SettingsMenuItemData(
-                    id = "normalization_models",
-                    icon = Icons.Outlined.Tune,
-                    title = "Modelli per normalizzazione",
-                    subtitle = if (settings.enabledNormalizationModelIds.isEmpty()) {
-                        "Tutti i modelli attivi"
-                    } else {
-                        "${settings.enabledNormalizationModelIds.size} modelli selezionati"
-                    },
-                    onClick = onOpenNormalizationModel,
-                ),
-                SettingsMenuItemData(
-                    id = "confidence",
-                    icon = Icons.Outlined.Verified,
-                    title = "Livello di confidenza",
-                    subtitle = if (settings.confidenceIndicatorEnabled) {
-                        "Avviso attivo sotto ${settings.confidenceAlertThresholdPercent}%"
-                    } else {
-                        "Avviso bassa confidenza disattivato"
-                    },
-                    badgeText = if (settings.confidenceIndicatorEnabled) "${settings.confidenceAlertThresholdPercent}%" else null,
-                    onClick = onOpenConfidence,
-                ),
-                SettingsMenuItemData(
-                    id = "history_chart",
-                    icon = Icons.Outlined.BarChart,
-                    title = "Grafico cronologia",
-                    subtitle = if (settings.historyChartEnabled) "Visibile in Cronologia" else "Nascosto",
-                    onClick = onOpenHistoryChart,
                 ),
             ),
         ),
         SettingsSectionData(
-            title = "Strumenti & Database",
+            title = "Aspetto & Dati",
             items = listOf(
                 SettingsMenuItemData(
-                    id = "tables",
-                    icon = Icons.Outlined.TableChart,
-                    title = "Tabelle valori ufficiali",
-                    subtitle = "Carica, ordina e modifica tabelle CHO/grassi",
-                    badgeText = "${state.officialTableCount}",
-                    badgePositive = state.officialTableCount > 0,
-                    onClick = onOpenTables,
+                    id = "accessibility",
+                    icon = Icons.Outlined.Palette,
+                    title = "Tema e accessibilità",
+                    subtitle = "Tema $activeThemeLabel · Testo ${(settings.textScale * 100).toInt()}%",
+                    onClick = onOpenAccessibility,
                 ),
                 SettingsMenuItemData(
-                    id = "recipes",
-                    icon = Icons.Outlined.MenuBook,
-                    title = "Ricette",
-                    subtitle = "Gestisci le ricette per la strategia Composto",
-                    onClick = onOpenRecipes,
+                    id = "glycemic_profile",
+                    icon = Icons.Outlined.ShowChart,
+                    title = "Curva e profilo glicemico",
+                    subtitle = if (settings.showGlycemicCurve) {
+                        "Attiva · ${settings.toGlycemicProfile().preset.label}"
+                    } else {
+                        "Nascosta nei risultati"
+                    },
+                    badgeText = if (settings.showGlycemicCurve) "Attiva" else "Off",
+                    badgePositive = settings.showGlycemicCurve,
+                    onClick = onOpenGlycemicProfile,
+                ),
+                SettingsMenuItemData(
+                    id = "backup",
+                    icon = Icons.Outlined.Backup,
+                    title = "Backup e ripristino",
+                    subtitle = "Esporta, importa o ripristina i dati locali",
+                    onClick = onOpenBackup,
+                ),
+                SettingsMenuItemData(
+                    id = "changelog",
+                    icon = Icons.Outlined.SystemUpdate,
+                    title = "Software e aggiornamenti",
+                    subtitle = "Versione ${BuildConfig.VERSION_NAME} e storico rilasci",
+                    onClick = onOpenChangelog,
                 ),
             ),
         ),
@@ -266,20 +212,50 @@ fun SettingsScreen(
 
     val advancedItems = listOf(
         SettingsMenuItemData(
-            id = "bias_evolution",
-            icon = Icons.Outlined.Psychology,
-            title = "BIAS & Evoluzione",
-            subtitle = "Motore V2, peso vero e fattori appresi",
-            badgeText = if (settings.v2VisibleModeEnabled) "V2" else if (settings.v2ShadowModeEnabled) "Shadow" else null,
-            onClick = onOpenBiasEvolution,
+            id = "normalization_models",
+            icon = Icons.Outlined.Tune,
+            title = "Modelli per normalizzazione",
+            subtitle = if (settings.enabledNormalizationModelIds.isEmpty()) {
+                "Tutti i modelli attivi"
+            } else {
+                "${settings.enabledNormalizationModelIds.size} modelli selezionati"
+            },
+            onClick = onOpenNormalizationModel,
         ),
         SettingsMenuItemData(
-            id = "shadow_models",
-            icon = Icons.Outlined.Science,
-            title = "Modelli V2 shadow",
-            subtitle = "Seleziona i modelli da testare in shadow mode",
-            badgeText = if (settings.shadowModelIds.isNotEmpty()) "${settings.shadowModelIds.size}" else null,
-            onClick = onOpenShadowModel,
+            id = "confidence",
+            icon = Icons.Outlined.Verified,
+            title = "Livello di confidenza",
+            subtitle = if (settings.confidenceIndicatorEnabled) {
+                "Avviso attivo sotto ${settings.confidenceAlertThresholdPercent}%"
+            } else {
+                "Avviso bassa confidenza disattivato"
+            },
+            badgeText = if (settings.confidenceIndicatorEnabled) "${settings.confidenceAlertThresholdPercent}%" else null,
+            onClick = onOpenConfidence,
+        ),
+        SettingsMenuItemData(
+            id = "favorites",
+            icon = Icons.Outlined.StarOutline,
+            title = "Preferiti in Home",
+            subtitle = if (settings.favoritesEnabled) "Visibili in Homepage" else "Nascosti",
+            badgeText = if (settings.favoritesEnabled) "Attivi" else "Off",
+            badgePositive = settings.favoritesEnabled,
+            onClick = onOpenFavorites,
+        ),
+        SettingsMenuItemData(
+            id = "history_chart",
+            icon = Icons.Outlined.BarChart,
+            title = "Grafico cronologia",
+            subtitle = if (settings.historyChartEnabled) "Visibile in Cronologia" else "Nascosto",
+            onClick = onOpenHistoryChart,
+        ),
+        SettingsMenuItemData(
+            id = "permissions",
+            icon = Icons.Outlined.Security,
+            title = "Permessi",
+            subtitle = "Fotocamera e notifiche in background",
+            onClick = onOpenPermissions,
         ),
         SettingsMenuItemData(
             id = "scale_calibrations",
@@ -296,18 +272,20 @@ fun SettingsScreen(
             onClick = onOpenCostManagement,
         ),
         SettingsMenuItemData(
-            id = "backup",
-            icon = Icons.Outlined.Backup,
-            title = "Backup e ripristino",
-            subtitle = "Esporta, importa o ripristina i dati locali",
-            onClick = onOpenBackup,
+            id = "bias_evolution",
+            icon = Icons.Outlined.Psychology,
+            title = "BIAS & Evoluzione",
+            subtitle = "Motore V2, peso vero e fattori appresi",
+            badgeText = if (settings.v2VisibleModeEnabled) "V2" else if (settings.v2ShadowModeEnabled) "Shadow" else null,
+            onClick = onOpenBiasEvolution,
         ),
         SettingsMenuItemData(
-            id = "changelog",
-            icon = Icons.Outlined.SystemUpdate,
-            title = "Software e aggiornamenti",
-            subtitle = "Versione ${BuildConfig.VERSION_NAME} e storico rilasci",
-            onClick = onOpenChangelog,
+            id = "shadow_models",
+            icon = Icons.Outlined.Science,
+            title = "Modelli V2 shadow",
+            subtitle = "Seleziona i modelli da testare in shadow mode",
+            badgeText = if (settings.shadowModelIds.isNotEmpty()) "${settings.shadowModelIds.size}" else null,
+            onClick = onOpenShadowModel,
         ),
     )
 
