@@ -52,6 +52,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BrokenImage
@@ -66,6 +67,8 @@ import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.rounded.ShowChart
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -75,8 +78,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -160,6 +166,8 @@ fun CameraXStudioView(
     isLoadingGallery: Boolean,
     availableCalibrations: List<ScaleCalibrationEntity>,
     selectedCalibrationIds: Set<Long>,
+    preMealGlucoseMgDl: Int? = null,
+    onSetPreMealGlucose: ((Int?) -> Unit)? = null,
     bannerErrorMessage: String?,
     onDismissBannerError: () -> Unit,
     onRequestCameraPermission: () -> Unit,
@@ -199,6 +207,7 @@ fun CameraXStudioView(
     var captureError by remember { mutableStateOf<String?>(null) }
     var focusTapOffset by remember { mutableStateOf<Offset?>(null) }
     var showCalibrationMenu by remember { mutableStateOf(false) }
+    var showPreMealGlucoseDialog by remember { mutableStateOf(false) }
 
     var previewViewRef by remember { mutableStateOf<PreviewView?>(null) }
     var boundCamera by remember { mutableStateOf<Camera?>(null) }
@@ -796,6 +805,39 @@ fun CameraXStudioView(
                         }
                     }
                 }
+
+                if (onSetPreMealGlucose != null) {
+                    Spacer(Modifier.width(10.dp))
+                    val hasGlucose = preMealGlucoseMgDl != null
+                    Surface(
+                        onClick = { showPreMealGlucoseDialog = true },
+                        shape = RoundedCornerShape(50),
+                        color = if (hasGlucose) EmeraldLocked.copy(alpha = 0.25f) else StudioPillBg,
+                        border = BorderStroke(
+                            1.dp,
+                            if (hasGlucose) EmeraldLocked else Color.White.copy(alpha = 0.25f),
+                        ),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.ShowChart,
+                                contentDescription = null,
+                                tint = if (hasGlucose) EmeraldLocked else Color.White,
+                                modifier = Modifier.size(14.dp),
+                            )
+                            Text(
+                                text = if (hasGlucose) "Pre-pasto: ${preMealGlucoseMgDl}" else "Pre-pasto",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
+                }
             }
 
             // Filmstrip delle foto catturate (con tocco per zoom e X per rimozione)
@@ -946,6 +988,55 @@ fun CameraXStudioView(
                 }
             }
         }
+    }
+
+    if (showPreMealGlucoseDialog && onSetPreMealGlucose != null) {
+        var inputText by remember(preMealGlucoseMgDl) {
+            mutableStateOf(preMealGlucoseMgDl?.toString().orEmpty())
+        }
+        val parsed = inputText.trim().toIntOrNull()
+        val isValid = inputText.isBlank() || (parsed != null && parsed in 40..400)
+        AlertDialog(
+            onDismissRequest = { showPreMealGlucoseDialog = false },
+            shape = RoundedCornerShape(20.dp),
+            title = { Text("Glicemia pre-pasto", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Inserisci la glicemia attuale prima di questo pasto (40–400 mg/dL).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { next -> inputText = next.filter { it.isDigit() }.take(3) },
+                        label = { Text("mg/dL (opzionale)") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = !isValid,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        onSetPreMealGlucose(if (inputText.isBlank()) null else parsed?.coerceIn(40, 400))
+                        showPreMealGlucoseDialog = false
+                    },
+                    enabled = isValid,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Salva")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPreMealGlucoseDialog = false }) {
+                    Text("Annulla")
+                }
+            },
+        )
     }
 }
 
@@ -1250,6 +1341,7 @@ private fun CollapsibleTelemetryHud(
             }
         }
     }
+
 }
 
 @Composable
@@ -1346,6 +1438,7 @@ private fun ZoomQuickChips(
             }
         }
     }
+
 }
 
 @Composable
@@ -1428,6 +1521,7 @@ private fun StudioFilmstripThumbnail(
             }
         }
     }
+
 }
 
 @Composable
@@ -1544,6 +1638,7 @@ private fun CameraPermissionRationaleOverlay(
             }
         }
     }
+
 }
 
 @Composable
@@ -1617,6 +1712,7 @@ private fun CameraUnavailableFallback(
             }
         }
     }
+
 }
 
 private fun decodeStudioThumbnail(imageBytes: ByteArray, targetSizePx: Int = 180): Bitmap? {

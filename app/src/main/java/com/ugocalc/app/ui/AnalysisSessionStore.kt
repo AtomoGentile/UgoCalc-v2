@@ -54,6 +54,8 @@ class AnalysisSessionStore @Inject constructor() {
         val pendingManualRows: List<PendingManualRow>? = null,
         /** Riepilogo sintetico della telemetria ottica/sensori degli scatti di questa sessione (CameraX Pro Studio / EXIF). */
         val photoTelemetrySummary: String? = null,
+        /** Glicemia pre-pasto inserita per la sessione corrente (mg/dL, 40..400). */
+        val preMealGlucoseMgDl: Int? = null,
     )
 
     data class V2VisibleResult(
@@ -96,6 +98,9 @@ class AnalysisSessionStore @Inject constructor() {
 
     fun setPhotoTelemetrySummary(summary: String?) =
         _session.update { it.copy(photoTelemetrySummary = summary) }
+
+    fun setPreMealGlucoseMgDl(mgDl: Int?) =
+        _session.update { it.copy(preMealGlucoseMgDl = mgDl?.coerceIn(40, 400)) }
 
     fun setVisionOutcomes(outcomes: List<ModelVisionOutcome>) =
         _session.update { it.copy(visionOutcomes = outcomes, referenceModelId = it.referenceModelId ?: outcomes.firstOrNull { o -> o is ModelVisionOutcome.Success }?.model?.uid) }

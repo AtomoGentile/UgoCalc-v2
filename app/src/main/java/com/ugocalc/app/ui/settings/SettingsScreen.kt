@@ -164,7 +164,7 @@ fun SettingsScreen(
                     id = "glycemic_profile",
                     icon = Icons.Outlined.ShowChart,
                     title = "Profilo Glicemico",
-                    subtitle = "${settings.toGlycemicProfile().preset.label} · Basale ${settings.baselineGlucoseMgDl} mg/dL",
+                    subtitle = "${settings.toGlycemicProfile().preset.label} · +${settings.carbSensitivityMgDlPer10g} mg/dL / 10g CHO",
                     badgeText = "≤${settings.targetPostPrandialMaxMgDl}",
                     badgePositive = true,
                     onClick = onOpenGlycemicProfile,

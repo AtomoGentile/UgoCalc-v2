@@ -183,6 +183,11 @@ object GlycemicCurveCalculator {
                     profile = profile,
                 )
             }
+            val safeCho = if (meal.lines.isNotEmpty()) {
+                meal.lines.filter { !it.isExcluded }.sumOf { it.choContributionG.coerceAtLeast(0.0) }
+            } else {
+                meal.choG.coerceAtLeast(0.0)
+            }
             val safeGrassi = if (meal.lines.isNotEmpty()) {
                 meal.lines.filter { !it.isExcluded }.sumOf { it.grassiContributionG.coerceAtLeast(0.0) }
             } else {
@@ -194,9 +199,9 @@ object GlycemicCurveCalculator {
                 meal.proteineG.coerceAtLeast(0.0)
             }
             val wave = computeWaveParams(
+                totalChoG = safeCho,
                 grassiG = safeGrassi,
                 proteineG = safeProteine,
-                effectiveGl = sim.totalGlycemicLoad,
                 effectiveMealGi = sim.effectiveMealGi,
                 fpuCount = sim.fpuCount,
                 profile = profile,
@@ -258,9 +263,9 @@ object GlycemicCurveCalculator {
     }
 
     private fun computeWaveParams(
+        totalChoG: Double,
         grassiG: Double,
         proteineG: Double,
-        effectiveGl: Double,
         effectiveMealGi: Double,
         fpuCount: Double,
         profile: GlycemicProfile,
@@ -269,7 +274,13 @@ object GlycemicCurveCalculator {
         val deltaDelay = (0.85 * grassiG + 0.30 * proteineG).coerceIn(0.0, 55.0)
         val tPeak = tBase + deltaDelay
         val blunt = 1.0 / (1.0 + deltaDelay / 130.0)
-        val choAmp = (effectiveGl / 10.0) * profile.carbSensitivityMgDlPer10g * 1.15 * blunt
+        // L'ampiezza dipende dai CHO reali (non dal GL); l'IG modula velocità e forma del picco.
+        val giShapeFactor = if (effectiveMealGi > 0.0) {
+            0.78 + 0.35 * (effectiveMealGi / 100.0)
+        } else {
+            1.0
+        }
+        val choAmp = (totalChoG / 10.0) * profile.carbSensitivityMgDlPer10g * giShapeFactor * blunt
 
         val fpAmp = if (fpuCount >= 0.5) {
             ((fpuCount - 0.3).coerceAtLeast(0.0) * profile.carbSensitivityMgDlPer10g * 0.38)
@@ -299,9 +310,9 @@ object GlycemicCurveCalculator {
         val baseline = profile.baselineGlucoseMgDl
         val fpuCount = (totalGrassiG * 9.0 + totalProteineG * 4.0) / 100.0
         val wave = computeWaveParams(
+            totalChoG = totalChoG,
             grassiG = totalGrassiG,
             proteineG = totalProteineG,
-            effectiveGl = effectiveGl,
             effectiveMealGi = effectiveMealGi,
             fpuCount = fpuCount,
             profile = profile,

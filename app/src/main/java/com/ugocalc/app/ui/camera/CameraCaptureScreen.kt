@@ -250,6 +250,8 @@ fun CameraCaptureScreen(
                 isLoadingGallery = uiState.isLoadingGallery,
                 availableCalibrations = uiState.availableCalibrations,
                 selectedCalibrationIds = uiState.selectedCalibrationIds,
+                preMealGlucoseMgDl = uiState.preMealGlucoseMgDl,
+                onSetPreMealGlucose = viewModel::setPreMealGlucoseMgDl,
                 bannerErrorMessage = activeBannerError,
                 onDismissBannerError = {
                     cameraPermissionDeniedMessage = null

@@ -100,7 +100,6 @@ class FinalResultViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(FinalResultUiState())
     val uiState: StateFlow<FinalResultUiState> = _uiState
 
-    private val baselineOverrideFlow = MutableStateFlow<Int?>(null)
     private val saveMutex = Mutex()
     private var autoSaveJob: Job? = null
     private var currentHistoryId: Long? = null
@@ -127,7 +126,7 @@ class FinalResultViewModel @Inject constructor(
         combine(
             sessionStore.session.map { it.totals }.distinctUntilChanged(),
             settingsRepository.settings.map { it.toGlycemicProfile() }.distinctUntilChanged(),
-            baselineOverrideFlow,
+            sessionStore.session.map { it.preMealGlucoseMgDl }.distinctUntilChanged(),
         ) { totals, profile, overrideMgDl ->
             val sim = simulateMealWithOverride(totals, profile, overrideMgDl)
             Triple(sim, profile.targetPostPrandialMaxMgDl, overrideMgDl)
@@ -310,12 +309,17 @@ class FinalResultViewModel @Inject constructor(
         }
     }
 
-    /** Regola temporaneamente la glicemia pre-pasto (mg/dL) per la simulazione corrente (clamped 65..180). */
+    /** Regola la glicemia pre-pasto (mg/dL) per la sessione corrente (clamped 40..400). */
     fun adjustBaselineBy(delta: Int) {
         val currentBaseline = _uiState.value.baselineOverrideMgDl
             ?: _uiState.value.glycemicSimulation?.baselineMgDl?.toInt()
             ?: 90
-        baselineOverrideFlow.value = (currentBaseline + delta).coerceIn(65, 180)
+        sessionStore.setPreMealGlucoseMgDl((currentBaseline + delta).coerceIn(40, 400))
+    }
+
+    /** Imposta direttamente la glicemia pre-pasto (mg/dL) per la sessione corrente (40..400). */
+    fun setPreMealGlucose(mgDl: Int) {
+        sessionStore.setPreMealGlucoseMgDl(mgDl.coerceIn(40, 400))
     }
 
     /**

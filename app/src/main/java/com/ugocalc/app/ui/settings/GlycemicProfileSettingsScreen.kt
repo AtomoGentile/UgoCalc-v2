@@ -27,7 +27,9 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -110,13 +112,14 @@ fun GlycemicProfileSettingsScreen(
 ) {
     val state by viewModel.state.collectAsState()
     val settings = state.userSettings
+    var previewBaselineMgDl by remember { mutableIntStateOf(100) }
     val profile = remember(
         settings.glycemicProfilePreset,
-        settings.baselineGlucoseMgDl,
         settings.carbSensitivityMgDlPer10g,
         settings.targetPostPrandialMaxMgDl,
+        previewBaselineMgDl,
     ) {
-        settings.toGlycemicProfile()
+        settings.toGlycemicProfile().copy(baselineGlucoseMgDl = previewBaselineMgDl.toDouble())
     }
     val sampleSimulation = remember(profile) {
         GlycemicCurveCalculator.simulateMeal(SAMPLE_ITALIAN_MEAL_LINES, profile)
@@ -175,23 +178,8 @@ fun GlycemicProfileSettingsScreen(
                 ) {
                     UgoSectionHeader(
                         title = "Parametri personalizzati",
-                        subtitle = "Affina i valori in base al tuo profilo personale",
+                        subtitle = "Affina i valori fissi del tuo profilo (la glicemia pre-pasto si inserisce in Analisi AI)",
                     )
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    ParameterSliderWithSteppers(
-                        label = "Glicemia basale pre-pasto",
-                        valueText = "${settings.baselineGlucoseMgDl} mg/dL",
-                        value = settings.baselineGlucoseMgDl.toFloat(),
-                        valueRange = 65f..180f,
-                        step = 5,
-                        onValueChange = { viewModel.setBaselineGlucoseMgDl(it.roundToInt()) },
-                        onStep = { delta ->
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            viewModel.setBaselineGlucoseMgDl(settings.baselineGlucoseMgDl + delta)
-                        },
-                    )
-
                     Spacer(modifier = Modifier.height(14.dp))
 
                     ParameterSliderWithSteppers(
@@ -236,7 +224,10 @@ fun GlycemicProfileSettingsScreen(
                     simulation = sampleSimulation,
                     targetMaxMgDl = profile.targetPostPrandialMaxMgDl,
                     onAdjustBaseline = { delta ->
-                        viewModel.setBaselineGlucoseMgDl(settings.baselineGlucoseMgDl + delta)
+                        previewBaselineMgDl = (previewBaselineMgDl + delta).coerceIn(40, 400)
+                    },
+                    onSetBaseline = { value ->
+                        previewBaselineMgDl = value.coerceIn(40, 400)
                     },
                 )
             }
@@ -244,8 +235,8 @@ fun GlycemicProfileSettingsScreen(
             item(key = "disclaimer") {
                 StatusBanner(
                     icon = Icons.Outlined.Info,
-                    title = "Uso educativo e informativo",
-                    subtitle = "La curva stimata aiuta a confrontare l'impatto relativo dei pasti; non sostituisce glucometro, sensore CGM o indicazioni mediche.",
+                    title = "Curva senza insulina / uso educativo",
+                    subtitle = "Simula l'assorbimento del pasto (CHO reali + ritardo grassi/proteine) senza considerare boli o insulina attiva. Non sostituisce glucometro, CGM o indicazioni mediche.",
                     tone = BannerTone.INFO,
                 )
             }

@@ -184,6 +184,7 @@ data class CameraUiState(
     val angleOverlayEnabled: Boolean = false,
     val availableCalibrations: List<ScaleCalibrationEntity> = emptyList(),
     val selectedCalibrationIds: Set<Long> = emptySet(),
+    val preMealGlucoseMgDl: Int? = null,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -221,6 +222,14 @@ class CameraCaptureViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { ids ->
                     _uiState.update { it.copy(selectedCalibrationIds = ids) }
+                }
+        }
+        viewModelScope.launch {
+            sessionStore.session
+                .map { it.preMealGlucoseMgDl }
+                .distinctUntilChanged()
+                .collect { mgDl ->
+                    _uiState.update { it.copy(preMealGlucoseMgDl = mgDl) }
                 }
         }
         viewModelScope.launch {
@@ -378,6 +387,10 @@ class CameraCaptureViewModel @Inject constructor(
         val current = _uiState.value.selectedCalibrationIds
         val next = if (id in current) current - id else current + id
         sessionStore.setSelectedCalibrationIds(next)
+    }
+
+    fun setPreMealGlucoseMgDl(mgDl: Int?) {
+        sessionStore.setPreMealGlucoseMgDl(mgDl)
     }
 
     /** Tutte le foto confermate → controllo qualità su [Dispatchers.Default] → Passaggio 1 (§2.4 punto 3). */

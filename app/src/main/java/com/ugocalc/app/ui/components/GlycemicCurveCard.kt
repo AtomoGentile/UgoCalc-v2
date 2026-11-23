@@ -27,12 +27,17 @@ import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material.icons.rounded.Tune
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -77,12 +82,14 @@ fun GlycemicCurveCard(
     simulation: GlycemicSimulationResult,
     targetMaxMgDl: Double,
     onAdjustBaseline: ((Int) -> Unit)? = null,
+    onSetBaseline: ((Int) -> Unit)? = null,
     onOpenGlycemicSettings: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
     val haptic = LocalHapticFeedback.current
     var scrubbedIndex by remember(simulation.points) { mutableStateOf<Int?>(null) }
     var breakdownExpanded by remember { mutableStateOf(false) }
+    var showBaselineDialog by remember { mutableStateOf(false) }
 
     val (glContainer, glContent, glLevelLabel) = when (simulation.glycemicLoadLevel) {
         GlycemicLoadLevel.BASSO -> Triple(
@@ -311,9 +318,15 @@ fun GlycemicCurveCard(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable(enabled = onSetBaseline != null) { showBaselineDialog = true }
+                            .padding(vertical = 2.dp),
+                    ) {
                         Text(
-                            text = "Glicemia pre-pasto",
+                            text = if (onSetBaseline != null) "Glicemia pre-pasto (tocca per inserire)" else "Glicemia pre-pasto",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -321,7 +334,7 @@ fun GlycemicCurveCard(
                             text = "${simulation.baselineMgDl.roundToInt()} mg/dL",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSurface,
+                            color = if (onSetBaseline != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                         )
                     }
                     Row(
@@ -331,7 +344,7 @@ fun GlycemicCurveCard(
                         if (onAdjustBaseline != null) {
                             BaselineStepButton(
                                 label = "-10",
-                                enabled = simulation.baselineMgDl > 65.0,
+                                enabled = simulation.baselineMgDl > 40.0,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onAdjustBaseline(-10)
@@ -339,7 +352,7 @@ fun GlycemicCurveCard(
                             )
                             BaselineStepButton(
                                 label = "+10",
-                                enabled = simulation.baselineMgDl < 180.0,
+                                enabled = simulation.baselineMgDl < 400.0,
                                 onClick = {
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     onAdjustBaseline(10)
@@ -415,9 +428,62 @@ fun GlycemicCurveCard(
         // Disclaimer
         Spacer(modifier = Modifier.height(8.dp))
         Text(
-            text = "Stima fisiologica indicativa — non sostituisce misurazioni reali né consulenza medica.",
+            text = "Curva di assorbimento del pasto senza insulina/bolo (stima educativa — non sostituisce glucometro, CGM o indicazioni mediche).",
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+        )
+    }
+
+    if (showBaselineDialog && onSetBaseline != null) {
+        var inputText by remember(simulation.baselineMgDl) {
+            mutableStateOf(simulation.baselineMgDl.roundToInt().toString())
+        }
+        val parsedValue = inputText.trim().toIntOrNull()
+        val isValid = parsedValue != null && parsedValue in 40..400
+        AlertDialog(
+            onDismissRequest = { showBaselineDialog = false },
+            shape = RoundedCornerShape(20.dp),
+            title = { Text("Glicemia pre-pasto", fontWeight = FontWeight.Bold) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Inserisci la glicemia misurata prima di questo pasto (40–400 mg/dL).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { next ->
+                            inputText = next.filter { it.isDigit() }.take(3)
+                        },
+                        label = { Text("mg/dL") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        isError = inputText.isNotEmpty() && !isValid,
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (parsedValue != null) {
+                            onSetBaseline(parsedValue.coerceIn(40, 400))
+                            showBaselineDialog = false
+                        }
+                    },
+                    enabled = isValid,
+                    shape = RoundedCornerShape(12.dp),
+                ) {
+                    Text("Applica")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBaselineDialog = false }) {
+                    Text("Annulla")
+                }
+            },
         )
     }
 }

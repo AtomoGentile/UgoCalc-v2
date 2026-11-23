@@ -230,6 +230,7 @@ fun FinalResultScreen(
                             simulation = simulation,
                             targetMaxMgDl = uiState.targetPostPrandialMaxMgDl,
                             onAdjustBaseline = viewModel::adjustBaselineBy,
+                            onSetBaseline = viewModel::setPreMealGlucose,
                             onOpenGlycemicSettings = onOpenGlycemicSettings,
                         )
                     }
