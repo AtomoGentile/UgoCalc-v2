@@ -56,6 +56,8 @@ class AnalysisSessionStore @Inject constructor() {
         val photoTelemetrySummary: String? = null,
         /** Glicemia pre-pasto inserita per la sessione corrente (mg/dL, 40..400). */
         val preMealGlucoseMgDl: Int? = null,
+        /** Note aggiuntive scritte dall'utente nella barra chat in Home, iniettate nel prompt Vision V1/V2. */
+        val userPromptNote: String = "",
     )
 
     data class V2VisibleResult(
@@ -101,6 +103,9 @@ class AnalysisSessionStore @Inject constructor() {
 
     fun setPreMealGlucoseMgDl(mgDl: Int?) =
         _session.update { it.copy(preMealGlucoseMgDl = mgDl?.coerceIn(40, 400)) }
+
+    fun setUserPromptNote(note: String) =
+        _session.update { it.copy(userPromptNote = note.trim()) }
 
     fun setVisionOutcomes(outcomes: List<ModelVisionOutcome>) =
         _session.update { it.copy(visionOutcomes = outcomes, referenceModelId = it.referenceModelId ?: outcomes.firstOrNull { o -> o is ModelVisionOutcome.Success }?.model?.uid) }

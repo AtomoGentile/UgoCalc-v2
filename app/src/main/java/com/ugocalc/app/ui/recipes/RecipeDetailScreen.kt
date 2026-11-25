@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -55,40 +55,34 @@ fun RecipeDetailScreen(
     }
     val recipe by viewModel.recipe.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(recipe?.name ?: "Dettaglio Ricetta") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-        floatingActionButton = {
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = recipe?.name ?: "Dettaglio Ricetta",
+        onBack = onBack,
+        trailing = {
             if (recipe != null) {
-                FloatingActionButton(
+                com.ugocalc.app.ui.components.FloatingCircleIconButton(
+                    icon = Icons.Default.Edit,
+                    contentDescription = "Modifica ricetta",
                     onClick = { onEdit(recipeId) },
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(Icons.Default.Edit, contentDescription = "Modifica ricetta")
-                }
+                    size = 40.dp,
+                )
             }
         },
-    ) { padding ->
+    ) {
         if (recipe == null && recipeId > 0) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularProgressIndicator()
             }
         } else if (recipe == null) {
             Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
+                modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 EmptyStateMessage(
-                    icon = Icons.Default.MenuBook,
+                    icon = Icons.AutoMirrored.Filled.MenuBook,
                     title = "Ricetta non trovata",
                     message = "La ricetta richiesta non è più disponibile.",
                     actionLabel = "Torna alla lista",
@@ -100,9 +94,8 @@ fun RecipeDetailScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(horizontal = 20.dp, vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 UgoCard(
@@ -131,7 +124,7 @@ fun RecipeDetailScreen(
 
                 if (r.ingredients.isEmpty()) {
                     EmptyStateMessage(
-                        icon = Icons.Default.MenuBook,
+                        icon = Icons.AutoMirrored.Filled.MenuBook,
                         title = "Nessun ingrediente",
                         message = "Tocca modifica per aggiungere gli ingredienti con le relative percentuali.",
                         modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),

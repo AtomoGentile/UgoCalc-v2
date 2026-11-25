@@ -94,20 +94,14 @@ fun PermissionsSettingsScreen(
         notificationGranted = isNotificationGranted(context)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Permessi") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Permessi",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             UgoCard(

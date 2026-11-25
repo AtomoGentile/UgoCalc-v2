@@ -47,6 +47,7 @@ import com.ugocalc.app.domain.model.Changelog
 import com.ugocalc.app.domain.model.ModuleVersions
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
@@ -62,18 +63,13 @@ fun ChangelogScreen(onBack: () -> Unit, viewModel: ChangelogViewModel = hiltView
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Software e aggiornamenti") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    EditorialDetailScaffold(
+        title = "Software e aggiornamenti",
+        onBack = onBack,
+    ) {
         LazyColumn(
-            modifier = Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "header_info") {

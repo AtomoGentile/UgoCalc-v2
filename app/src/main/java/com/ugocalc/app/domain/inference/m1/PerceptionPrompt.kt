@@ -30,6 +30,7 @@ object PerceptionPrompt {
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
         pastoImageCount: Int = 0,
         photoQualities: List<PhotoQuality?> = emptyList(),
+        userPromptNote: String? = null,
     ): String = """
         Sei un assistente esperto in analisi visiva di piatti alimentari, incaricato di una
         PERCEZIONE UNIFICATA della scena: ancoraggio di scala, inventario degli alimenti e misure
@@ -54,6 +55,7 @@ object PerceptionPrompt {
         alimenti già contati.
         ${angleReadingsBlock(angleDescriptions, cameraMetadatas, photoQualities)}
         ${calibrationsBlock(calibrations, pastoImageCount)}
+        ${userNoteBlock(userPromptNote)}
 
         IMMAGINI DI RIFERIMENTO: Oltre alle foto del pasto, ti sono state fornite delle immagini di
         riferimento per le calibrazioni dell'utente elencate sopra (se presenti). Usale per fare
@@ -267,6 +269,14 @@ object PerceptionPrompt {
         }
         return "\nL'utente ha già calibrato i seguenti oggetti di riferimento. Se ne riconosci uno, usa il suo nome esatto nel campo 'descrizione' e riporta il valore di centimetri indicato:\n" +
             righe.joinToString("\n")
+    }
+
+    private fun userNoteBlock(userPromptNote: String?): String {
+        val note = userPromptNote?.trim().orEmpty()
+        if (note.isEmpty()) return ""
+        return "\n[NOTE UTENTE SUL PIATTO]\n" +
+            "L'utente ha fornito direttamente queste indicazioni aggiuntive sul piatto (ingredienti nascosti, tipo di pasta/pane, condimenti, cottura o dettagli non ovvi dalle sole foto — usale con alta priorità per l'identificazione e il ragionamento):\n" +
+            note
     }
 
     private fun anchorOrder(mode: SessionMode): String = when (mode) {

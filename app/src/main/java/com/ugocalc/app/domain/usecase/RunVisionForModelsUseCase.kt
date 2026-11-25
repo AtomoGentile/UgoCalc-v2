@@ -24,6 +24,7 @@ class RunVisionForModelsUseCase @Inject constructor(
         imageMimeType: String,
         sessionId: String? = null,
         photoTelemetryBlock: String? = null,
+        userPromptNote: String? = null,
     ): List<ModelVisionOutcome> = coroutineScope {
         models.map { model ->
             async {
@@ -34,6 +35,7 @@ class RunVisionForModelsUseCase @Inject constructor(
                         imageMimeType = imageMimeType,
                         sessionId = sessionId,
                         photoTelemetryBlock = photoTelemetryBlock,
+                        userPromptNote = userPromptNote,
                     )
                     ModelVisionOutcome.Success(model, result)
                 } catch (e: CancellationException) {

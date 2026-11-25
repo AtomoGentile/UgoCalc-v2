@@ -1,10 +1,16 @@
 package com.ugocalc.app.ui.components
 
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -12,6 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
@@ -53,6 +60,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -243,7 +251,30 @@ fun EditorialTopBar(
 }
 
 /**
- * Pulsante circolare flottante stile Claude (bianco caldo con bordo sottile e ombra leggera).
+ * Animazione tattile di pressione (spring bounce) riutilizzabile su pulsanti, card e pillole.
+ */
+@Composable
+fun Modifier.animatedPressScale(
+    interactionSource: MutableInteractionSource,
+    pressedScale: Float = 0.94f,
+): Modifier {
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (pressed) pressedScale else 1f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "press_scale",
+    )
+    return this.graphicsLayer {
+        scaleX = scale
+        scaleY = scale
+    }
+}
+
+/**
+ * Pulsante circolare flottante stile Claude (bianco caldo con bordo sottile, ombra leggera e bounce tattile).
  */
 @Composable
 fun FloatingCircleIconButton(
@@ -262,9 +293,13 @@ fun FloatingCircleIconButton(
     borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
     elevation: Dp = if (isDarkSurfaceTheme()) 0.dp else 2.dp,
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        modifier = modifier.size(size),
+        interactionSource = interactionSource,
+        modifier = modifier
+            .size(size)
+            .animatedPressScale(interactionSource, pressedScale = 0.90f),
         shape = CircleShape,
         color = containerColor,
         contentColor = contentColor,
@@ -651,6 +686,8 @@ fun TactilePillEffortSlider(
     modifier: Modifier = Modifier,
     showHeaderLabel: Boolean = true,
     showDescription: Boolean = true,
+    labelForEffort: (AiEffort) -> String = { it.label },
+    descriptionForEffort: (AiEffort) -> String = { it.description },
 ) {
     if (efforts.isEmpty()) return
     val haptic = LocalHapticFeedback.current
@@ -672,7 +709,7 @@ fun TactilePillEffortSlider(
     val animatedFraction by animateFloatAsState(
         targetValue = if (isDragging) dragFraction else targetFraction,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBouncy,
+            dampingRatio = Spring.DampingRatioLowBouncy,
             stiffness = Spring.StiffnessMedium,
         ),
         label = "effort_pill_fraction",
@@ -696,13 +733,22 @@ fun TactilePillEffortSlider(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         if (showHeaderLabel) {
-            Text(
-                text = currentEffort.label,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-            )
+            AnimatedContent(
+                targetState = labelForEffort(currentEffort),
+                transitionSpec = {
+                    (fadeIn(tween(150)) + slideInVertically(tween(150)) { -it / 3 }) togetherWith
+                        (fadeOut(tween(110)) + slideOutVertically(tween(110)) { it / 3 })
+                },
+                label = "effort_header_anim",
+            ) { label ->
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(modifier = Modifier.height(14.dp))
         }
 
@@ -824,7 +870,7 @@ fun TactilePillEffortSlider(
             efforts.forEachIndexed { idx, option ->
                 val isCurrent = idx == activeIndex
                 Text(
-                    text = option.label,
+                    text = labelForEffort(option),
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
                     color = if (isCurrent) {
@@ -851,7 +897,7 @@ fun TactilePillEffortSlider(
         if (showDescription) {
             Spacer(modifier = Modifier.height(14.dp))
             Text(
-                text = currentEffort.description,
+                text = descriptionForEffort(currentEffort),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,

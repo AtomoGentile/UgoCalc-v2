@@ -236,7 +236,29 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
 
     fun clearGeminiAvailableModels() {
         removeCachedString(KEY_GEMINI_MODELS)
-        prefs.edit().remove(KEY_GEMINI_MODELS).apply()
+        removeCachedString(KEY_GEMINI_THINKING_META)
+        prefs.edit()
+            .remove(KEY_GEMINI_MODELS)
+            .remove(KEY_GEMINI_THINKING_META)
+            .apply()
+    }
+
+    /** Mappa `modelId -> thinking` ricavata da Google AI Studio (`/v1beta/models`). */
+    fun getGeminiThinkingCapabilities(): Map<String, Boolean> {
+        val raw = getCachedString(KEY_GEMINI_THINKING_META) ?: return emptyMap()
+        return raw.split("|").mapNotNull { entry ->
+            val sep = entry.indexOf('=')
+            if (sep <= 0) return@mapNotNull null
+            val id = entry.substring(0, sep)
+            val flag = entry.substring(sep + 1).toBooleanStrictOrNull() ?: return@mapNotNull null
+            id to flag
+        }.toMap()
+    }
+
+    fun setGeminiThinkingCapabilities(capabilities: Map<String, Boolean>) {
+        val raw = capabilities.entries.joinToString("|") { "${it.key}=${it.value}" }
+        putCachedString(KEY_GEMINI_THINKING_META, raw)
+        prefs.edit().putString(KEY_GEMINI_THINKING_META, raw).apply()
     }
 
     // ── OpenAI API: lista modelli disponibili ──────────────────────────────────
@@ -313,6 +335,7 @@ class SecureApiKeyStore @Inject constructor(@ApplicationContext context: Context
         const val PREFS_FILE_NAME = "ugocalc_secure_prefs"
         const val KEY_GEMINI_SERVICE_ACCOUNT = "gemini_vertex_service_account_json"
         const val KEY_GEMINI_MODELS = "gemini_available_models"
+        const val KEY_GEMINI_THINKING_META = "gemini_thinking_capabilities"
         const val KEY_OPENAI_MODELS = "openai_available_models"
         const val KEY_ANTHROPIC_MODELS = "anthropic_available_models"
         const val KEY_BEDROCK_MANTLE_API_KEY = "bedrock_mantle_api_key"

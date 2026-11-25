@@ -1,7 +1,12 @@
 package com.ugocalc.app.ui.settings
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -326,7 +332,7 @@ fun SettingsScreen(
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item(key = "settings_title") {
@@ -393,17 +399,23 @@ fun SettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
+                        val chevronRotation by animateFloatAsState(
+                            targetValue = if (advancedExpanded) 180f else 0f,
+                            animationSpec = spring(stiffness = Spring.StiffnessMedium),
+                            label = "settings_adv_chevron",
+                        )
                         Icon(
-                            imageVector = if (advancedExpanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown,
+                            imageVector = Icons.Filled.KeyboardArrowDown,
                             contentDescription = if (advancedExpanded) "Comprimi" else "Espandi",
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
                         )
                     }
 
                     AnimatedVisibility(
                         visible = advancedExpanded,
-                        enter = expandVertically(),
-                        exit = shrinkVertically(),
+                        enter = expandVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy)) + fadeIn(),
+                        exit = shrinkVertically() + fadeOut(),
                     ) {
                         Column {
                             HorizontalDivider(

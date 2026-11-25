@@ -4,16 +4,28 @@ import android.content.res.Configuration
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkHorizontally
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,7 +38,9 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -38,14 +52,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CloudOff
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.QrCodeScanner
 import androidx.compose.material.icons.rounded.Replay
@@ -75,7 +91,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -95,6 +115,7 @@ import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.effectiveEffort
+import com.ugocalc.app.domain.model.effortLabel
 import com.ugocalc.app.domain.model.supportedEfforts
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.BannerTone
@@ -108,8 +129,11 @@ import com.ugocalc.app.ui.components.FramelessListRow
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.MacroProgressRing
 import com.ugocalc.app.ui.components.ModelEffortBottomSheet
+import com.ugocalc.app.ui.components.ModelLogoBox
+import com.ugocalc.app.ui.components.ModelSheetPage
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
+import com.ugocalc.app.ui.components.animatedPressScale
 import com.ugocalc.app.ui.components.buildHighlightedMatchText
 import com.ugocalc.app.ui.components.isDarkSurfaceTheme
 import com.ugocalc.app.ui.theme.UgoSemanticColors
@@ -147,10 +171,11 @@ fun HomeScreen(
     var showAddFavoriteDialog by remember { mutableStateOf(false) }
     var showAiSetupDialog by remember { mutableStateOf(false) }
     var showOfflineAiDialog by remember { mutableStateOf(false) }
-    var showModelSheet by remember { mutableStateOf(false) }
+    var activeModelSheetPage by remember { mutableStateOf<ModelSheetPage?>(null) }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var quickSearchQuery by rememberSaveable { mutableStateOf("") }
     var timelineExpanded by rememberSaveable { mutableStateOf(false) }
+    var quickActionsExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.refresh()
@@ -159,20 +184,26 @@ fun HomeScreen(
         viewModel.refresh()
     }
 
-    BackHandler(enabled = isSearchActive) {
-        isSearchActive = false
-        quickSearchQuery = ""
+    BackHandler(enabled = isSearchActive || quickActionsExpanded) {
+        if (quickActionsExpanded) {
+            quickActionsExpanded = false
+        } else {
+            isSearchActive = false
+            quickSearchQuery = ""
+        }
     }
 
     val onLaunchPhotoAi: () -> Unit = {
         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+        quickActionsExpanded = false
+        val modelsToRun = uiState.activeModels
         when {
             uiState.tableCount == 0 -> onNavigateToTables()
             !uiState.hasAnyAiKey -> showAiSetupDialog = true
             !uiState.isOnline -> showOfflineAiDialog = true
-            uiState.preferredModels.isNotEmpty() -> {
+            modelsToRun.isNotEmpty() -> {
                 viewModel.startAnalysisWithPreferredModels()
-                onNavigateDirectlyToCamera(uiState.preferredModels.map { it.uid })
+                onNavigateDirectlyToCamera(modelsToRun.map { it.uid })
             }
             else -> {
                 viewModel.startNewAnalysis()
@@ -182,11 +213,21 @@ fun HomeScreen(
     }
 
     val onLaunchManual: () -> Unit = {
+        quickActionsExpanded = false
         if (uiState.tableCount == 0) {
             onNavigateToTables()
         } else {
             viewModel.startNewAnalysis()
             onNavigateToManualEntry()
+        }
+    }
+
+    val onLaunchBarcode: () -> Unit = {
+        quickActionsExpanded = false
+        if (uiState.tableCount == 0) {
+            onNavigateToTables()
+        } else {
+            onNavigateToBarcodeScan()
         }
     }
 
@@ -221,6 +262,16 @@ fun HomeScreen(
         viewModel.setSessionMode(next)
     }
 
+    val openSheetOrGuard: (ModelSheetPage) -> Unit = { page ->
+        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+        quickActionsExpanded = false
+        when {
+            !uiState.hasAnyAiKey -> showAiSetupDialog = true
+            !uiState.isOnline -> showOfflineAiDialog = true
+            else -> activeModelSheetPage = page
+        }
+    }
+
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -228,7 +279,10 @@ fun HomeScreen(
         topBar = {
             AnimatedContent(
                 targetState = isSearchActive,
-                transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(120)) },
+                transitionSpec = {
+                    (fadeIn(tween(180)) + slideInVertically(tween(180)) { -it / 4 }) togetherWith
+                        (fadeOut(tween(130)) + slideOutVertically(tween(130)) { -it / 4 })
+                },
                 label = "home_topbar_mode",
             ) { searching ->
                 if (searching) {
@@ -247,43 +301,56 @@ fun HomeScreen(
                 } else {
                     HomeEditorialTopBar(
                         sessionMode = uiState.sessionMode,
-                        onOpenSearch = { isSearchActive = true },
+                        onOpenSearch = {
+                            quickActionsExpanded = false
+                            isSearchActive = true
+                        },
                         onToggleMode = onToggleSessionMode,
                     )
                 }
             }
         },
         overlayContent = {
-            if (!isSearchActive) {
-                HomeFloatingActionDock(
+            AnimatedVisibility(
+                visible = !isSearchActive,
+                enter = slideInVertically(
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                ) { it / 2 } + fadeIn(tween(180)),
+                exit = slideOutVertically(tween(150)) { it / 2 } + fadeOut(tween(130)),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .imePadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(bottom = 82.dp),
+            ) {
+                HomeChatComposerCard(
                     uiState = uiState,
-                    onManualClick = onLaunchManual,
-                    onBarcodeClick = {
-                        if (uiState.tableCount == 0) onNavigateToTables() else onNavigateToBarcodeScan()
-                    },
-                    onOpenModelSheet = {
+                    quickActionsExpanded = quickActionsExpanded,
+                    onToggleQuickActions = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (!uiState.hasAnyAiKey) {
-                            showAiSetupDialog = true
-                        } else if (!uiState.isOnline) {
-                            showOfflineAiDialog = true
-                        } else {
-                            showModelSheet = true
-                        }
+                        quickActionsExpanded = !quickActionsExpanded
                     },
+                    onPromptNoteChange = viewModel::setPromptNote,
+                    onManualClick = onLaunchManual,
+                    onBarcodeClick = onLaunchBarcode,
+                    onAddFavoriteClick = {
+                        quickActionsExpanded = false
+                        showAddFavoriteDialog = true
+                    },
+                    onOpenModelPicker = { openSheetOrGuard(ModelSheetPage.MODEL) },
+                    onOpenEffortPicker = { openSheetOrGuard(ModelSheetPage.EFFORT) },
                     onPhotoAiClick = onLaunchPhotoAi,
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 72.dp),
                 )
             }
         },
     ) {
         AnimatedContent(
             targetState = isSearchActive,
-            transitionSpec = { fadeIn(tween(160)) togetherWith fadeOut(tween(120)) },
+            transitionSpec = { fadeIn(tween(180)) togetherWith fadeOut(tween(130)) },
             label = "home_canvas_mode",
         ) { searching ->
             if (searching) {
@@ -301,11 +368,6 @@ fun HomeScreen(
                         quickSearchQuery = ""
                         onOpenHistoryEntry(id)
                     },
-                    onRepeatMealClick = { id ->
-                        isSearchActive = false
-                        quickSearchQuery = ""
-                        onRepeatMealClick(id)
-                    },
                 )
             } else if (isLandscape) {
                 Row(
@@ -318,7 +380,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = 152.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = 220.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         item(key = "greeting") {
@@ -363,7 +425,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = 152.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = 220.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         if (uiState.favoritesEnabled) {
@@ -388,10 +450,9 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 156.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 232.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    // 1) Saluto editoriale Serif (stile "How can I help you today?")
                     item(key = "greeting") {
                         HomeEditorialGreeting(
                             greeting = uiState.greeting,
@@ -400,7 +461,6 @@ fun HomeScreen(
                         )
                     }
 
-                    // 2) Avviso di configurazione (solo se necessario)
                     if (shouldShowHomeBanner(uiState)) {
                         item(key = "status_banner") {
                             HomeStatusBanner(
@@ -411,7 +471,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // 3) Riepilogo nutrizionale di oggi + timeline glicemica
                     item(key = "today_summary") {
                         TodayNutritionCard(
                             mealsCount = uiState.todayMealsCount,
@@ -434,7 +493,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // 4) Preferiti rapidi ("In evidenza")
                     if (uiState.favoritesEnabled) {
                         item(key = "favorites_section") {
                             FavoritesSection(
@@ -445,7 +503,6 @@ fun HomeScreen(
                         }
                     }
 
-                    // 5) Ultimi pasti (lista editoriale ariosa senza card pesanti)
                     item(key = "recent_meals_section") {
                         RecentMealsSection(
                             recentMeals = uiState.recentMeals,
@@ -459,19 +516,21 @@ fun HomeScreen(
         }
     }
 
-    if (showModelSheet) {
+    activeModelSheetPage?.let { initialPage ->
         ModelEffortBottomSheet(
             availableModels = uiState.availableModels,
-            selectedModels = uiState.preferredModels,
+            selectedModels = uiState.activeModels,
             currentEffort = uiState.aiEffort,
-            onSelectModel = { model -> viewModel.selectQuickModel(model) },
+            onSelectSingleModel = { model -> viewModel.selectQuickModel(model) },
+            onToggleMultiModel = { model -> viewModel.toggleQuickModel(model) },
             onSelectEffort = { effort -> viewModel.setAiEffort(effort) },
             onOpenFullModelPicker = {
                 viewModel.startNewAnalysis()
                 onNavigateToModelSelection()
             },
             onOpenApiSettings = onNavigateToApiSettings,
-            onDismiss = { showModelSheet = false },
+            onDismiss = { activeModelSheetPage = null },
+            initialPage = initialPage,
         )
     }
 
@@ -526,7 +585,7 @@ fun HomeScreen(
                         showAiSetupDialog = false
                         onNavigateToApiSettings()
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                 ) {
                     Text("Vai alle API")
                 }
@@ -538,7 +597,7 @@ fun HomeScreen(
                             showAiSetupDialog = false
                             onLaunchManual()
                         },
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(50),
                     ) {
                         Text("Usa Manuale")
                     }
@@ -590,7 +649,7 @@ fun HomeScreen(
                         showOfflineAiDialog = false
                         onLaunchManual()
                     },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                 ) {
                     Text("Usa Manuale")
                 }
@@ -642,30 +701,34 @@ private fun HomeEditorialTopBar(
             AnimatedContent(
                 targetState = sessionMode,
                 transitionSpec = {
-                    (fadeIn(tween(180)) + scaleIn(initialScale = 0.92f, animationSpec = tween(180))) togetherWith
-                        (fadeOut(tween(140)) + scaleOut(targetScale = 0.92f, animationSpec = tween(140)))
+                    (fadeIn(tween(200)) + scaleIn(
+                        initialScale = 0.88f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+                    )) togetherWith (fadeOut(tween(140)) + scaleOut(targetScale = 0.90f, animationSpec = tween(140)))
                 },
                 label = "home_mode_caption",
             ) { mode ->
+                val interaction = remember { MutableInteractionSource() }
                 Row(
                     modifier = Modifier
+                        .animatedPressScale(interaction, pressedScale = 0.94f)
                         .clip(RoundedCornerShape(50))
-                        .clickable(onClick = onToggleMode)
-                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                        .clickable(interactionSource = interaction, indication = null, onClick = onToggleMode)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(7.dp)
+                            .size(8.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                     )
                     Text(
                         text = if (mode == SessionMode.RISTORANTE) "Ristorante" else "Casa",
                         style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onBackground,
                         maxLines = 1,
                     )
                 }
@@ -701,7 +764,6 @@ private fun HomeEditorialGreeting(
             .format(Date())
             .replaceFirstChar { it.uppercase() }
     }
-    val modeLabel = if (sessionMode == SessionMode.RISTORANTE) "Ristorante" else "Casa"
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -745,166 +807,428 @@ private fun HomeEditorialGreeting(
             overflow = TextOverflow.Ellipsis,
         )
 
-        Text(
-            text = "Scatta il piatto o aggiungi gli alimenti · $modeLabel",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-        )
+        AnimatedContent(
+            targetState = sessionMode,
+            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
+            label = "greeting_subtitle_mode",
+        ) { mode ->
+            Text(
+                text = if (mode == SessionMode.RISTORANTE) {
+                    "Fuori casa · descrivi il piatto sotto o scatta subito"
+                } else {
+                    "A casa · aggiungi note al prompt o fotografa il piatto"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
 /**
- * Barra flottante rapida in basso stile "Ask Claude":
- * - `+` a sinistra: inserimento manuale
- * - Chip centrale `Modello · Effort ∨`: apre il bottom sheet selettore Modello/Effort
- * - Icona Barcode a destra: scanner etichetta
- * - Cerchio CTA primario a destra: Foto AI
+ * Vera card Composer stile Claude flottante sopra la pillola di navigazione:
+ * - Riga superiore: campo chat reale per aggiungere note al prompt Vision AI (V1 e V2)
+ * - Riga inferiore: `+` animato (apre azioni rapide Manuale / Barcode / Preferito),
+ *   chip Modello (apre scelta singola/multi-modello), chip Effort reale del modello,
+ *   e CTA circolare primario Foto AI che avvia esattamente i modelli mostrati + la nota chat.
  */
 @Composable
-private fun HomeFloatingActionDock(
+private fun HomeChatComposerCard(
     uiState: HomeUiState,
+    quickActionsExpanded: Boolean,
+    onToggleQuickActions: () -> Unit,
+    onPromptNoteChange: (String) -> Unit,
     onManualClick: () -> Unit,
     onBarcodeClick: () -> Unit,
-    onOpenModelSheet: () -> Unit,
+    onAddFavoriteClick: () -> Unit,
+    onOpenModelPicker: () -> Unit,
+    onOpenEffortPicker: () -> Unit,
     onPhotoAiClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val isDark = isDarkSurfaceTheme()
-    val primaryModel: AiModel? = uiState.preferredModels.firstOrNull() ?: uiState.availableModels.firstOrNull()
-    val supportsEffort = remember(primaryModel) { primaryModel?.supportedEfforts()?.isNotEmpty() == true }
-    val effectiveEffort: AiEffort? = remember(primaryModel, uiState.aiEffort, supportsEffort) {
-        if (supportsEffort && primaryModel != null) primaryModel.effectiveEffort(uiState.aiEffort) else null
+    var isFocused by remember { mutableStateOf(false) }
+
+    val activeModels = uiState.activeModels
+    val primaryModel: AiModel? = activeModels.firstOrNull()
+    val supportedEfforts = remember(activeModels) {
+        val union = activeModels.flatMap { it.supportedEfforts() }.toSet()
+        AiEffort.entries.filter { it in union }
+    }
+    val effectiveEffort: AiEffort? = remember(primaryModel, uiState.aiEffort, supportedEfforts) {
+        if (supportedEfforts.isEmpty()) null
+        else primaryModel?.effectiveEffort(uiState.aiEffort) ?: supportedEfforts.getOrNull(supportedEfforts.size / 2)
+    }
+    val realEffortLabel = remember(primaryModel, effectiveEffort) {
+        if (effectiveEffort == null) null
+        else primaryModel?.effortLabel(effectiveEffort) ?: effectiveEffort.label
     }
 
     val modelChipLabel = when {
         uiState.tableCount == 0 -> "Apri tabelle"
         !uiState.hasAnyAiKey -> "Configura AI"
         !uiState.isOnline -> "Offline"
-        uiState.preferredModels.size > 1 -> "${uiState.preferredModels.size} modelli"
+        activeModels.size > 1 -> "${activeModels.size} modelli"
         primaryModel != null -> primaryModel.displayName
         else -> "Scegli modello"
     }
 
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(30.dp),
-        color = if (isDark) {
-            MaterialTheme.colorScheme.surfaceContainerLow
-        } else {
-            MaterialTheme.colorScheme.surfaceContainerLowest
+    val borderColor by animateColorAsState(
+        targetValue = when {
+            isFocused || uiState.promptNote.isNotBlank() -> MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
+            isDark -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f)
+            else -> MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.90f)
         },
-        border = BorderStroke(
-            width = 0.85.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.70f else 0.85f),
+        animationSpec = tween(180),
+        label = "composer_border",
+    )
+    val plusRotation by animateFloatAsState(
+        targetValue = if (quickActionsExpanded) 45f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
         ),
-        shadowElevation = if (isDark) 2.dp else 7.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            // `+` circolare (Inserimento manuale)
-            Surface(
-                onClick = onManualClick,
-                modifier = Modifier.size(40.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                contentColor = MaterialTheme.colorScheme.onSurface,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.Add,
-                        contentDescription = "Inserimento manuale",
-                        modifier = Modifier.size(22.dp),
-                    )
-                }
-            }
+        label = "plus_rotation",
+    )
 
-            // Chip centrale Modello + Effort stile Claude
-            Surface(
-                onClick = onOpenModelSheet,
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(50),
-                color = Color.Transparent,
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioNoBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        // Vassoio azioni rapide animato sopra il composer (+ -> Manuale / Barcode / Preferito)
+        AnimatedVisibility(
+            visible = quickActionsExpanded,
+            enter = fadeIn(tween(150)) + slideInVertically(
+                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy),
+            ) { it / 2 } + expandVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy)),
+            exit = fadeOut(tween(120)) + slideOutVertically(tween(130)) { it / 2 } + shrinkVertically(tween(140)),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
+                ComposerQuickActionPill(
+                    icon = Icons.Rounded.EditNote,
+                    label = "Manuale",
+                    accent = MaterialTheme.colorScheme.primary,
+                    onClick = onManualClick,
+                    modifier = Modifier.weight(1f),
+                )
+                ComposerQuickActionPill(
+                    icon = Icons.Rounded.QrCodeScanner,
+                    label = "Barcode",
+                    accent = MaterialTheme.colorScheme.secondary,
+                    onClick = onBarcodeClick,
+                    modifier = Modifier.weight(1f),
+                )
+                ComposerQuickActionPill(
+                    icon = Icons.Rounded.StarOutline,
+                    label = "Preferito",
+                    accent = MaterialTheme.colorScheme.tertiary,
+                    onClick = onAddFavoriteClick,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+
+        // Card Composer principale
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(26.dp),
+            color = if (isDark) {
+                MaterialTheme.colorScheme.surfaceContainerLow
+            } else {
+                MaterialTheme.colorScheme.surfaceContainerLowest
+            },
+            border = BorderStroke(if (isFocused) 1.25.dp else 0.9.dp, borderColor),
+            shadowElevation = if (isDark) 4.dp else 8.dp,
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                // Riga 1: vero campo chat per arricchire il prompt Vision AI
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
+                        .padding(horizontal = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    Text(
-                        text = modelChipLabel,
-                        style = MaterialTheme.typography.labelLarge,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (effectiveEffort != null && uiState.hasAnyAiKey && uiState.isOnline) {
-                        Text(
-                            text = "· ${effectiveEffort.label}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Normal,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            softWrap = false,
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 2.dp),
+                        contentAlignment = Alignment.CenterStart,
+                    ) {
+                        if (uiState.promptNote.isEmpty()) {
+                            Text(
+                                text = "Note sul piatto per l'AI (es. integrale, poco olio)…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        BasicTextField(
+                            value = uiState.promptNote,
+                            onValueChange = onPromptNoteChange,
+                            maxLines = 3,
+                            textStyle = MaterialTheme.typography.bodyMedium.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                            ),
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .onFocusChanged { isFocused = it.isFocused },
                         )
                     }
-                    Icon(
-                        imageVector = Icons.Rounded.KeyboardArrowDown,
-                        contentDescription = "Cambia modello o effort",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(16.dp),
-                    )
+
+                    AnimatedVisibility(
+                        visible = uiState.promptNote.isNotEmpty(),
+                        enter = fadeIn(tween(120)) + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut(tween(100)) + scaleOut(targetScale = 0.8f),
+                    ) {
+                        Surface(
+                            onClick = { onPromptNoteChange("") },
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.size(24.dp),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.Close,
+                                    contentDescription = "Cancella nota prompt",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                            }
+                        }
+                    }
                 }
-            }
 
-            // Icona Barcode discreta (posizione microfono di Claude)
-            Box(
-                modifier = Modifier
-                    .size(38.dp)
-                    .clip(CircleShape)
-                    .clickable(onClick = onBarcodeClick),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.QrCodeScanner,
-                    contentDescription = "Scansiona barcode",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+                // Riga 2: controlli stile Claude (`+`, chip Modello, chip Effort reale, CTA Foto AI)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    val plusInteraction = remember { MutableInteractionSource() }
+                    Surface(
+                        onClick = onToggleQuickActions,
+                        interactionSource = plusInteraction,
+                        modifier = Modifier
+                            .size(36.dp)
+                            .animatedPressScale(plusInteraction, pressedScale = 0.88f),
+                        shape = CircleShape,
+                        color = if (quickActionsExpanded) {
+                            MaterialTheme.colorScheme.primaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.surfaceContainer
+                        },
+                        contentColor = if (quickActionsExpanded) {
+                            MaterialTheme.colorScheme.onPrimaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurface
+                        },
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Rounded.Add,
+                                contentDescription = "Azioni rapide: Manuale, Barcode, Preferito",
+                                modifier = Modifier
+                                    .size(20.dp)
+                                    .graphicsLayer { rotationZ = plusRotation },
+                            )
+                        }
+                    }
 
-            // CTA circolare primario (Foto AI — Emerald in Casa, Bordeaux in Ristorante)
-            Surface(
-                onClick = onPhotoAiClick,
-                modifier = Modifier.size(42.dp),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shadowElevation = if (isDark) 0.dp else 2.dp,
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(
-                        imageVector = Icons.Rounded.PhotoCamera,
-                        contentDescription = "Analizza piatto con Foto AI",
-                        modifier = Modifier.size(21.dp),
-                    )
+                    // Gruppo sinistro/centrale: chip Modello + chip Effort reale affiancati senza sprechi di spazio
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        val modelInteraction = remember { MutableInteractionSource() }
+                        Surface(
+                            onClick = onOpenModelPicker,
+                            interactionSource = modelInteraction,
+                            shape = RoundedCornerShape(50),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .animatedPressScale(modelInteraction, pressedScale = 0.95f),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            ) {
+                                if (primaryModel?.logoRes != null && activeModels.size == 1 && uiState.hasAnyAiKey) {
+                                    Surface(
+                                        modifier = Modifier.size(16.dp),
+                                        shape = CircleShape,
+                                        color = Color.White,
+                                    ) {
+                                        ModelLogoBox(
+                                            logoRes = primaryModel.logoRes,
+                                            displayName = primaryModel.displayName,
+                                            subtitle = primaryModel.subtitle,
+                                            modifier = Modifier.padding(2.dp),
+                                        )
+                                    }
+                                }
+                                Text(
+                                    text = modelChipLabel,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Icon(
+                                    imageVector = Icons.Rounded.KeyboardArrowDown,
+                                    contentDescription = "Seleziona modello",
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
+                        }
+
+                        // Chip Effort reale (visibile solo se il modello scelto supporta effort!)
+                        AnimatedVisibility(
+                            visible = realEffortLabel != null && uiState.hasAnyAiKey && uiState.isOnline,
+                            enter = fadeIn(tween(160)) + expandHorizontally(spring(stiffness = Spring.StiffnessMedium)),
+                            exit = fadeOut(tween(120)) + shrinkHorizontally(tween(120)),
+                        ) {
+                            val effortInteraction = remember { MutableInteractionSource() }
+                            Surface(
+                                onClick = onOpenEffortPicker,
+                                interactionSource = effortInteraction,
+                                shape = RoundedCornerShape(50),
+                                color = MaterialTheme.colorScheme.surfaceContainer,
+                                modifier = Modifier.animatedPressScale(effortInteraction, pressedScale = 0.94f),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 7.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    Text(
+                                        text = realEffortLabel.orEmpty(),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        softWrap = false,
+                                    )
+                                    Icon(
+                                        imageVector = Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription = "Regola effort",
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // CTA circolare primario Foto AI (con pallino se è presente una nota nel prompt!)
+                    val cameraInteraction = remember { MutableInteractionSource() }
+                    Box(contentAlignment = Alignment.TopEnd) {
+                        Surface(
+                            onClick = onPhotoAiClick,
+                            interactionSource = cameraInteraction,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .animatedPressScale(cameraInteraction, pressedScale = 0.89f),
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            shadowElevation = if (isDark) 0.dp else 3.dp,
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Rounded.PhotoCamera,
+                                    contentDescription = "Analizza piatto con Foto AI",
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                        if (uiState.promptNote.isNotBlank()) {
+                            Box(
+                                modifier = Modifier
+                                    .offset(x = 1.dp, y = (-1).dp)
+                                    .size(10.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondary),
+                            )
+                        }
+                    }
                 }
             }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ComposerQuickActionPill(
+    icon: ImageVector,
+    label: String,
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isDark = isDarkSurfaceTheme()
+    val interaction = remember { MutableInteractionSource() }
+    Surface(
+        onClick = onClick,
+        interactionSource = interaction,
+        modifier = modifier.animatedPressScale(interaction, pressedScale = 0.94f),
+        shape = RoundedCornerShape(50),
+        color = if (isDark) {
+            MaterialTheme.colorScheme.surfaceContainerLow
+        } else {
+            MaterialTheme.colorScheme.surfaceContainerLowest
+        },
+        border = BorderStroke(0.8.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)),
+        shadowElevation = if (isDark) 2.dp else 4.dp,
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(17.dp),
+            )
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+    }
+}
+
 @Composable
 private fun HomeQuickSearchContent(
     query: String,
@@ -912,7 +1236,6 @@ private fun HomeQuickSearchContent(
     meals: List<AnalysisHistoryEntity>,
     onFavoriteClick: (FavoriteDisplay) -> Unit,
     onMealClick: (Long) -> Unit,
-    onRepeatMealClick: (Long) -> Unit,
 ) {
     val trimmed = query.trim()
     val matchedFavorites = remember(favorites, trimmed) {
@@ -926,7 +1249,7 @@ private fun HomeQuickSearchContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 96.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
     ) {
         if (matchedFavorites.isNotEmpty()) {
             item(key = "qs_fav_header") {
@@ -938,6 +1261,7 @@ private fun HomeQuickSearchContent(
             itemsIndexed(matchedFavorites, key = { _, fav -> "qs_fav_${fav.id}" }) { index, fav ->
                 FramelessListRow(
                     onClick = { onFavoriteClick(fav) },
+                    modifier = Modifier.animateItem(),
                     showDivider = index < matchedFavorites.lastIndex,
                     leading = {
                         Icon(
@@ -986,6 +1310,7 @@ private fun HomeQuickSearchContent(
                 }
                 FramelessListRow(
                     onClick = { onMealClick(meal.id) },
+                    modifier = Modifier.animateItem(),
                     showDivider = index < matchedMeals.lastIndex,
                     trailing = {
                         Icon(
@@ -1060,7 +1385,9 @@ private fun TodayNutritionCard(
 
     UgoCard(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .animateContentSize(spring(stiffness = Spring.StiffnessMediumLow)),
         shape = RoundedCornerShape(22.dp),
         contentPadding = PaddingValues(16.dp),
     ) {
@@ -1158,6 +1485,12 @@ private fun CollapsibleDailyTimelineSection(
     onToggleExpand: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "timeline_chevron",
+    )
+
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Surface(
             onClick = onToggleExpand,
@@ -1183,13 +1516,18 @@ private fun CollapsibleDailyTimelineSection(
                     modifier = Modifier.weight(1f),
                 )
                 Icon(
-                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowUp else Icons.Rounded.KeyboardArrowDown,
+                    imageVector = Icons.Rounded.KeyboardArrowDown,
                     contentDescription = if (expanded) "Comprimi timeline" else "Espandi timeline",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
                 )
             }
         }
-        AnimatedVisibility(visible = expanded) {
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy)) + fadeIn(tween(180)),
+            exit = shrinkVertically(tween(160)) + fadeOut(tween(120)),
+        ) {
             DailyGlycemicTimelineCard(
                 timeline = timeline,
                 onOpenSettings = onOpenSettings,
@@ -1296,6 +1634,7 @@ private fun FavoritesSection(
                     FavoriteQuickCard(
                         favorite = favorite,
                         onClick = { onFavoriteClick(favorite) },
+                        modifier = Modifier.animateItem(),
                     )
                 }
             }
@@ -1308,10 +1647,15 @@ private fun FavoritesSection(
 private fun FavoriteQuickCard(
     favorite: FavoriteDisplay,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    val interaction = remember { MutableInteractionSource() }
     Surface(
         onClick = onClick,
-        modifier = Modifier.widthIn(min = 166.dp, max = 224.dp),
+        interactionSource = interaction,
+        modifier = modifier
+            .widthIn(min = 166.dp, max = 224.dp)
+            .animatedPressScale(interaction, pressedScale = 0.96f),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)),
@@ -1473,8 +1817,11 @@ private fun RecentMealEditorialRow(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                val repeatInteraction = remember { MutableInteractionSource() }
                 Surface(
                     onClick = onRepeatClick,
+                    interactionSource = repeatInteraction,
+                    modifier = Modifier.animatedPressScale(repeatInteraction, pressedScale = 0.92f),
                     shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surfaceContainerLow,
                     border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),

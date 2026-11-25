@@ -58,6 +58,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.prefs.AppTheme
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.ColorPickerDialog
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
@@ -102,20 +103,14 @@ fun AccessibilitySettingsScreen(
     val previewTextColor = state.userSettings.fontColorArgb?.let { Color(it) }
         ?: if (previewBg.luminance() > 0.45f) Color(0xFF18181B) else Color(0xFFFAF9F6)
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Accessibilità e tema") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    EditorialDetailScaffold(
+        title = "Accessibilità e tema",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 20.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {

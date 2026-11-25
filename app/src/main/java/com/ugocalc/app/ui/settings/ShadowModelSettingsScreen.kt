@@ -48,20 +48,14 @@ fun ShadowModelSettingsScreen(
     }
     val selectedIds = state.userSettings.shadowModelIds
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Modelli V2 in shadow") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Modelli V2 in shadow",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             UgoCard(
                 modifier = Modifier.fillMaxWidth(),

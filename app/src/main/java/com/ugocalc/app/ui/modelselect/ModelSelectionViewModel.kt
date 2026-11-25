@@ -148,7 +148,10 @@ class ModelSelectionViewModel @Inject constructor(
                         .map { it.id }
                         .toSet()
                     if (current != geminiIds.toSet()) {
-                        AiModelCatalog.setGeminiModels(geminiIds)
+                        AiModelCatalog.setGeminiModels(
+                            geminiIds,
+                            settingsRepository.getGeminiThinkingCapabilities(),
+                        )
                     }
                 }
 

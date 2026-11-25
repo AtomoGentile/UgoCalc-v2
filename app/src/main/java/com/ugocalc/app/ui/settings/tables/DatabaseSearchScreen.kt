@@ -25,6 +25,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.FoodSearchPicker
 import com.ugocalc.app.ui.components.StatusBanner
@@ -46,21 +47,15 @@ fun DatabaseSearchScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Cerca nel database") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    EditorialDetailScaffold(
+        title = "Cerca nel database",
+        onBack = onBack,
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             StatusBanner(
                 icon = Icons.Default.Search,

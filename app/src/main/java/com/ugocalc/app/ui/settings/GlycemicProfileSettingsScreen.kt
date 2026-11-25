@@ -46,6 +46,7 @@ import com.ugocalc.app.domain.model.FoodMatch
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.domain.model.RecognizedFood
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.GlycemicCurveCard
 import com.ugocalc.app.ui.components.StatusBanner
@@ -127,20 +128,13 @@ fun GlycemicProfileSettingsScreen(
     }
     val haptic = LocalHapticFeedback.current
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Profilo Glicemico") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    EditorialDetailScaffold(
+        title = "Profilo Glicemico",
+        onBack = onBack,
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item(key = "toggle_curve_card") {

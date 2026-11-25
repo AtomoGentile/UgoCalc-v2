@@ -59,27 +59,23 @@ fun TableEditorScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(uiState.tableDisplayName.ifBlank { "Editor tabella" }) },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-        floatingActionButton = {
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = uiState.tableDisplayName.ifBlank { "Editor tabella" },
+        onBack = onBack,
+        trailing = {
             if (uiState.isDirty) {
-                ExtendedFloatingActionButton(
+                com.ugocalc.app.ui.components.FloatingCircleIconButton(
+                    icon = Icons.Default.Save,
+                    contentDescription = "Salva tabella",
                     onClick = { viewModel.save() },
-                    icon = { Icon(Icons.Default.Save, contentDescription = null) },
-                    text = { Text("Salva") },
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    size = 40.dp,
                 )
             }
         },
-    ) { padding ->
-        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()

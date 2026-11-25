@@ -274,24 +274,17 @@ fun AccountSettingsScreen(
             },
         )
     }
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Account e Cloud Sync") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Account e Cloud Sync",
+        onBack = onBack,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             val user = uiState.currentUser

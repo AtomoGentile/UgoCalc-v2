@@ -34,7 +34,10 @@ class V2AnalysisPipelineFactory @Inject constructor(
      * benchmark V1/V2 (§10, §13 punto 5), se il chiamante ne ha già generato uno; `null` se la
      * pipeline gira fuori da una sessione tracciata (es. test, chiamate dirette).
      */
-    suspend fun create(sessionId: String? = null): V2AnalysisPipeline {
+    suspend fun create(
+        sessionId: String? = null,
+        userPromptNote: String? = null,
+    ): V2AnalysisPipeline {
         val customDensities = physicalDataRepository.getCustomDensities().map {
             com.ugocalc.app.domain.inference.m3.PhysicalValue(
                 valore = it.value,
@@ -57,7 +60,7 @@ class V2AnalysisPipelineFactory @Inject constructor(
 
         return V2AnalysisPipeline(
             perceive = { model, images, imageMimeType, sessionMode, angleDescriptions, cameraMetadatas, calibrations ->
-                perceptionEngine.perceive(model, images, imageMimeType, sessionMode, angleDescriptions, cameraMetadatas, calibrations, sessionId)
+                perceptionEngine.perceive(model, images, imageMimeType, sessionMode, angleDescriptions, cameraMetadatas, calibrations, sessionId, userPromptNote)
             },
             physicsEngine = com.ugocalc.app.domain.inference.m3.PhysicsEngine(physicalData),
             arbitrate = { model, images, imageMimeType, scene, flaggati ->

@@ -72,6 +72,7 @@ import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 /** Impostazioni > API: configurazione esplicita e test connessione per ogni provider AI. */
@@ -88,20 +89,14 @@ fun ApiSettingsScreen(
     val state by viewModel.state.collectAsState()
     val availableModels by viewModel.availableModels.collectAsState()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("API e Provider AI") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    EditorialDetailScaffold(
+        title = "API e Provider AI",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 20.dp, vertical = 16.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
@@ -789,20 +784,14 @@ fun AllModelsPickerScreen(
 ) {
     var selected by remember(currentSelection) { mutableStateOf(currentSelection) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Seleziona modelli") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    EditorialDetailScaffold(
+        title = "Seleziona modelli",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             BrandFilteredModelGrid(
                 models = models,
@@ -822,7 +811,7 @@ fun AllModelsPickerScreen(
             ) {
                 OutlinedButton(
                     onClick = onBack,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("Annulla")
@@ -833,7 +822,7 @@ fun AllModelsPickerScreen(
                         onBack()
                     },
                     enabled = selected.isNotEmpty(),
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(50),
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("Conferma (${selected.size})")

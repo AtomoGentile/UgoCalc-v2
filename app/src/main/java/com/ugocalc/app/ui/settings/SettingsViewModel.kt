@@ -122,7 +122,9 @@ class SettingsViewModel @Inject constructor(
         if (iamIds.isNotEmpty()) AiModelCatalog.setBedrockIamModels(iamIds)
 
         val geminiIds = settingsRepository.getGeminiAvailableModels()
-        if (geminiIds.isNotEmpty()) AiModelCatalog.setGeminiModels(geminiIds)
+        if (geminiIds.isNotEmpty()) {
+            AiModelCatalog.setGeminiModels(geminiIds, settingsRepository.getGeminiThinkingCapabilities())
+        }
 
         refreshAvailableModels()
 
@@ -699,7 +701,7 @@ class SettingsViewModel @Inject constructor(
         _geminiModelsState.value = GeminiModelsState.Loading
         setProviderTestState(AiProviderType.GEMINI, ProviderTestState.Testing)
         try {
-            val ids = withContext(Dispatchers.IO) {
+            val (ids, thinkingCaps) = withContext(Dispatchers.IO) {
                 val request = Request.Builder()
                     .url("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")
                     .header("x-goog-api-key", apiKey)
@@ -710,12 +712,13 @@ class SettingsViewModel @Inject constructor(
                     if (!response.isSuccessful) {
                         throw Exception(formatProviderHttpError("Gemini", response.code, body))
                     }
-                    parseGeminiModelIds(body)
+                    parseGeminiModelsFromAiStudio(body)
                 }
             }
             if (ids.isEmpty()) throw Exception("Nessun modello Gemini compatibile trovato per questa chiave")
             settingsRepository.setGeminiAvailableModels(ids)
-            AiModelCatalog.setGeminiModels(ids)
+            settingsRepository.setGeminiThinkingCapabilities(thinkingCaps)
+            AiModelCatalog.setGeminiModels(ids, thinkingCaps)
             refreshAvailableModels()
             _geminiModelsState.value = GeminiModelsState.Loaded(ids.size)
             setProviderTestState(
@@ -732,12 +735,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private fun parseGeminiModelIds(json: String): List<String> {
+    /**
+     * Estrae dalla risposta ufficiale di Google AI Studio (`/v1beta/models`) sia gli ID dei modelli
+     * compatibili con `generateContent` sia il flag reale `thinking` quando dichiarato dall'API.
+     */
+    private fun parseGeminiModelsFromAiStudio(json: String): Pair<List<String>, Map<String, Boolean>> {
         return try {
             val root = JSONObject(json)
-            val arr = root.optJSONArray("models") ?: return emptyList()
+            val arr = root.optJSONArray("models") ?: return emptyList<String>() to emptyMap()
             val excludedTokens = listOf("embedding", "imagen", "veo", "tts", "aqa", "bison")
             val ids = mutableListOf<String>()
+            val thinkingCaps = linkedMapOf<String, Boolean>()
             for (i in 0 until arr.length()) {
                 val obj = arr.getJSONObject(i)
                 val methods = obj.optJSONArray("supportedGenerationMethods")
@@ -749,12 +757,15 @@ class SettingsViewModel @Inject constructor(
                 val lower = name.lowercase()
                 if (lower.startsWith("gemini-") && excludedTokens.none { it in lower }) {
                     ids.add(name)
+                    if (obj.has("thinking") && !obj.isNull("thinking")) {
+                        thinkingCaps[name] = obj.optBoolean("thinking")
+                    }
                 }
             }
-            ids.distinct()
+            ids.distinct() to thinkingCaps
         } catch (e: Exception) {
             Log.e("Gemini", "Parsing modelli fallito: ${e.message}", e)
-            emptyList()
+            emptyList<String>() to emptyMap()
         }
     }
 

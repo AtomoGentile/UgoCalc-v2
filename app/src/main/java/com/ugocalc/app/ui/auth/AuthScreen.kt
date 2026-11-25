@@ -102,25 +102,14 @@ fun AuthScreen(
         }
     }
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            TopAppBar(
-                title = { Text("Cloud Sync opzionale") },
-                navigationIcon = {
-                    if (onBack != null) {
-                        BackIconButton(onBack)
-                    }
-                },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Cloud Sync opzionale",
+        onBack = onBack,
         snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp, vertical = 16.dp),

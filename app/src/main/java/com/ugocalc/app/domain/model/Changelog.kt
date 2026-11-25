@@ -40,6 +40,16 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.6.1",
+            categories = listOf("Chat → Prompt AI", "Effort Reali AI Studio", "Pillola & Animazioni"),
+            highlights = listOf(
+                "Card Composer in Home con chat reale: scrivi note sul piatto (es. pasta integrale, poco olio) che vengono inviate direttamente nei prompt Vision AI (V1 e V2) e restano modificabili anche dalla fotocamera.",
+                "Scelta modelli singola e multi-modello dalla card: filtri per brand e selezione diretta senza lasciare la Home, sempre sincronizzata col pulsante Foto AI.",
+                "Effort reali per modello + metadati AI Studio: parsing del flag `thinking` da Google AI Studio e livelli fedeli all'API (es. Minimal/Low/Medium/High su Gemini 3 Flash, solo Low/High su Gemini 3 Pro, XHigh su Gemini 4 e GPT-5.2/5.4, Max su Claude 4.6/5.5).",
+                "Barra inferiore a pillola flottante e animazioni fluide ovunque: transizioni direzionali tra schermate, cambio tema Casa ↔ Ristorante animato, bounce tattile sui pulsanti e tutte le schermate secondarie uniformate.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.6.0",
             categories = listOf("Nuova UI Editoriale", "Barra con Scrub", "Selettore Modello & Effort"),
             highlights = listOf(

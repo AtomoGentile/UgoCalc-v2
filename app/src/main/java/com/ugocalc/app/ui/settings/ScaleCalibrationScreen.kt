@@ -121,16 +121,11 @@ fun ScaleCalibrationScreen(
         validationError = null
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Calibrazioni scala") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Calibrazioni scala",
+        onBack = onBack,
+    ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             if (calibrations.isEmpty()) {
                 Box(
                     modifier = Modifier.weight(1f).fillMaxWidth(),

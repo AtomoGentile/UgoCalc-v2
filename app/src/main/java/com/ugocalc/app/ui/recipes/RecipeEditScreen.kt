@@ -73,30 +73,24 @@ fun RecipeEditScreen(
     var newIngPerc by remember { mutableStateOf("") }
     var ingredientError by remember { mutableStateOf<String?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(if (recipeId == 0L) "Nuova Ricetta" else "Modifica Ricetta") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = if (recipeId == 0L) "Nuova Ricetta" else "Modifica Ricetta",
+        onBack = onBack,
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 6.dp,
-                tonalElevation = 2.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     Button(
                         onClick = { viewModel.save { onSaved() } },
                         enabled = state.name.isNotBlank() && !state.isSaving,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(50),
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
                     ) {
                         if (state.isSaving) {
                             CircularProgressIndicator(
@@ -111,14 +105,13 @@ fun RecipeEditScreen(
                 }
             }
         },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
                 .imePadding()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             UgoCard(

@@ -8,9 +8,15 @@ import android.graphics.Matrix
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
@@ -21,12 +27,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -35,8 +43,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -230,6 +240,8 @@ fun CameraCaptureScreen(
     val nextTarget = PHOTO_ANGLE_TARGETS[nextTargetIndex]
 
     val activeBannerError = uiState.analysisError ?: uiState.galleryError ?: cameraPermissionDeniedMessage
+    var showEditNoteDialog by remember { mutableStateOf(false) }
+    var draftNoteText by remember { mutableStateOf("") }
 
     Box(modifier = Modifier.fillMaxSize()) {
         if (activeZoomIndex != null && activeZoomIndex in images.indices) {
@@ -282,6 +294,98 @@ fun CameraCaptureScreen(
                 onToggleCalibration = viewModel::toggleCalibrationSelection,
                 onConfirmAnalysis = { viewModel.confirmPhotos(selectedModels) },
                 onBack = onCancelled,
+            )
+        }
+
+        // Pillola discreta in fotocamera che mostra/modifica la nota chat allegata al prompt AI
+        AnimatedVisibility(
+            visible = activeZoomIndex == null && !uiState.isAnalyzing && uiState.userPromptNote.isNotBlank(),
+            enter = fadeIn() + slideInVertically { -it / 2 },
+            exit = fadeOut() + slideOutVertically { -it / 2 },
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(top = 64.dp, start = 16.dp, end = 16.dp),
+        ) {
+            Surface(
+                onClick = {
+                    draftNoteText = uiState.userPromptNote
+                    showEditNoteDialog = true
+                },
+                shape = RoundedCornerShape(50),
+                color = Color.Black.copy(alpha = 0.68f),
+                border = BorderStroke(0.75.dp, Color.White.copy(alpha = 0.25f)),
+            ) {
+                Row(
+                    modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.EditNote,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Text(
+                        text = "Nota AI: ${uiState.userPromptNote}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Rimuovi nota AI",
+                        tint = Color.White.copy(alpha = 0.8f),
+                        modifier = Modifier
+                            .size(18.dp)
+                            .clickable { viewModel.setUserPromptNote("") }
+                            .padding(1.dp),
+                    )
+                }
+            }
+        }
+
+        if (showEditNoteDialog) {
+            AlertDialog(
+                onDismissRequest = { showEditNoteDialog = false },
+                shape = RoundedCornerShape(24.dp),
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                title = {
+                    Text(
+                        text = "Nota per il prompt AI",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                },
+                text = {
+                    OutlinedTextField(
+                        value = draftNoteText,
+                        onValueChange = { draftNoteText = it },
+                        placeholder = { Text("Es. pasta integrale, poco olio, piatto fondo…") },
+                        maxLines = 4,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            viewModel.setUserPromptNote(draftNoteText)
+                            showEditNoteDialog = false
+                        },
+                        shape = RoundedCornerShape(50),
+                    ) {
+                        Text("Salva")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showEditNoteDialog = false }) {
+                        Text("Annulla")
+                    }
+                },
             )
         }
 

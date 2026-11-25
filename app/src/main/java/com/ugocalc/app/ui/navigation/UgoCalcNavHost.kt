@@ -11,7 +11,9 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -198,8 +200,30 @@ fun UgoCalcNavHost(
             navController = navController,
             startDestination = startDestination,
             modifier = Modifier.fillMaxSize(),
-            enterTransition = { fadeIn(animationSpec = tween(90)) },
-            exitTransition = { fadeOut(animationSpec = tween(60)) },
+            enterTransition = {
+                val targetIsTop = targetState.destination.route in TOP_LEVEL_ROUTES
+                val sourceIsTop = initialState.destination.route in TOP_LEVEL_ROUTES
+                if (targetIsTop && sourceIsTop) {
+                    fadeIn(tween(210)) + scaleIn(initialScale = 0.985f, animationSpec = tween(210))
+                } else {
+                    slideInHorizontally(tween(260)) { it / 6 } + fadeIn(tween(220))
+                }
+            },
+            exitTransition = {
+                val targetIsTop = targetState.destination.route in TOP_LEVEL_ROUTES
+                val sourceIsTop = initialState.destination.route in TOP_LEVEL_ROUTES
+                if (targetIsTop && sourceIsTop) {
+                    fadeOut(tween(150))
+                } else {
+                    slideOutHorizontally(tween(220)) { -it / 10 } + fadeOut(tween(180))
+                }
+            },
+            popEnterTransition = {
+                slideInHorizontally(tween(240)) { -it / 8 } + fadeIn(tween(200))
+            },
+            popExitTransition = {
+                slideOutHorizontally(tween(240)) { it / 6 } + fadeOut(tween(190))
+            },
         ) {
 
             composable(Routes.ONBOARDING) {
@@ -531,11 +555,20 @@ fun UgoCalcNavHost(
             }
         }
 
-        if (showBottomBar) {
+        AnimatedVisibility(
+            visible = showBottomBar,
+            enter = slideInVertically(
+                animationSpec = spring(
+                    dampingRatio = Spring.DampingRatioLowBouncy,
+                    stiffness = Spring.StiffnessMediumLow,
+                ),
+            ) { it } + fadeIn(tween(180)),
+            exit = slideOutVertically(tween(180)) { it } + fadeOut(tween(140)),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
             UgoBottomNavigationBar(
                 currentRoute = currentRoute,
                 onSelectRoute = navigateTopLevel,
-                modifier = Modifier.align(Alignment.BottomCenter),
             )
         }
     }
@@ -549,7 +582,6 @@ private fun UgoBottomNavigationBar(
     badgeRoutes: Set<String> = emptySet(),
 ) {
     val haptic = LocalHapticFeedback.current
-    val density = LocalDensity.current
     val isDark = isDarkSurfaceTheme()
 
     val selectedIndex = TOP_LEVEL_DESTINATIONS
@@ -563,11 +595,15 @@ private fun UgoBottomNavigationBar(
     val displayedIndex = if (isScrubbing) scrubIndex else selectedIndex
     val activeDestination = TOP_LEVEL_DESTINATIONS[displayedIndex]
 
-    val containerColor = MaterialTheme.colorScheme.surface
-    val pillColor = if (isDark) {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+    val containerColor = if (isDark) {
+        MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.96f)
     } else {
-        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.97f)
+    }
+    val pillColor = if (isDark) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.20f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     }
 
     fun indexForX(x: Float): Int {
@@ -578,141 +614,151 @@ private fun UgoBottomNavigationBar(
     }
 
     Box(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        // Barra inferiore pulita stile Claude: icone essenziali, pillola scorrevole con scrub orizzontale
+        // Barra inferiore a PILLOLA FLOTTANTE staccata dai bordi su overlay trasparente,
+        // con pillola attiva elastica, scrub orizzontale e tooltip scuro flottante.
         Surface(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .padding(horizontal = 30.dp, vertical = 10.dp)
+                .fillMaxWidth()
+                .height(58.dp),
+            shape = RoundedCornerShape(50),
             color = containerColor,
-            shadowElevation = if (isDark) 0.dp else 4.dp,
+            shadowElevation = if (isDark) 6.dp else 10.dp,
             tonalElevation = 0.dp,
+            border = BorderStroke(
+                width = 0.85.dp,
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = if (isDark) 0.70f else 0.80f),
+            ),
         ) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                HorizontalDivider(
-                    thickness = 0.75.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-                )
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                        .height(48.dp)
-                        .onSizeChanged { barWidthPx = it.width.coerceAtLeast(1) }
-                        .pointerInput(selectedIndex) {
-                            detectHorizontalDragGestures(
-                                onDragStart = { offset ->
-                                    isScrubbing = true
-                                    val nextIdx = indexForX(offset.x)
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
+                    .onSizeChanged { barWidthPx = it.width.coerceAtLeast(1) }
+                    .pointerInput(selectedIndex) {
+                        detectHorizontalDragGestures(
+                            onDragStart = { offset ->
+                                isScrubbing = true
+                                val nextIdx = indexForX(offset.x)
+                                scrubIndex = nextIdx
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            },
+                            onDragEnd = {
+                                val targetRoute = TOP_LEVEL_DESTINATIONS[scrubIndex].route
+                                isScrubbing = false
+                                onSelectRoute(targetRoute)
+                            },
+                            onDragCancel = {
+                                isScrubbing = false
+                            },
+                            onHorizontalDrag = { change, _ ->
+                                change.consume()
+                                val nextIdx = indexForX(change.position.x)
+                                if (nextIdx != scrubIndex) {
                                     scrubIndex = nextIdx
                                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                },
-                                onDragEnd = {
-                                    val targetRoute = TOP_LEVEL_DESTINATIONS[scrubIndex].route
-                                    isScrubbing = false
-                                    onSelectRoute(targetRoute)
-                                },
-                                onDragCancel = {
-                                    isScrubbing = false
-                                },
-                                onHorizontalDrag = { change, _ ->
-                                    change.consume()
-                                    val nextIdx = indexForX(change.position.x)
-                                    if (nextIdx != scrubIndex) {
-                                        scrubIndex = nextIdx
+                                }
+                            },
+                        )
+                    },
+            ) {
+                val slotWidth = maxWidth / TOP_LEVEL_DESTINATIONS.size
+                val pillWidth = (slotWidth - 8.dp).coerceIn(48.dp, 68.dp)
+                val pillHeight = 44.dp
+                val pillTargetX = slotWidth * displayedIndex + (slotWidth - pillWidth) / 2
+                val animatedPillX by animateDpAsState(
+                    targetValue = pillTargetX,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessMediumLow,
+                    ),
+                    label = "bottom_bar_pill_x",
+                )
+
+                // Pillola elastica scorrevole dietro l'icona selezionata / trascinata
+                Box(
+                    modifier = Modifier
+                        .offset(x = animatedPillX)
+                        .align(Alignment.CenterStart)
+                        .size(width = pillWidth, height = pillHeight)
+                        .clip(RoundedCornerShape(50))
+                        .background(pillColor),
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxSize(),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TOP_LEVEL_DESTINATIONS.forEachIndexed { index, destination ->
+                        val isActive = index == displayedIndex
+                        val iconTint by animateColorAsState(
+                            targetValue = if (isActive) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                            },
+                            animationSpec = tween(160),
+                            label = "nav_icon_${destination.route}",
+                        )
+                        val iconScale by animateFloatAsState(
+                            targetValue = when {
+                                isActive && isScrubbing -> 1.18f
+                                isActive -> 1.06f
+                                else -> 0.96f
+                            },
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium,
+                            ),
+                            label = "nav_scale_${destination.route}",
+                        )
+                        val interactionSource = remember { MutableInteractionSource() }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight()
+                                .semantics {
+                                    role = Role.Tab
+                                    selected = currentRoute == destination.route
+                                    contentDescription = destination.label
+                                }
+                                .clickable(
+                                    interactionSource = interactionSource,
+                                    indication = null,
+                                ) {
+                                    if (currentRoute != destination.route) {
                                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                                     }
+                                    onSelectRoute(destination.route)
                                 },
-                            )
-                        },
-                ) {
-                    val slotWidth = maxWidth / TOP_LEVEL_DESTINATIONS.size
-                    val pillWidth = 58.dp
-                    val pillHeight = 40.dp
-                    val pillTargetX = slotWidth * displayedIndex + (slotWidth - pillWidth) / 2
-                    val animatedPillX by animateDpAsState(
-                        targetValue = pillTargetX,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium,
-                        ),
-                        label = "bottom_bar_pill_x",
-                    )
-
-                    // Pillola scorrevole dietro l'icona selezionata / trascinata
-                    Box(
-                        modifier = Modifier
-                            .offset(x = animatedPillX)
-                            .align(Alignment.CenterStart)
-                            .size(width = pillWidth, height = pillHeight)
-                            .clip(RoundedCornerShape(50))
-                            .background(pillColor),
-                    )
-
-                    Row(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        TOP_LEVEL_DESTINATIONS.forEachIndexed { index, destination ->
-                            val isActive = index == displayedIndex
-                            val iconTint by animateColorAsState(
-                                targetValue = if (isActive) {
-                                    MaterialTheme.colorScheme.primary
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-                                },
-                                animationSpec = tween(140),
-                                label = "nav_icon_${destination.route}",
-                            )
-                            val iconScale by animateFloatAsState(
-                                targetValue = if (isActive && isScrubbing) 1.12f else if (isActive) 1.04f else 1f,
-                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
-                                label = "nav_scale_${destination.route}",
-                            )
-                            val interactionSource = remember { MutableInteractionSource() }
-
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .semantics {
-                                        role = Role.Tab
-                                        selected = currentRoute == destination.route
-                                        contentDescription = destination.label
-                                    }
-                                    .clickable(
-                                        interactionSource = interactionSource,
-                                        indication = null,
-                                    ) {
-                                        if (currentRoute != destination.route) {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        }
-                                        onSelectRoute(destination.route)
-                                    },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Box(contentAlignment = Alignment.TopEnd) {
-                                    Icon(
-                                        imageVector = destination.icon,
-                                        contentDescription = destination.label,
-                                        tint = iconTint,
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(contentAlignment = Alignment.TopEnd) {
+                                Icon(
+                                    imageVector = destination.icon,
+                                    contentDescription = destination.label,
+                                    tint = iconTint,
+                                    modifier = Modifier
+                                        .size(23.dp)
+                                        .graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        },
+                                )
+                                if (destination.route in badgeRoutes) {
+                                    Box(
                                         modifier = Modifier
-                                            .size(23.dp)
-                                            .graphicsLayer {
-                                                scaleX = iconScale
-                                                scaleY = iconScale
-                                            },
+                                            .offset(x = 3.dp, y = (-2).dp)
+                                            .size(7.dp)
+                                            .clip(CircleShape)
+                                            .background(MaterialTheme.colorScheme.primary),
                                     )
-                                    if (destination.route in badgeRoutes) {
-                                        Box(
-                                            modifier = Modifier
-                                                .offset(x = 3.dp, y = (-2).dp)
-                                                .size(7.dp)
-                                                .clip(CircleShape)
-                                                .background(MaterialTheme.colorScheme.primary),
-                                        )
-                                    }
                                 }
                             }
                         }
@@ -725,13 +771,12 @@ private fun UgoBottomNavigationBar(
         val tooltipTargetX = remember(displayedIndex, barWidthPx) {
             val count = TOP_LEVEL_DESTINATIONS.size
             val slotW = barWidthPx.toFloat() / count.toFloat()
-            val padPx = with(density) { 16.dp.toPx() }
-            (padPx + slotW * (displayedIndex + 0.5f) - (barWidthPx / 2f + padPx)).roundToInt()
+            (slotW * (displayedIndex + 0.5f) - barWidthPx / 2f).roundToInt()
         }
         val animatedTooltipOffsetX by animateFloatAsState(
             targetValue = tooltipTargetX.toFloat(),
             animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
+                dampingRatio = Spring.DampingRatioLowBouncy,
                 stiffness = Spring.StiffnessMedium,
             ),
             label = "tooltip_x",
@@ -739,21 +784,22 @@ private fun UgoBottomNavigationBar(
 
         AnimatedVisibility(
             visible = isScrubbing,
-            enter = fadeIn(tween(110)) + scaleIn(initialScale = 0.88f, animationSpec = tween(120)) +
-                slideInVertically(tween(120)) { it / 2 },
-            exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.90f, animationSpec = tween(120)) +
+            enter = fadeIn(tween(110)) + scaleIn(
+                initialScale = 0.84f,
+                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+            ) + slideInVertically(tween(130)) { it / 2 },
+            exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.88f, animationSpec = tween(120)) +
                 slideOutVertically(tween(120)) { it / 3 },
             modifier = Modifier
                 .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 70.dp)
+                .padding(bottom = 78.dp)
                 .offset { IntOffset(animatedTooltipOffsetX.roundToInt(), 0) },
         ) {
             Surface(
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.inverseSurface,
                 contentColor = MaterialTheme.colorScheme.inverseOnSurface,
-                shadowElevation = 6.dp,
+                shadowElevation = 8.dp,
             ) {
                 Text(
                     text = activeDestination.label,

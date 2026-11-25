@@ -96,24 +96,13 @@ fun BiasEvolutionScreen(
         return
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("BIAS ed evoluzione") },
-                navigationIcon = {
-                    if (showBackButton) {
-                        BackIconButton(onBack)
-                    }
-                },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "BIAS ed evoluzione",
+        onBack = if (showBackButton) onBack else null,
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item(key = "engine_status") {

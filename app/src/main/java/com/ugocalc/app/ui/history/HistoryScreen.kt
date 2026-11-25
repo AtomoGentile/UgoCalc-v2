@@ -201,7 +201,7 @@ fun HistoryScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 100.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 112.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!isSearchActive && searchQuery.isEmpty()) {
@@ -376,6 +376,7 @@ fun HistoryScreen(
                             onClick = { onOpenEntry(entry.id) },
                             onToggleFavorite = { viewModel.toggleFavorite(entry) },
                             onRequestDelete = { pendingDeleteEntry = entry },
+                            modifier = Modifier.animateItem(),
                         )
                     }
                 }
@@ -422,6 +423,7 @@ private fun HistoryEntryRow(
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRequestDelete: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val isRistorante = entry.sessionMode == SessionMode.RISTORANTE.name
     val formattedTime = remember(entry.analyzedAtEpochMillis) {
@@ -430,6 +432,7 @@ private fun HistoryEntryRow(
 
     FramelessListRow(
         onClick = onClick,
+        modifier = modifier,
         showDivider = showDivider,
         dividerStartPadding = 44.dp,
         leading = {

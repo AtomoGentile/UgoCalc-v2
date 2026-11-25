@@ -35,20 +35,14 @@ fun NormalizationModelSettingsScreen(
     val availableModels by viewModel.availableModels.collectAsState()
     val selectedIds = state.userSettings.enabledNormalizationModelIds
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Modelli per normalizzazione") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-    ) { padding ->
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Modelli per normalizzazione",
+        onBack = onBack,
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
         ) {
             UgoCard(
                 modifier = Modifier.fillMaxWidth(),

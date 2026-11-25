@@ -29,7 +29,9 @@ class UgoCalcApplication : Application(), Configuration.Provider {
         val iamModels = apiKeyStore.getBedrockIamAvailableModels()
         if (iamModels.isNotEmpty()) AiModelCatalog.setBedrockIamModels(iamModels)
         val geminiModels = apiKeyStore.getGeminiAvailableModels()
-        if (geminiModels.isNotEmpty()) AiModelCatalog.setGeminiModels(geminiModels)
+        if (geminiModels.isNotEmpty()) {
+            AiModelCatalog.setGeminiModels(geminiModels, apiKeyStore.getGeminiThinkingCapabilities())
+        }
         val openAiModels = apiKeyStore.getOpenAiAvailableModels()
         if (openAiModels.isNotEmpty()) AiModelCatalog.setOpenAiModels(openAiModels)
         val anthropicModels = apiKeyStore.getAnthropicAvailableModels()

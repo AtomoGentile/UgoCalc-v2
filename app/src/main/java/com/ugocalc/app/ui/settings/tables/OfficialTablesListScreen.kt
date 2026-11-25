@@ -60,6 +60,8 @@ import com.ugocalc.app.data.local.db.entity.NormalizationStatus
 import com.ugocalc.app.data.local.db.entity.OfficialTableEntity
 import com.ugocalc.app.domain.model.OfficialFileType
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
+import com.ugocalc.app.ui.components.FloatingSplitPillActions
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.StatusBanner
@@ -118,34 +120,24 @@ fun OfficialTablesListScreen(
         viewModel.importPreFormatted(uri, displayName)
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Tabelle valori ufficiali") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-                actions = {
-                    IconButton(onClick = onOpenSearch) {
-                        Icon(Icons.Default.Search, contentDescription = "Cerca nel database")
-                    }
-                },
+    EditorialDetailScaffold(
+        title = "Tabelle nutrizionali",
+        onBack = onBack,
+        trailing = {
+            FloatingSplitPillActions(
+                leftIcon = Icons.Default.Search,
+                leftDescription = "Cerca nel database",
+                onLeftClick = onOpenSearch,
+                rightIcon = Icons.Default.Add,
+                rightDescription = "Aggiungi tabella",
+                onRightClick = { showImportChoiceDialog = true },
+                rightActive = true,
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showImportChoiceDialog = true },
-                containerColor = MaterialTheme.colorScheme.secondary,
-                contentColor = MaterialTheme.colorScheme.onSecondary,
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "Aggiungi tabella")
-            }
-        },
-    ) { padding ->
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             uiState.errorMessage?.let { error ->

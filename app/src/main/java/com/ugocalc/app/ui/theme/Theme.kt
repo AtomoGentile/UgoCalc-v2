@@ -1,5 +1,7 @@
 package com.ugocalc.app.ui.theme
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -686,7 +689,7 @@ fun UgoCalcTheme(
         AppTheme.SYSTEM -> isSystemInDarkTheme()
     }
 
-    val colors = remember(
+    val targetColors = remember(
         useDark,
         isRistorante,
         primaryColor,
@@ -704,6 +707,34 @@ fun UgoCalcTheme(
             errorColor = errorColor,
         )
     }
+
+    // Transizione cromatica fluida (es. cambio Casa ↔ Ristorante o Chiaro ↔ Scuro)
+    val themeAnimSpec = tween<Color>(durationMillis = 280)
+    val animatedPrimary by animateColorAsState(targetColors.primary, themeAnimSpec, label = "theme_primary")
+    val animatedOnPrimary by animateColorAsState(targetColors.onPrimary, themeAnimSpec, label = "theme_on_primary")
+    val animatedPrimaryContainer by animateColorAsState(targetColors.primaryContainer, themeAnimSpec, label = "theme_primary_container")
+    val animatedOnPrimaryContainer by animateColorAsState(targetColors.onPrimaryContainer, themeAnimSpec, label = "theme_on_primary_container")
+    val animatedSecondary by animateColorAsState(targetColors.secondary, themeAnimSpec, label = "theme_secondary")
+    val animatedBackground by animateColorAsState(targetColors.background, themeAnimSpec, label = "theme_bg")
+    val animatedSurface by animateColorAsState(targetColors.surface, themeAnimSpec, label = "theme_surface")
+    val animatedSurfaceLow by animateColorAsState(targetColors.surfaceContainerLow, themeAnimSpec, label = "theme_surface_low")
+    val animatedSurfaceContainer by animateColorAsState(targetColors.surfaceContainer, themeAnimSpec, label = "theme_surface_container")
+    val animatedSurfaceHigh by animateColorAsState(targetColors.surfaceContainerHigh, themeAnimSpec, label = "theme_surface_high")
+    val animatedOutlineVariant by animateColorAsState(targetColors.outlineVariant, themeAnimSpec, label = "theme_outline_variant")
+
+    val colors = targetColors.copy(
+        primary = animatedPrimary,
+        onPrimary = animatedOnPrimary,
+        primaryContainer = animatedPrimaryContainer,
+        onPrimaryContainer = animatedOnPrimaryContainer,
+        secondary = animatedSecondary,
+        background = animatedBackground,
+        surface = animatedSurface,
+        surfaceContainerLow = animatedSurfaceLow,
+        surfaceContainer = animatedSurfaceContainer,
+        surfaceContainerHigh = animatedSurfaceHigh,
+        outlineVariant = animatedOutlineVariant,
+    )
 
     val semanticColors = remember(colors, useDark, isRistorante) {
         buildSemanticPalette(colors, useDark, isRistorante)

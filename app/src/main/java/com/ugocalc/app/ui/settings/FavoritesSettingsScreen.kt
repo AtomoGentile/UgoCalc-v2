@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.db.entity.FavoriteShortcutEntity
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
+import com.ugocalc.app.ui.components.FloatingCircleIconButton
 import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.UgoCard
@@ -67,23 +69,17 @@ fun FavoritesSettingsScreen(
     var showComboDialog by remember { mutableStateOf(false) }
     var pendingDeleteFavorite by remember { mutableStateOf<FavoriteShortcutEntity?>(null) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Preferiti") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
-        floatingActionButton = {
+    EditorialDetailScaffold(
+        title = "Preferiti",
+        onBack = onBack,
+        trailing = {
             Box {
-                FloatingActionButton(
+                FloatingCircleIconButton(
+                    icon = Icons.Default.Add,
+                    contentDescription = "Aggiungi preferito",
                     onClick = { showAddMenu = true },
-                    containerColor = MaterialTheme.colorScheme.secondary,
-                    contentColor = MaterialTheme.colorScheme.onSecondary,
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Aggiungi preferito")
-                }
+                    size = 40.dp,
+                )
                 DropdownMenu(expanded = showAddMenu, onDismissRequest = { showAddMenu = false }) {
                     DropdownMenuItem(
                         text = { Text("Da cronologia") },
@@ -96,12 +92,11 @@ fun FavoritesSettingsScreen(
                 }
             }
         },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             UgoCard(

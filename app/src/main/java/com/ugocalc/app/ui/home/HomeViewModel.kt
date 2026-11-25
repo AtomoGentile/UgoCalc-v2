@@ -85,9 +85,15 @@ data class HomeUiState(
     val availableModels: List<AiModel> = emptyList(),
     /** Effort AI attivo, regolabile dal bottom sheet rapido in Home. */
     val aiEffort: AiEffort = AiEffort.MEDIUM,
+    /** Note aggiuntive scritte dall'utente nella barra chat in Home, iniettate nel prompt Vision. */
+    val promptNote: String = "",
     /** Scelta esplicita Casa/Ristorante per la prossima analisi (piano V2 §8): mai dedotta, sempre scelta qui prima di "Analizza". */
     val sessionMode: SessionMode = SessionMode.CASA,
-)
+) {
+    /** Modelli effettivamente attivi sulla card Home (preferiti, o il primo consigliato disponibile). */
+    val activeModels: List<AiModel>
+        get() = preferredModels.ifEmpty { listOfNotNull(availableModels.firstOrNull()) }
+}
 
 internal fun greetingForHour(
     hourOfDay: Int = Calendar.getInstance().get(Calendar.HOUR_OF_DAY),
@@ -334,10 +340,23 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setActiveSessionMode(mode) }
     }
 
-    /** Selezione rapida del modello attivo dal bottom sheet stile Claude in Home. */
+    /** Selezione singola rapida del modello attivo dal bottom sheet stile Claude in Home. */
     fun selectQuickModel(model: AiModel) {
         _uiState.update { it.copy(preferredModels = listOf(model)) }
         viewModelScope.launch { settingsRepository.setPreferredModelIds(setOf(model.uid)) }
+    }
+
+    /** Attiva/disattiva un modello in modalità Multi-modello direttamente dalla card in Home. */
+    fun toggleQuickModel(model: AiModel) {
+        val current = _uiState.value.activeModels
+        val exists = current.any { it.uid == model.uid }
+        val next = if (exists) {
+            if (current.size <= 1) current else current.filterNot { it.uid == model.uid }
+        } else {
+            current + model
+        }
+        _uiState.update { it.copy(preferredModels = next) }
+        viewModelScope.launch { settingsRepository.setPreferredModelIds(next.map { it.uid }.toSet()) }
     }
 
     /** Aggiorna l'effort AI dallo slider tattile nel bottom sheet in Home. */
@@ -346,17 +365,27 @@ class HomeViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setAiEffort(effort) }
     }
 
+    /** Aggiorna le note testuali scritte nella chat Home per arricchirne il prompt Vision AI. */
+    fun setPromptNote(note: String) {
+        _uiState.update { it.copy(promptNote = note) }
+    }
+
     /** Azzera lo stato di una eventuale analisi precedente prima di avviarne una nuova (§2.4 punto 1). */
     fun startNewAnalysis() {
         sessionStore.reset()
         sessionStore.setSessionMode(_uiState.value.sessionMode)
+        val note = _uiState.value.promptNote.trim()
+        if (note.isNotEmpty()) sessionStore.setUserPromptNote(note)
     }
 
-    /** "Analizza" con i modelli preferiti (§ modello preferito esteso): salta del tutto la schermata di scelta modello. */
+    /** Avvia la fotocamera con i modelli attivi mostrati sulla card Home, portando con sé le note chat. */
     fun startAnalysisWithPreferredModels() {
+        val models = _uiState.value.activeModels
         sessionStore.reset()
         sessionStore.setSessionMode(_uiState.value.sessionMode)
-        sessionStore.setSelectedModels(_uiState.value.preferredModels)
+        sessionStore.setSelectedModels(models)
+        val note = _uiState.value.promptNote.trim()
+        if (note.isNotEmpty()) sessionStore.setUserPromptNote(note)
     }
 
     /** "+" in Homepage: aggiunge un preferito da database senza passare da Impostazioni. */

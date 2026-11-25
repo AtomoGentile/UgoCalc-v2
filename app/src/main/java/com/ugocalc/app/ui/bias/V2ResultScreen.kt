@@ -68,29 +68,22 @@ fun V2ResultScreen(
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Dettaglio Tecnico V2") },
-                navigationIcon = { BackIconButton(onBack) },
-                actions = {
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = "Elimina analisi",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                },
-                colors = ugoTopAppBarColors(),
+    com.ugocalc.app.ui.components.EditorialDetailScaffold(
+        title = "Dettaglio Tecnico V2",
+        onBack = onBack,
+        trailing = {
+            com.ugocalc.app.ui.components.FloatingCircleIconButton(
+                icon = Icons.Default.Delete,
+                contentDescription = "Elimina analisi",
+                onClick = { showDeleteConfirm = true },
+                contentColor = MaterialTheme.colorScheme.error,
+                size = 40.dp,
             )
         },
-    ) { padding ->
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "intro_banner") {

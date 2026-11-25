@@ -42,8 +42,9 @@ class AiOrchestrator @Inject constructor(
         imageMimeType: String,
         sessionId: String? = null,
         photoTelemetryBlock: String? = null,
+        userPromptNote: String? = null,
     ): VisionAnalysisResult {
-        val prompt = PromptTemplates.visionPrompt(photoTelemetryBlock)
+        val prompt = PromptTemplates.visionPrompt(photoTelemetryBlock, userPromptNote)
         val imageParts = executor.encodeImages(images, imageMimeType)
         val responseDto = executor.completeJson<VisionAnalysisDto>(model, prompt, imageParts)
 

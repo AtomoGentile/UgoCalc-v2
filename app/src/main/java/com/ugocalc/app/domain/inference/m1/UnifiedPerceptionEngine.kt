@@ -44,6 +44,7 @@ class UnifiedPerceptionEngine @Inject constructor(
         cameraMetadatas: List<CameraMetadata?> = emptyList(),
         calibrations: List<ScaleCalibrationEntity> = emptyList(),
         sessionId: String? = null,
+        userPromptNote: String? = null,
     ): PerceptionOutcome {
         val pastoParts = executor.encodeImages(images, imageMimeType)
         
@@ -66,7 +67,8 @@ class UnifiedPerceptionEngine @Inject constructor(
             angleDescriptions = angleDescriptions,
             cameraMetadatas = cameraMetadatas,
             calibrations = calibrations,
-            pastoImageCount = images.size
+            pastoImageCount = images.size,
+            userPromptNote = userPromptNote,
         )
         return try {
             val sceneGraph = executor.completeJson<SceneGraph>(model, prompt, allImageParts)

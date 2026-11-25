@@ -2,6 +2,14 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.6.1] - 2026-11-25
+
+### Changed
+- **Real Home Chat Composer -> AI Prompt**: Replaced the static Home dock with an interactive Claude-style Composer card featuring a real text input to attach dish notes directly to both V1 and V2 Vision prompts (with an editable floating `Nota AI` pill inside CameraX Studio).
+- **Direct Single & Multi-Model Selection + True Per-Model Efforts**: Select single or multiple AI models with brand filters directly from the Home card (`ModelEffortBottomSheet`), and auto-launch Camera with the exact active model shown. Added Google AI Studio `/v1beta/models` `thinking` capability parsing and accurate provider effort labels (`Minimal`, `None`, `Off`, `Low`, `Medium`, `High`, `XHigh`, `Max`) including `gemini-3-pro-preview` (`Low`/`High` only), `gemini-3-flash` (`Minimal`..`High`), `gemini-4` (`Low`..`XHigh`), GPT-5.x, and Claude 4.6/5.5.
+- **Floating Pill Bottom Bar & Full Motion System**: Restored the detached floating pill bottom bar over a transparent overlay with spring-gliding active pill, horizontal scrub gesture, and dark tooltip; added smooth theme color transitions (Casa ↔ Ristorante), directional `NavHost` animations, tactile spring `animatedPressScale`, rotating chevrons, and `animateItem()` list transitions.
+- **Full Secondary Screen Consistency**: Unified remaining Settings, Tables, Recipes, Auth, and V2/Bias screens on `EditorialDetailScaffold`.
+
 ## [4.6.0] - 2026-11-25
 
 ### Changed

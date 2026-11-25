@@ -67,6 +67,8 @@ import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelTier
 import com.ugocalc.app.domain.model.effectiveEffort
+import com.ugocalc.app.domain.model.effortDescription
+import com.ugocalc.app.domain.model.effortLabel
 import com.ugocalc.app.domain.model.recommendedTier
 import com.ugocalc.app.domain.model.supportedEfforts
 import com.ugocalc.app.ui.components.BannerTone
@@ -219,6 +221,7 @@ fun ModelSelectionScreen(
                     effort = uiState.effort,
                     supportedEfforts = supportedEfforts,
                     onSelectEffort = viewModel::setEffort,
+                    referenceModel = selectedModels.firstOrNull(),
                 )
 
                 Spacer(Modifier.height(10.dp))
@@ -321,6 +324,7 @@ fun AiEffortSelectorCard(
     onSelectEffort: (AiEffort) -> Unit,
     supportedEfforts: List<AiEffort> = AiEffort.entries,
     modifier: Modifier = Modifier,
+    referenceModel: AiModel? = null,
 ) {
     val haptic = LocalHapticFeedback.current
     if (supportedEfforts.isEmpty()) {
@@ -385,7 +389,7 @@ fun AiEffortSelectorCard(
                 )
             }
             Text(
-                text = activeEffort.label,
+                text = referenceModel?.effortLabel(activeEffort) ?: activeEffort.label,
                 style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -398,6 +402,8 @@ fun AiEffortSelectorCard(
             onSelectEffort = onSelectEffort,
             showHeaderLabel = false,
             showDescription = true,
+            labelForEffort = { eff -> referenceModel?.effortLabel(eff) ?: eff.label },
+            descriptionForEffort = { eff -> referenceModel?.effortDescription(eff) ?: eff.description },
         )
     }
 }

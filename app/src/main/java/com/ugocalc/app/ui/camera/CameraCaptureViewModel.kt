@@ -185,6 +185,7 @@ data class CameraUiState(
     val availableCalibrations: List<ScaleCalibrationEntity> = emptyList(),
     val selectedCalibrationIds: Set<Long> = emptySet(),
     val preMealGlucoseMgDl: Int? = null,
+    val userPromptNote: String = "",
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -230,6 +231,14 @@ class CameraCaptureViewModel @Inject constructor(
                 .distinctUntilChanged()
                 .collect { mgDl ->
                     _uiState.update { it.copy(preMealGlucoseMgDl = mgDl) }
+                }
+        }
+        viewModelScope.launch {
+            sessionStore.session
+                .map { it.userPromptNote }
+                .distinctUntilChanged()
+                .collect { note ->
+                    _uiState.update { it.copy(userPromptNote = note) }
                 }
         }
         viewModelScope.launch {
@@ -393,6 +402,10 @@ class CameraCaptureViewModel @Inject constructor(
         sessionStore.setPreMealGlucoseMgDl(mgDl)
     }
 
+    fun setUserPromptNote(note: String) {
+        sessionStore.setUserPromptNote(note)
+    }
+
     /** Tutte le foto confermate → controllo qualità su [Dispatchers.Default] → Passaggio 1 (§2.4 punto 3). */
     fun confirmPhotos(models: List<AiModel>) {
         if (_uiState.value.isAnalyzing) return
@@ -493,7 +506,9 @@ class CameraCaptureViewModel @Inject constructor(
         sessionStore.setCapturedImages(images, CAPTURED_IMAGE_MIME_TYPE)
         _uiState.update { it.copy(isAnalyzing = true, analysisError = null) }
         val settings = settingsRepository.settings.first()
-        val sessionId = sessionStore.session.value.sessionId
+        val session = sessionStore.session.value
+        val sessionId = session.sessionId
+        val userPromptNote = session.userPromptNote.takeIf { it.isNotBlank() }
 
         // Calcola una sola volta le metriche ottiche/qualità e popola la pillola telemetrica di sessione
         val qualityPhotos = buildQualityPhotos(capturedPhotos)
@@ -506,7 +521,7 @@ class CameraCaptureViewModel @Inject constructor(
         if (v2VisibleEnabled && models.isNotEmpty()) {
             val v2Results = coroutineScope {
                 models.map { model ->
-                    async { runV2Visible(capturedPhotos, qualityPhotos, model) }
+                    async { runV2Visible(capturedPhotos, qualityPhotos, model, userPromptNote) }
                 }.awaitAll().filterNotNull()
             }
             if (v2Results.isNotEmpty()) {
@@ -526,6 +541,7 @@ class CameraCaptureViewModel @Inject constructor(
                             imageMimeType = CAPTURED_IMAGE_MIME_TYPE,
                             sessionId = sessionId,
                             photoTelemetryBlock = photoTelemetryBlock,
+                            userPromptNote = userPromptNote,
                         )
                         recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
                     }
@@ -534,13 +550,14 @@ class CameraCaptureViewModel @Inject constructor(
             }
         }
 
-        // La V1 resta sempre la rete di sicurezza (§13 punto 1), ora arricchita con telemetria ottica CameraX/EXIF.
+        // La V1 resta sempre la rete di sicurezza (§13 punto 1), ora arricchita con telemetria ottica CameraX/EXIF e note utente.
         val outcomes = runVisionForModels(
             models = models,
             images = images,
             imageMimeType = CAPTURED_IMAGE_MIME_TYPE,
             sessionId = sessionId,
             photoTelemetryBlock = photoTelemetryBlock,
+            userPromptNote = userPromptNote,
         )
         sessionStore.setVisionOutcomes(outcomes)
         _uiState.update { it.copy(isAnalyzing = false, analysisDone = true) }
@@ -548,7 +565,7 @@ class CameraCaptureViewModel @Inject constructor(
         recordV1EstimateForBenchmarkIfEnabled(outcomes, models)
 
         if (!v2VisibleEnabled) {
-            runV2ShadowAnalysisIfEnabled(capturedPhotos, qualityPhotos, models)
+            runV2ShadowAnalysisIfEnabled(capturedPhotos, qualityPhotos, models, userPromptNote)
         }
     }
 
@@ -556,6 +573,7 @@ class CameraCaptureViewModel @Inject constructor(
         capturedPhotos: List<CapturedPhoto>,
         qualityPhotos: List<PhotoQuality>,
         model: AiModel,
+        userPromptNote: String? = null,
     ): V2AnalysisResultInternal? {
         val sessionId = sessionStore.session.value.sessionId
         val sessionMode = sessionStore.session.value.sessionMode
@@ -565,7 +583,7 @@ class CameraCaptureViewModel @Inject constructor(
             val calibrations = if (selectedIds.isEmpty()) null else {
                 scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
             }
-            val outcome = v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations, sessionId)
+            val outcome = v2PipelineFactory.create(sessionId, userPromptNote).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations, sessionId)
             if (outcome !is PipelineOutcome.Verificato) {
                 Log.w("CameraCaptureVM", "V2 failed or requested fallback: $outcome")
                 return@runCatching null
@@ -603,6 +621,7 @@ class CameraCaptureViewModel @Inject constructor(
         capturedPhotos: List<CapturedPhoto>,
         qualityPhotos: List<PhotoQuality>,
         models: List<AiModel>,
+        userPromptNote: String? = null,
     ) {
         val sessionId = sessionStore.session.value.sessionId
         shadowScope.launch {
@@ -623,7 +642,7 @@ class CameraCaptureViewModel @Inject constructor(
                     val calibrations = if (selectedIds.isEmpty()) null else {
                         scaleCalibrationRepository.observeAll(sessionMode).first().filter { it.id in selectedIds }
                     }
-                    v2PipelineFactory.create(sessionId).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations, sessionId)
+                    v2PipelineFactory.create(sessionId, userPromptNote).run(photos, CAPTURED_IMAGE_MIME_TYPE, sessionMode, model, calibrations, sessionId)
                 }
                 when {
                     outcome.isFailure -> {

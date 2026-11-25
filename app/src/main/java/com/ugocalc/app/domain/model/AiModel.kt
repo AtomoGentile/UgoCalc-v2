@@ -31,6 +31,8 @@ data class AiModel(
     val displayName: String,
     val subtitle: String = "",
     val logoRes: Int? = null,
+    /** Flag reale `thinking` ricavato da Google AI Studio (`/v1beta/models`), `null` se non dichiarato dal provider. */
+    val thinkingSupported: Boolean? = null,
 ) {
     /** Chiave univoca che distingue lo stesso modello su provider diversi (es. Bedrock Mantle vs IAM). */
     val uid: String get() = "${provider.name}::$id"
@@ -65,24 +67,33 @@ fun AiModel.recommendedTier(): AiModelTier {
 }
 
 /**
- * Restituisce i livelli di effort reali supportati dall'API del modello.
+ * Restituisce i livelli di effort reali supportati dall'API del modello, combinando i metadati
+ * live ricevuti da Google AI Studio (`thinkingSupported`) con le specifiche ufficiali per famiglia.
  * Lista vuota = il modello non supporta ragionamento/effort configurabile (es. GPT-4o, GPT-4.1, Gemini 2.0).
  */
 fun AiModel.supportedEfforts(): List<AiEffort> {
     val lower = id.lowercase()
     return when (provider) {
         AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> when {
+            thinkingSupported == false -> emptyList()
             "gemini-4" in lower -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
-            "gemini-3" in lower -> if ("pro" in lower) {
-                listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
-            } else {
-                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+            "gemini-3" in lower -> when {
+                "3.1-pro" in lower || "3-1-pro" in lower || "3.5-pro" in lower ->
+                    listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+                "pro" in lower ->
+                    // gemini-3-pro-preview supporta esclusivamente LOW e HIGH (MEDIUM genera HTTP 400).
+                    listOf(AiEffort.LOW, AiEffort.HIGH)
+                "flash" in lower || "lite" in lower ->
+                    // gemini-3-flash / 3.6-flash / 3.8-flash: MINIMAL, LOW, MEDIUM, HIGH.
+                    listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+                else -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
             }
             "2.5" in lower -> if ("pro" in lower) {
                 listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
             } else {
                 listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
             }
+            thinkingSupported == true -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
             else -> emptyList()
         }
         AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT -> when {
@@ -93,7 +104,7 @@ fun AiModel.supportedEfforts(): List<AiEffort> {
             else -> emptyList()
         }
         AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE -> when {
-            "4-6" in lower || "4.6" in lower ->
+            "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower || "4-6" in lower || "4.6" in lower ->
                 listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
             "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
                 "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
@@ -106,6 +117,80 @@ fun AiModel.supportedEfforts(): List<AiEffort> {
 }
 
 fun AiModel.supportsEffort(): Boolean = supportedEfforts().isNotEmpty()
+
+/** Etichetta reale del livello di effort così come definita dall'API del modello selezionato. */
+fun AiModel.effortLabel(effort: AiEffort): String {
+    val lower = id.lowercase()
+    return when (provider) {
+        AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> when {
+            "gemini-4" in lower -> when (effort) {
+                AiEffort.OFF, AiEffort.LOW -> "Low"
+                AiEffort.MEDIUM -> "Medium"
+                AiEffort.HIGH -> "High"
+                AiEffort.MAX -> "XHigh"
+            }
+            "gemini-3" in lower -> when (effort) {
+                AiEffort.OFF -> if ("pro" in lower) "Low" else "Minimal"
+                AiEffort.LOW -> "Low"
+                AiEffort.MEDIUM -> if ("pro" in lower && "3.1" !in lower && "3-1" !in lower && "3.5" !in lower) "High" else "Medium"
+                AiEffort.HIGH, AiEffort.MAX -> "High"
+            }
+            else -> effort.label
+        }
+        AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT -> when {
+            "gpt-5.2" in lower || "gpt-5.3" in lower || "gpt-5.4" in lower || "gpt-5-pro" in lower || "o3-pro" in lower -> when (effort) {
+                AiEffort.OFF -> "None"
+                AiEffort.MAX -> "XHigh"
+                else -> effort.label
+            }
+            "gpt-5" in lower -> when (effort) {
+                AiEffort.OFF -> "Minimal"
+                else -> effort.label
+            }
+            else -> effort.label
+        }
+        else -> effort.label
+    }
+}
+
+/** Descrizione tecnica fedele al parametro realmente inviato all'API per questo modello. */
+fun AiModel.effortDescription(effort: AiEffort): String {
+    val lower = id.lowercase()
+    val realLabel = effortLabel(effort)
+    return when (provider) {
+        AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> when {
+            "gemini-4" in lower || "gemini-3" in lower ->
+                "thinkingLevel: ${realLabel.lowercase()} · ${effort.description}"
+            "2.5" in lower -> {
+                val budget = when (effort) {
+                    AiEffort.OFF -> if ("pro" in lower) 1024 else 0
+                    AiEffort.LOW -> 1024
+                    AiEffort.MEDIUM -> 8192
+                    AiEffort.HIGH, AiEffort.MAX -> 24576
+                }
+                if (budget == 0) "thinkingBudget: 0 (disattivato · immediato)"
+                else "thinkingBudget: $budget token · ${effort.description}"
+            }
+            else -> effort.description
+        }
+        AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT ->
+            "reasoning_effort: ${realLabel.lowercase()} · ${effort.description}"
+        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE ->
+            if ("5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower || "4-6" in lower || "4.6" in lower) {
+                "adaptive effort: ${realLabel.lowercase()} · ${effort.description}"
+            } else {
+                val budget = when (effort) {
+                    AiEffort.OFF -> 0
+                    AiEffort.LOW -> 1024
+                    AiEffort.MEDIUM -> 4096
+                    AiEffort.HIGH, AiEffort.MAX -> 16384
+                }
+                if (budget == 0) "thinking disattivato · risposta immediata"
+                else "thinking budget: $budget token · ${effort.description}"
+            }
+        else -> effort.description
+    }
+}
 
 /** Adatta l'effort scelto dall'utente al livello più vicino realmente supportato dal modello. */
 fun AiModel.effectiveEffort(requested: AiEffort): AiEffort? {
@@ -276,7 +361,10 @@ object AiModelCatalog {
         _catalogVersion.update { it + 1 }
     }
 
-    fun setGeminiModels(modelIds: List<String>) {
+    fun setGeminiModels(
+        modelIds: List<String>,
+        thinkingCapabilities: Map<String, Boolean> = emptyMap(),
+    ) {
         geminiModels = modelIds.distinct().map { id ->
             AiModel(
                 id = id,
@@ -284,6 +372,7 @@ object AiModelCatalog {
                 displayName = geminiDisplayName(id),
                 subtitle = "Google",
                 logoRes = R.drawable.logogemini,
+                thinkingSupported = thinkingCapabilities[id],
             )
         }
         _catalogVersion.update { it + 1 }

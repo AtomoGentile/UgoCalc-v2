@@ -79,6 +79,8 @@ class SettingsRepository @Inject constructor(
     fun setBedrockIamAvailableModels(modelIds: List<String>) = apiKeyStore.setBedrockIamAvailableModels(modelIds)
     fun getGeminiAvailableModels(): List<String> = apiKeyStore.getGeminiAvailableModels()
     fun setGeminiAvailableModels(modelIds: List<String>) = apiKeyStore.setGeminiAvailableModels(modelIds)
+    fun getGeminiThinkingCapabilities(): Map<String, Boolean> = apiKeyStore.getGeminiThinkingCapabilities()
+    fun setGeminiThinkingCapabilities(capabilities: Map<String, Boolean>) = apiKeyStore.setGeminiThinkingCapabilities(capabilities)
     fun clearGeminiAvailableModels() = apiKeyStore.clearGeminiAvailableModels()
     fun getOpenAiAvailableModels(): List<String> = apiKeyStore.getOpenAiAvailableModels()
     fun setOpenAiAvailableModels(modelIds: List<String>) = apiKeyStore.setOpenAiAvailableModels(modelIds)

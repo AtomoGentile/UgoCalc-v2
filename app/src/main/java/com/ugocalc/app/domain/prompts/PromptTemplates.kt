@@ -101,19 +101,29 @@ object PromptTemplates {
 
     /**
      * Costruisce il prompt Vision V1 arricchendolo con la telemetria ottica/sensori misurata
-     * durante gli scatti (CameraX Pro Studio / EXIF) quando disponibile; se [photoTelemetryBlock]
-     * è nullo o vuoto restituisce esattamente [VISION_PROMPT].
+     * durante gli scatti (CameraX Pro Studio / EXIF) e con eventuali note testuali scritte
+     * dall'utente nella barra chat; se entrambi sono vuoti restituisce esattamente [VISION_PROMPT].
      */
-    fun visionPrompt(photoTelemetryBlock: String? = null): String {
-        val telemetry = photoTelemetryBlock?.trim()
-        if (telemetry.isNullOrEmpty()) return VISION_PROMPT
-        return """
-            $VISION_PROMPT
-
-            [TELEMETRIA OTTICA & SENSORI DISPOSITIVO]
-            Dati reali misurati da fotocamera e sensori durante gli scatti (usali per verificare scala, prospettiva, dimensione del piatto e affidabilità dell'immagine):
-            $telemetry
-        """.trimIndent()
+    fun visionPrompt(
+        photoTelemetryBlock: String? = null,
+        userPromptNote: String? = null,
+    ): String {
+        val telemetry = photoTelemetryBlock?.trim().orEmpty()
+        val note = userPromptNote?.trim().orEmpty()
+        if (telemetry.isEmpty() && note.isEmpty()) return VISION_PROMPT
+        return buildString {
+            append(VISION_PROMPT)
+            if (telemetry.isNotEmpty()) {
+                append("\n\n[TELEMETRIA OTTICA & SENSORI DISPOSITIVO]\n")
+                append("Dati reali misurati da fotocamera e sensori durante gli scatti (usali per verificare scala, prospettiva, dimensione del piatto e affidabilità dell'immagine):\n")
+                append(telemetry)
+            }
+            if (note.isNotEmpty()) {
+                append("\n\n[NOTE UTENTE SUL PIATTO]\n")
+                append("Informazioni aggiuntive fornite direttamente dall'utente (ingredienti nascosti, tipo di pasta/pane, condimenti, cottura o pesi già noti — tienine conto con priorità alta nell'identificazione e nelle stime):\n")
+                append(note)
+            }
+        }
     }
 
     val NORMALIZATION_PROMPT_HEADER = """
