@@ -153,6 +153,30 @@ fun UgoSectionHeader(
     }
 }
 
+/**
+ * Formatta un valore di macronutrienti in grammi in modo compatto e coerente in tutta l'app:
+ * elimina gli zeri decimali superflui (es. `21,0` -> `21g`, `19,9` -> `19,9g`, `124,3` -> `124g`).
+ */
+fun formatCompactGrams(value: Double): String {
+    if (!value.isFinite() || value <= 0.0) return "0g"
+    if (value >= 100.0) return "${value.roundToInt()}g"
+    val roundedTenths = (value * 10.0).roundToInt()
+    return if (roundedTenths % 10 == 0) {
+        "${roundedTenths / 10}g"
+    } else {
+        "${"%.1f".format(Locale.ITALIAN, roundedTenths / 10.0)}g"
+    }
+}
+
+/** Normalizza i titoli dei pasti per la visualizzazione (iniziale maiuscola e fallback pulito). */
+fun formatMealDisplayTitle(raw: String): String {
+    val trimmed = raw.trim()
+    if (trimmed.isEmpty()) return "Pasto"
+    return trimmed.replaceFirstChar { ch ->
+        if (ch.isLowerCase()) ch.titlecase(Locale.ITALIAN) else ch.toString()
+    }
+}
+
 @Composable
 fun MacroPill(
     label: String,
@@ -160,6 +184,7 @@ fun MacroPill(
     containerColor: Color,
     contentColor: Color,
     modifier: Modifier = Modifier,
+    compact: Boolean = false,
 ) {
     Surface(
         modifier = modifier,
@@ -168,9 +193,12 @@ fun MacroPill(
         shape = RoundedCornerShape(50),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+            modifier = Modifier.padding(
+                horizontal = if (compact) 7.dp else 10.dp,
+                vertical = if (compact) 3.dp else 4.dp,
+            ),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 3.dp else 4.dp),
         ) {
             Text(
                 text = label,
@@ -181,7 +209,7 @@ fun MacroPill(
             )
             Text(
                 text = value,
-                style = MaterialTheme.typography.labelMedium,
+                style = if (compact) MaterialTheme.typography.labelSmall else MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = contentColor,
                 maxLines = 1,

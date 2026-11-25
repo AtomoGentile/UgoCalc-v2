@@ -264,6 +264,12 @@ fun CameraCaptureScreen(
                 selectedCalibrationIds = uiState.selectedCalibrationIds,
                 preMealGlucoseMgDl = uiState.preMealGlucoseMgDl,
                 onSetPreMealGlucose = viewModel::setPreMealGlucoseMgDl,
+                userPromptNote = uiState.userPromptNote,
+                onEditPromptNote = {
+                    draftNoteText = uiState.userPromptNote
+                    showEditNoteDialog = true
+                },
+                onClearPromptNote = { viewModel.setUserPromptNote("") },
                 bannerErrorMessage = activeBannerError,
                 onDismissBannerError = {
                     cameraPermissionDeniedMessage = null
@@ -295,57 +301,6 @@ fun CameraCaptureScreen(
                 onConfirmAnalysis = { viewModel.confirmPhotos(selectedModels) },
                 onBack = onCancelled,
             )
-        }
-
-        // Pillola discreta in fotocamera che mostra/modifica la nota chat allegata al prompt AI
-        AnimatedVisibility(
-            visible = activeZoomIndex == null && !uiState.isAnalyzing && uiState.userPromptNote.isNotBlank(),
-            enter = fadeIn() + slideInVertically { -it / 2 },
-            exit = fadeOut() + slideOutVertically { -it / 2 },
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(top = 64.dp, start = 16.dp, end = 16.dp),
-        ) {
-            Surface(
-                onClick = {
-                    draftNoteText = uiState.userPromptNote
-                    showEditNoteDialog = true
-                },
-                shape = RoundedCornerShape(50),
-                color = Color.Black.copy(alpha = 0.68f),
-                border = BorderStroke(0.75.dp, Color.White.copy(alpha = 0.25f)),
-            ) {
-                Row(
-                    modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 7.dp, bottom = 7.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.EditNote,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(16.dp),
-                    )
-                    Text(
-                        text = "Nota AI: ${uiState.userPromptNote}",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = "Rimuovi nota AI",
-                        tint = Color.White.copy(alpha = 0.8f),
-                        modifier = Modifier
-                            .size(18.dp)
-                            .clickable { viewModel.setUserPromptNote("") }
-                            .padding(1.dp),
-                    )
-                }
-            }
         }
 
         if (showEditNoteDialog) {

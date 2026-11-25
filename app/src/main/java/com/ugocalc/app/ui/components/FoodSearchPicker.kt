@@ -8,10 +8,13 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -205,6 +208,9 @@ fun FoodSearchPicker(
             Modifier.fillMaxWidth().heightIn(max = 320.dp)
         }
 
+        val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val listBottomPadding = if (fillAvailableHeight) navBarBottom + 108.dp else 16.dp
+
         Spacer(modifier = Modifier.height(8.dp))
 
         if (query.isBlank()) {
@@ -226,7 +232,7 @@ fun FoodSearchPicker(
                 LazyColumn(
                     modifier = resultsModifier,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 112.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = listBottomPadding),
                 ) {
                     if (filteredMostSearched.isNotEmpty()) {
                         item(key = "__header_recent__") {
@@ -335,7 +341,7 @@ fun FoodSearchPicker(
                 LazyColumn(
                     modifier = resultsModifier,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
-                    contentPadding = PaddingValues(top = 4.dp, bottom = 112.dp),
+                    contentPadding = PaddingValues(top = 4.dp, bottom = listBottomPadding),
                 ) {
                     item(key = "__header_search_results__") {
                         val resultsTitle = selectedCategory?.let {
@@ -651,29 +657,32 @@ private fun FoodResultRow(
                 overflow = TextOverflow.Ellipsis,
             )
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.padding(top = 3.dp),
             ) {
                 MacroPill(
                     label = "CHO",
-                    value = "${"%.1f".format(result.entry.choPer100g)}g",
+                    value = formatCompactGrams(result.entry.choPer100g),
                     containerColor = UgoSemanticColors.choContainer,
                     contentColor = UgoSemanticColors.onChoContainer,
+                    compact = true,
                 )
                 if (result.entry.proteinePer100g > 0.0) {
                     MacroPill(
                         label = "P",
-                        value = "${"%.1f".format(result.entry.proteinePer100g)}g",
+                        value = formatCompactGrams(result.entry.proteinePer100g),
                         containerColor = UgoSemanticColors.proteinContainer,
                         contentColor = UgoSemanticColors.onProteinContainer,
+                        compact = true,
                     )
                 }
                 MacroPill(
                     label = "G",
-                    value = "${"%.1f".format(result.entry.grassiPer100g)}g",
+                    value = formatCompactGrams(result.entry.grassiPer100g),
                     containerColor = UgoSemanticColors.fatContainer,
                     contentColor = UgoSemanticColors.onFatContainer,
+                    compact = true,
                 )
                 result.entry.indiceGlicemico?.let { gi ->
                     MacroPill(
@@ -681,6 +690,7 @@ private fun FoodResultRow(
                         value = "$gi",
                         containerColor = MaterialTheme.colorScheme.surfaceContainer,
                         contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        compact = true,
                     )
                 }
             }

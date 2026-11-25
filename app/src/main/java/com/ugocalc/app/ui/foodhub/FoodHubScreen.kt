@@ -1,6 +1,7 @@
 package com.ugocalc.app.ui.foodhub
 
 import android.content.res.Configuration
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -63,9 +65,10 @@ import com.ugocalc.app.ui.components.AddComboFavoriteDialog
 import com.ugocalc.app.ui.components.EditorialCanvasShell
 import com.ugocalc.app.ui.components.EditorialSectionLabel
 import com.ugocalc.app.ui.components.EditorialTopBar
+import com.ugocalc.app.ui.components.FloatingTopBarPill
 import com.ugocalc.app.ui.components.FoodSearchPicker
 import com.ugocalc.app.ui.components.UgoCard
-import com.ugocalc.app.ui.components.UgoSectionHeader
+import com.ugocalc.app.ui.components.isDarkSurfaceTheme
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -361,45 +364,35 @@ private fun FoodHubHeader(
     totalFoodCount: Int,
     tableCount: Int,
 ) {
+    val isDark = isDarkSurfaceTheme()
     val tablesWord = if (tableCount == 1) "tabella" else "tabelle"
     EditorialTopBar(
         leading = {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            Surface(
+                modifier = Modifier.size(42.dp),
+                shape = CircleShape,
+                color = if (isDark) {
+                    MaterialTheme.colorScheme.surfaceContainerLow
+                } else {
+                    MaterialTheme.colorScheme.surfaceContainerLowest
+                },
+                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                shadowElevation = if (isDark) 0.dp else 2.dp,
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(34.dp)
-                        .clip(RoundedCornerShape(50))
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest),
-                    contentAlignment = Alignment.Center,
-                ) {
+                Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Rounded.RestaurantMenu,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(18.dp),
+                        modifier = Modifier.size(19.dp),
                     )
                 }
             }
         },
         trailing = {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                shadowElevation = 1.dp,
-            ) {
-                Text(
-                    text = "$totalFoodCount alimenti · $tableCount $tablesWord",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                )
-            }
+            FloatingTopBarPill(
+                text = "$totalFoodCount alimenti · $tableCount $tablesWord",
+            )
         },
     )
 }

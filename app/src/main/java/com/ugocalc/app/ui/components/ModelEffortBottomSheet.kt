@@ -71,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import com.ugocalc.app.R
 import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
+import com.ugocalc.app.domain.model.apiEffortSummary
 import com.ugocalc.app.domain.model.effectiveEffort
 import com.ugocalc.app.domain.model.effortDescription
 import com.ugocalc.app.domain.model.effortLabel
@@ -197,7 +198,11 @@ fun ModelEffortBottomSheet(
                     text = if (currentPage == ModelSheetPage.MODEL) {
                         if (selectedModels.size > 1) "Modelli (${selectedModels.size})" else "Modello"
                     } else {
-                        "Effort · ${primarySelected?.displayName ?: "AI"}"
+                        if (selectedModels.size > 1) {
+                            "Effort · ${selectedModels.size} modelli"
+                        } else {
+                            "Effort · ${primarySelected?.displayName ?: "AI"}"
+                        }
                     },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
@@ -607,10 +612,71 @@ fun ModelEffortBottomSheet(
                                     selectedEffort = effectiveCurrentEffort,
                                     onSelectEffort = onSelectEffort,
                                     showHeaderLabel = true,
-                                    showDescription = true,
-                                    labelForEffort = { eff -> primarySelected?.effortLabel(eff) ?: eff.label },
-                                    descriptionForEffort = { eff -> primarySelected?.effortDescription(eff) ?: eff.description },
+                                    showDescription = selectedModels.size <= 1,
+                                    labelForEffort = { eff ->
+                                        if (selectedModels.size > 1) eff.label
+                                        else primarySelected?.effortLabel(eff) ?: eff.label
+                                    },
+                                    descriptionForEffort = { eff ->
+                                        primarySelected?.effortDescription(eff) ?: eff.description
+                                    },
                                 )
+
+                                if (selectedModels.size > 1) {
+                                    Spacer(modifier = Modifier.height(14.dp))
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(16.dp),
+                                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                                        border = BorderStroke(
+                                            0.75.dp,
+                                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
+                                        ),
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(horizontal = 14.dp, vertical = 12.dp),
+                                            verticalArrangement = Arrangement.spacedBy(7.dp),
+                                        ) {
+                                            Text(
+                                                text = "Parametro reale inviato a ciascun modello",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                fontWeight = FontWeight.SemiBold,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            selectedModels.forEach { model ->
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                ) {
+                                                    Text(
+                                                        text = model.displayName,
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = MaterialTheme.colorScheme.onSurface,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                        modifier = Modifier.weight(1f),
+                                                    )
+                                                    Spacer(modifier = Modifier.width(10.dp))
+                                                    Text(
+                                                        text = model.apiEffortSummary(currentEffort),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontWeight = FontWeight.SemiBold,
+                                                        color = if (model.supportedEfforts().isEmpty()) {
+                                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                                        } else {
+                                                            MaterialTheme.colorScheme.primary
+                                                        },
+                                                        maxLines = 1,
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

@@ -12,6 +12,7 @@ data class AppUpdateInfo(
     val htmlUrl: String,
     val releaseNotes: String,
     val apkDownloadUrl: String?,
+    val apkSizeBytes: Long? = null,
 )
 
 sealed interface UpdateCheckResult {
@@ -49,6 +50,7 @@ class UpdateRepository @Inject constructor(
                     htmlUrl = release.htmlUrl,
                     releaseNotes = release.body,
                     apkDownloadUrl = release.apkDownloadUrl,
+                    apkSizeBytes = release.apkSizeBytes,
                 ),
             )
         } else {

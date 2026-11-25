@@ -8,6 +8,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -16,12 +18,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -65,6 +71,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -75,14 +83,13 @@ import coil.compose.AsyncImage
 import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.R
 import com.ugocalc.app.data.local.prefs.AppTheme
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.EditorialCanvasShell
 import com.ugocalc.app.ui.components.EditorialSectionLabel
 import com.ugocalc.app.ui.components.EditorialTopBar
 import com.ugocalc.app.ui.components.FloatingCircleIconButton
+import com.ugocalc.app.ui.components.FloatingTopBarPill
 import com.ugocalc.app.ui.components.UgoCard
-import com.ugocalc.app.ui.components.UgoSectionHeader
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
+import com.ugocalc.app.ui.components.isDarkSurfaceTheme
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 private data class SettingsMenuItemData(
@@ -122,6 +129,7 @@ fun SettingsScreen(
     onOpenCostManagement: () -> Unit = {},
     onOpenBiasEvolution: () -> Unit = {},
     onOpenGlycemicProfile: () -> Unit = {},
+    hasUpdateAvailable: Boolean = false,
     showBackButton: Boolean = true,
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
@@ -141,6 +149,8 @@ fun SettingsScreen(
         AppTheme.DARK -> "Scuro"
         AppTheme.SYSTEM -> "Sistema"
     }
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val isDark = isDarkSurfaceTheme()
 
     val mainSections = listOf(
         SettingsSectionData(
@@ -160,9 +170,13 @@ fun SettingsScreen(
                     subtitle = if (configuredCount == 0) {
                         "Configura Gemini, OpenAI, Anthropic o AWS"
                     } else {
-                        "${availableModels.size} modelli disponibili"
+                        "${availableModels.size} ${if (availableModels.size == 1) "modello disponibile" else "modelli disponibili"}"
                     },
-                    badgeText = if (configuredCount == 0) "Richiesto" else "$configuredCount attivi",
+                    badgeText = when (configuredCount) {
+                        0 -> "Richiesto"
+                        1 -> "1 attivo"
+                        else -> "$configuredCount attivi"
+                    },
                     badgePositive = configuredCount > 0,
                     onClick = onOpenApi,
                 ),
@@ -170,10 +184,10 @@ fun SettingsScreen(
                     id = "preferred_models",
                     icon = Icons.Outlined.AutoAwesome,
                     title = "Modelli preferiti & Effort",
-                    subtitle = if (settings.preferredModelIds.isEmpty()) {
-                        "Scelta manuale · Effort: ${settings.aiEffort.label}"
-                    } else {
-                        "${settings.preferredModelIds.size} preferiti · Effort: ${settings.aiEffort.label}"
+                    subtitle = when (settings.preferredModelIds.size) {
+                        0 -> "Scelta manuale prima dello scatto"
+                        1 -> "1 modello preferito attivo"
+                        else -> "${settings.preferredModelIds.size} modelli preferiti attivi"
                     },
                     badgeText = settings.aiEffort.label,
                     onClick = onOpenPreferredModel,
@@ -214,7 +228,13 @@ fun SettingsScreen(
                     id = "changelog",
                     icon = Icons.Outlined.SystemUpdate,
                     title = "Software e aggiornamenti",
-                    subtitle = "Versione ${BuildConfig.VERSION_NAME} e storico rilasci",
+                    subtitle = if (hasUpdateAvailable) {
+                        "Aggiornamento disponibile · attuale v${BuildConfig.VERSION_NAME}"
+                    } else {
+                        "Versione ${BuildConfig.VERSION_NAME} e storico rilasci"
+                    },
+                    badgeText = if (hasUpdateAvailable) "Nuova" else null,
+                    badgePositive = true,
                     onClick = onOpenChangelog,
                 ),
             ),
@@ -310,29 +330,44 @@ fun SettingsScreen(
                             contentDescription = "Indietro",
                             onClick = onBack,
                         )
+                    } else {
+                        Surface(
+                            modifier = Modifier.size(42.dp),
+                            shape = CircleShape,
+                            color = if (isDark) {
+                                MaterialTheme.colorScheme.surfaceContainerLow
+                            } else {
+                                MaterialTheme.colorScheme.surfaceContainerLowest
+                            },
+                            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                            shadowElevation = if (isDark) 0.dp else 2.dp,
+                        ) {
+                            Box(contentAlignment = Alignment.Center, modifier = Modifier.padding(6.dp)) {
+                                Image(
+                                    painter = painterResource(id = R.drawable.ugocalc_logo),
+                                    contentDescription = "UgoCalc",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape),
+                                )
+                            }
+                        }
                     }
                 },
                 trailing = {
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        shadowElevation = 1.dp,
-                    ) {
-                        Text(
-                            text = "v${BuildConfig.VERSION_NAME}",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
-                        )
-                    }
+                    FloatingTopBarPill(
+                        text = if (hasUpdateAvailable) "Aggiorna · v${BuildConfig.VERSION_NAME}" else "v${BuildConfig.VERSION_NAME}",
+                        onClick = onOpenChangelog,
+                        highlight = hasUpdateAvailable,
+                    )
                 },
             )
         },
     ) {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 112.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = navBarBottom + 108.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             item(key = "settings_title") {
@@ -394,7 +429,7 @@ fun SettingsScreen(
                                 fontWeight = FontWeight.Bold,
                             )
                             Text(
-                                text = "BIAS, modelli shadow, scala, costi, backup",
+                                text = "BIAS, modelli shadow, calibrazioni scala, costi, permessi",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

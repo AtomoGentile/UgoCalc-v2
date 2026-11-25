@@ -1,9 +1,13 @@
 package com.ugocalc.app.ui
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.data.local.prefs.UserSettings
+import com.ugocalc.app.data.remote.github.ApkDownloadState
+import com.ugocalc.app.data.remote.github.ApkInstallLaunchResult
+import com.ugocalc.app.data.remote.github.ApkUpdateDownloader
 import com.ugocalc.app.data.repository.AppUpdateCheckResult
 import com.ugocalc.app.data.repository.AppUpdateRepository
 import com.ugocalc.app.data.repository.AppUpdateStatus
@@ -23,14 +27,21 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import org.json.JSONObject
+import java.io.File
 import javax.inject.Inject
+import javax.inject.Named
 
 @HiltViewModel
 class AppViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val appUpdateRepository: AppUpdateRepository,
+    private val apkUpdateDownloader: ApkUpdateDownloader,
     private val tableRepository: TableRepository,
     private val sessionStore: AnalysisSessionStore,
+    @Named("no_auth") private val okHttpClient: OkHttpClient,
 ) : ViewModel() {
     val settings: StateFlow<UserSettings> = settingsRepository.settings
         .stateIn(viewModelScope, SharingStarted.Eagerly, UserSettings())
@@ -59,6 +70,8 @@ class AppViewModel @Inject constructor(
     private val _appUpdateStatus = MutableStateFlow<AppUpdateStatus?>(null)
     val appUpdateStatus: StateFlow<AppUpdateStatus?> = _appUpdateStatus
 
+    val apkDownloadState: StateFlow<ApkDownloadState> = apkUpdateDownloader.state
+
     init {
         viewModelScope.launch {
             val first = settingsRepository.settings.first()
@@ -78,7 +91,84 @@ class AppViewModel @Inject constructor(
                 else -> Unit
             }
         }
+        // Auto-sync silenzioso delle capacità reali `thinking` da Google AI Studio per chi aveva già
+        // salvato la chiave Gemini in versioni precedenti (così gli effort reali sono subito accurati).
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { syncGeminiThinkingMetadataIfMissing() }
+        }
     }
+
+    private fun syncGeminiThinkingMetadataIfMissing() {
+        val geminiKey = settingsRepository.getApiKey(AiProviderType.GEMINI)?.trim().orEmpty()
+        if (geminiKey.isBlank()) return
+        if (settingsRepository.getGeminiThinkingCapabilities().isNotEmpty()) return
+
+        val allIds = mutableListOf<String>()
+        val thinkingCaps = linkedMapOf<String, Boolean>()
+        val excludedTokens = listOf("embedding", "imagen", "veo", "tts", "aqa", "bison")
+        var pageToken: String? = null
+        var pages = 0
+        do {
+            val url = buildString {
+                append("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200")
+                if (!pageToken.isNullOrBlank()) {
+                    append("&pageToken=")
+                    append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
+                }
+            }
+            val request = Request.Builder()
+                .url(url)
+                .header("x-goog-api-key", geminiKey)
+                .get()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return
+                val body = response.body?.string().orEmpty()
+                val root = JSONObject(body)
+                val arr = root.optJSONArray("models") ?: return
+                for (i in 0 until arr.length()) {
+                    val obj = arr.getJSONObject(i)
+                    val methods = obj.optJSONArray("supportedGenerationMethods")
+                    val supportsGenerate = methods != null && (0 until methods.length()).any {
+                        methods.getString(it) == "generateContent"
+                    }
+                    if (!supportsGenerate) continue
+                    val name = obj.optString("name").removePrefix("models/").trim()
+                    val lower = name.lowercase()
+                    if (lower.startsWith("gemini-") && excludedTokens.none { it in lower }) {
+                        allIds.add(name)
+                        if (obj.has("thinking") && !obj.isNull("thinking")) {
+                            thinkingCaps[name] = obj.optBoolean("thinking")
+                        }
+                    }
+                }
+                pageToken = root.optString("nextPageToken").takeIf { it.isNotBlank() }
+            }
+            pages++
+        } while (!pageToken.isNullOrBlank() && pages < 5)
+
+        val distinctIds = allIds.distinct()
+        if (distinctIds.isNotEmpty()) {
+            settingsRepository.setGeminiAvailableModels(distinctIds)
+            settingsRepository.setGeminiThinkingCapabilities(thinkingCaps)
+            AiModelCatalog.setGeminiModels(distinctIds, thinkingCaps)
+        }
+    }
+
+    fun startApkDownload(status: AppUpdateStatus) {
+        apkUpdateDownloader.startDownload(
+            version = status.latestVersion,
+            apkUrl = status.apkUrl,
+            expectedSizeBytes = status.apkSizeBytes,
+        )
+    }
+
+    fun cancelApkDownload() {
+        apkUpdateDownloader.cancelDownload()
+    }
+
+    fun launchApkInstall(context: Context, apkFile: File): ApkInstallLaunchResult =
+        apkUpdateDownloader.launchInstall(context, apkFile)
 
     fun completeOnboarding() {
         viewModelScope.launch {

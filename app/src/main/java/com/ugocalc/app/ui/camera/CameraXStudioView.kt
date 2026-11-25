@@ -67,6 +67,7 @@ import androidx.compose.material.icons.filled.FlashlightOn
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Straighten
+import androidx.compose.material.icons.rounded.EditNote
 import androidx.compose.material.icons.rounded.ShowChart
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -76,6 +77,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -84,6 +86,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -168,6 +171,9 @@ fun CameraXStudioView(
     selectedCalibrationIds: Set<Long>,
     preMealGlucoseMgDl: Int? = null,
     onSetPreMealGlucose: ((Int?) -> Unit)? = null,
+    userPromptNote: String = "",
+    onEditPromptNote: (() -> Unit)? = null,
+    onClearPromptNote: (() -> Unit)? = null,
     bannerErrorMessage: String?,
     onDismissBannerError: () -> Unit,
     onRequestCameraPermission: () -> Unit,
@@ -720,121 +726,195 @@ fun CameraXStudioView(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // Riga Zoom chips (0.6× / 1× / 2×) + selettore calibrazioni opzionale
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-            ) {
-                ZoomQuickChips(
-                    zoomRatio = telemetry.zoomRatio,
-                    minZoomRatio = telemetry.minZoomRatio,
-                    maxZoomRatio = telemetry.maxZoomRatio,
-                    onSelectZoom = { targetZoom ->
-                        boundCamera?.cameraControl?.setZoomRatio(
-                            targetZoom.coerceIn(telemetry.minZoomRatio, telemetry.maxZoomRatio),
+            // Nota AI allegata al prompt (posizionata pulitamente nel dock inferiore, zero collisioni con la livella)
+            if (userPromptNote.isNotBlank() && onEditPromptNote != null) {
+                Surface(
+                    onClick = onEditPromptNote,
+                    shape = RoundedCornerShape(50),
+                    color = StudioPillBg,
+                    border = BorderStroke(1.dp, EmeraldLocked.copy(alpha = 0.65f)),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.EditNote,
+                            contentDescription = null,
+                            tint = EmeraldLocked,
+                            modifier = Modifier.size(16.dp),
                         )
-                    },
-                )
+                        Text(
+                            text = "Nota AI: $userPromptNote",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f, fill = false),
+                        )
+                        if (onClearPromptNote != null) {
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = "Rimuovi nota AI",
+                                tint = Color.White.copy(alpha = 0.80f),
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onClearPromptNote),
+                            )
+                        }
+                    }
+                }
+            }
 
-                if (availableCalibrations.isNotEmpty()) {
-                    Spacer(Modifier.width(10.dp))
-                    Box {
-                        val selCount = selectedCalibrationIds.size
+            // Riga controlli rapidi uniformi (altezza coerente 36.dp): Zoom + Nota AI + Calibrazioni + Pre-pasto
+            CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides androidx.compose.ui.unit.Dp.Unspecified) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                ) {
+                    ZoomQuickChips(
+                        zoomRatio = telemetry.zoomRatio,
+                        minZoomRatio = telemetry.minZoomRatio,
+                        maxZoomRatio = telemetry.maxZoomRatio,
+                        onSelectZoom = { targetZoom ->
+                            boundCamera?.cameraControl?.setZoomRatio(
+                                targetZoom.coerceIn(telemetry.minZoomRatio, telemetry.maxZoomRatio),
+                            )
+                        },
+                    )
+
+                    if (onEditPromptNote != null && userPromptNote.isBlank()) {
                         Surface(
-                            onClick = { showCalibrationMenu = true },
+                            onClick = onEditPromptNote,
                             shape = RoundedCornerShape(50),
-                            color = if (selCount > 0) EmeraldLocked.copy(alpha = 0.25f) else StudioPillBg,
-                            border = BorderStroke(
-                                1.dp,
-                                if (selCount > 0) EmeraldLocked else Color.White.copy(alpha = 0.25f),
-                            ),
+                            color = StudioPillBg,
+                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+                            modifier = Modifier.height(36.dp),
                         ) {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp),
                             ) {
                                 Icon(
-                                    imageVector = Icons.Filled.Straighten,
-                                    contentDescription = null,
-                                    tint = if (selCount > 0) EmeraldLocked else Color.White,
-                                    modifier = Modifier.size(14.dp),
+                                    imageVector = Icons.Rounded.EditNote,
+                                    contentDescription = "Aggiungi nota AI",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp),
                                 )
                                 Text(
-                                    text = if (selCount > 0) "Calib. ($selCount)" else "Calibrazioni",
+                                    text = "Nota",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = Color.White,
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
                         }
+                    }
 
-                        DropdownMenu(
-                            expanded = showCalibrationMenu,
-                            onDismissRequest = { showCalibrationMenu = false },
-                        ) {
-                            availableCalibrations.forEach { cal ->
-                                val checked = cal.id in selectedCalibrationIds
-                                DropdownMenuItem(
-                                    text = {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (checked) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = null,
-                                                    tint = MaterialTheme.colorScheme.primary,
-                                                    modifier = Modifier
-                                                        .size(18.dp)
-                                                        .padding(end = 6.dp),
-                                                )
+                    if (availableCalibrations.isNotEmpty()) {
+                        Box {
+                            val selCount = selectedCalibrationIds.size
+                            Surface(
+                                onClick = { showCalibrationMenu = true },
+                                shape = RoundedCornerShape(50),
+                                color = if (selCount > 0) EmeraldLocked.copy(alpha = 0.25f) else StudioPillBg,
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (selCount > 0) EmeraldLocked else Color.White.copy(alpha = 0.22f),
+                                ),
+                                modifier = Modifier.height(36.dp),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Straighten,
+                                        contentDescription = null,
+                                        tint = if (selCount > 0) EmeraldLocked else Color.White,
+                                        modifier = Modifier.size(14.dp),
+                                    )
+                                    Text(
+                                        text = if (selCount > 0) "Calib. ($selCount)" else "Scala",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        fontWeight = FontWeight.SemiBold,
+                                    )
+                                }
+                            }
+
+                            DropdownMenu(
+                                expanded = showCalibrationMenu,
+                                onDismissRequest = { showCalibrationMenu = false },
+                            ) {
+                                availableCalibrations.forEach { cal ->
+                                    val checked = cal.id in selectedCalibrationIds
+                                    DropdownMenuItem(
+                                        text = {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                if (checked) {
+                                                    Icon(
+                                                        imageVector = Icons.Filled.Check,
+                                                        contentDescription = null,
+                                                        tint = MaterialTheme.colorScheme.primary,
+                                                        modifier = Modifier
+                                                            .size(18.dp)
+                                                            .padding(end = 6.dp),
+                                                    )
+                                                }
+                                                Column {
+                                                    Text(cal.name, fontWeight = FontWeight.Medium)
+                                                    Text(
+                                                        "${cal.valueCm} cm",
+                                                        style = MaterialTheme.typography.bodySmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    )
+                                                }
                                             }
-                                            Column {
-                                                Text(cal.name, fontWeight = FontWeight.Medium)
-                                                Text(
-                                                    "${cal.valueCm} cm",
-                                                    style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                )
-                                            }
-                                        }
-                                    },
-                                    onClick = { onToggleCalibration(cal.id) },
-                                )
+                                        },
+                                        onClick = { onToggleCalibration(cal.id) },
+                                    )
+                                }
                             }
                         }
                     }
-                }
 
-                if (onSetPreMealGlucose != null) {
-                    Spacer(Modifier.width(10.dp))
-                    val hasGlucose = preMealGlucoseMgDl != null
-                    Surface(
-                        onClick = { showPreMealGlucoseDialog = true },
-                        shape = RoundedCornerShape(50),
-                        color = if (hasGlucose) EmeraldLocked.copy(alpha = 0.25f) else StudioPillBg,
-                        border = BorderStroke(
-                            1.dp,
-                            if (hasGlucose) EmeraldLocked else Color.White.copy(alpha = 0.25f),
-                        ),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    if (onSetPreMealGlucose != null) {
+                        val hasGlucose = preMealGlucoseMgDl != null
+                        Surface(
+                            onClick = { showPreMealGlucoseDialog = true },
+                            shape = RoundedCornerShape(50),
+                            color = if (hasGlucose) EmeraldLocked.copy(alpha = 0.25f) else StudioPillBg,
+                            border = BorderStroke(
+                                1.dp,
+                                if (hasGlucose) EmeraldLocked else Color.White.copy(alpha = 0.22f),
+                            ),
+                            modifier = Modifier.height(36.dp),
                         ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ShowChart,
-                                contentDescription = null,
-                                tint = if (hasGlucose) EmeraldLocked else Color.White,
-                                modifier = Modifier.size(14.dp),
-                            )
-                            Text(
-                                text = if (hasGlucose) "Pre-pasto: ${preMealGlucoseMgDl}" else "Pre-pasto",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = Color.White,
-                                fontWeight = FontWeight.SemiBold,
-                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 10.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ShowChart,
+                                    contentDescription = null,
+                                    tint = if (hasGlucose) EmeraldLocked else Color.White,
+                                    modifier = Modifier.size(14.dp),
+                                )
+                                Text(
+                                    text = if (hasGlucose) "$preMealGlucoseMgDl mg/dL" else "Pre-pasto",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color.White,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
                         }
                     }
                 }
@@ -1414,26 +1494,34 @@ private fun ZoomQuickChips(
     Surface(
         shape = RoundedCornerShape(50),
         color = StudioPillBg,
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f)),
+        modifier = Modifier.height(36.dp),
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(3.dp),
         ) {
             options.forEach { (value, label) ->
                 val active = abs(zoomRatio - value) < 0.25f
                 Surface(
                     onClick = { onSelectZoom(value) },
-                    shape = CircleShape,
+                    shape = RoundedCornerShape(50),
                     color = if (active) Color.White else Color.Transparent,
+                    modifier = Modifier.height(28.dp),
                 ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = if (active) Color.Black else Color.White.copy(alpha = 0.85f),
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
-                    )
+                    Box(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = if (active) Color.Black else Color.White.copy(alpha = 0.85f),
+                            maxLines = 1,
+                        )
+                    }
                 }
             }
         }

@@ -34,11 +34,14 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -92,6 +95,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
@@ -135,6 +139,8 @@ import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.animatedPressScale
 import com.ugocalc.app.ui.components.buildHighlightedMatchText
+import com.ugocalc.app.ui.components.formatCompactGrams
+import com.ugocalc.app.ui.components.formatMealDisplayTitle
 import com.ugocalc.app.ui.components.isDarkSurfaceTheme
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import com.ugocalc.app.ui.theme.editorialDisplayTextStyle
@@ -274,6 +280,8 @@ fun HomeScreen(
 
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val sheetSurfaceColor = MaterialTheme.colorScheme.surface
 
     EditorialCanvasShell(
         topBar = {
@@ -322,29 +330,45 @@ fun HomeScreen(
                 exit = slideOutVertically(tween(150)) { it / 2 } + fadeOut(tween(130)),
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .imePadding()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 16.dp)
-                    .padding(bottom = 82.dp),
+                    .fillMaxWidth(),
             ) {
-                HomeChatComposerCard(
-                    uiState = uiState,
-                    quickActionsExpanded = quickActionsExpanded,
-                    onToggleQuickActions = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        quickActionsExpanded = !quickActionsExpanded
-                    },
-                    onPromptNoteChange = viewModel::setPromptNote,
-                    onManualClick = onLaunchManual,
-                    onBarcodeClick = onLaunchBarcode,
-                    onAddFavoriteClick = {
-                        quickActionsExpanded = false
-                        showAddFavoriteDialog = true
-                    },
-                    onOpenModelPicker = { openSheetOrGuard(ModelSheetPage.MODEL) },
-                    onOpenEffortPicker = { openSheetOrGuard(ModelSheetPage.EFFORT) },
-                    onPhotoAiClick = onLaunchPhotoAi,
-                )
+                // Scrim sfumato continuo dal bordo del composer fino alla pillola di navigazione,
+                // così nessun pasto in scorrimento trapela nello spazio tra card e pillola.
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                0.16f to sheetSurfaceColor.copy(alpha = 0.88f),
+                                0.42f to sheetSurfaceColor,
+                                1f to sheetSurfaceColor,
+                            ),
+                        )
+                        .imePadding()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp)
+                        .padding(top = 18.dp, bottom = 82.dp),
+                ) {
+                    HomeChatComposerCard(
+                        uiState = uiState,
+                        quickActionsExpanded = quickActionsExpanded,
+                        onToggleQuickActions = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            quickActionsExpanded = !quickActionsExpanded
+                        },
+                        onPromptNoteChange = viewModel::setPromptNote,
+                        onManualClick = onLaunchManual,
+                        onBarcodeClick = onLaunchBarcode,
+                        onAddFavoriteClick = {
+                            quickActionsExpanded = false
+                            showAddFavoriteDialog = true
+                        },
+                        onOpenModelPicker = { openSheetOrGuard(ModelSheetPage.MODEL) },
+                        onOpenEffortPicker = { openSheetOrGuard(ModelSheetPage.EFFORT) },
+                        onPhotoAiClick = onLaunchPhotoAi,
+                    )
+                }
             }
         },
     ) {
@@ -358,6 +382,7 @@ fun HomeScreen(
                     query = quickSearchQuery,
                     favorites = uiState.favorites,
                     meals = uiState.searchableMeals,
+                    bottomPadding = navBarBottom + 108.dp,
                     onFavoriteClick = { fav ->
                         isSearchActive = false
                         quickSearchQuery = ""
@@ -380,7 +405,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = 220.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 224.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         item(key = "greeting") {
@@ -425,7 +450,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = 220.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 224.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         if (uiState.favoritesEnabled) {
@@ -450,7 +475,7 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 232.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = navBarBottom + 236.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
                     item(key = "greeting") {
@@ -1234,6 +1259,7 @@ private fun HomeQuickSearchContent(
     query: String,
     favorites: List<FavoriteDisplay>,
     meals: List<AnalysisHistoryEntity>,
+    bottomPadding: androidx.compose.ui.unit.Dp,
     onFavoriteClick: (FavoriteDisplay) -> Unit,
     onMealClick: (Long) -> Unit,
 ) {
@@ -1249,7 +1275,7 @@ private fun HomeQuickSearchContent(
 
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 104.dp),
+        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = bottomPadding),
     ) {
         if (matchedFavorites.isNotEmpty()) {
             item(key = "qs_fav_header") {
@@ -1273,7 +1299,7 @@ private fun HomeQuickSearchContent(
                     },
                     trailing = {
                         Text(
-                            text = "${formatMacroValue(fav.choG)}g CHO",
+                            text = "${formatCompactGrams(fav.choG)} CHO",
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Medium,
                             color = UgoSemanticColors.cho,
@@ -1329,7 +1355,7 @@ private fun HomeQuickSearchContent(
                 ) {
                     Text(
                         text = buildHighlightedMatchText(
-                            text = meal.foodTitle.ifBlank { "Pasto" },
+                            text = formatMealDisplayTitle(meal.foodTitle),
                             query = trimmed,
                             highlightColor = MaterialTheme.colorScheme.onSurface,
                             baseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = if (trimmed.isEmpty()) 0.92f else 0.72f),
@@ -1339,7 +1365,7 @@ private fun HomeQuickSearchContent(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = "CHO ${formatMacroValue(meal.totalChoG)}g · Grassi ${formatMacroValue(meal.totalGrassiG)}g",
+                        text = "CHO ${formatCompactGrams(meal.totalChoG)} · Grassi ${formatCompactGrams(meal.totalGrassiG)}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1428,28 +1454,29 @@ private fun TodayNutritionCard(
                 }
 
                 FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                    horizontalArrangement = Arrangement.spacedBy(5.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp),
                 ) {
                     MacroPill(
                         label = "CHO",
-                        value = "${formatMacroValue(choG)}g",
+                        value = formatCompactGrams(choG),
                         containerColor = UgoSemanticColors.choContainer,
                         contentColor = UgoSemanticColors.onChoContainer,
+                        compact = true,
                     )
-                    if (proteineG > 0.0) {
-                        MacroPill(
-                            label = "Prot",
-                            value = "${formatMacroValue(proteineG)}g",
-                            containerColor = UgoSemanticColors.proteinContainer,
-                            contentColor = UgoSemanticColors.onProteinContainer,
-                        )
-                    }
+                    MacroPill(
+                        label = "Prot",
+                        value = formatCompactGrams(proteineG),
+                        containerColor = UgoSemanticColors.proteinContainer,
+                        contentColor = UgoSemanticColors.onProteinContainer,
+                        compact = true,
+                    )
                     MacroPill(
                         label = "Grassi",
-                        value = "${formatMacroValue(grassiG)}g",
+                        value = formatCompactGrams(grassiG),
                         containerColor = UgoSemanticColors.fatContainer,
                         contentColor = UgoSemanticColors.onFatContainer,
+                        compact = true,
                     )
                 }
 
@@ -1671,28 +1698,31 @@ private fun FavoriteQuickCard(
             )
             Spacer(modifier = Modifier.height(8.dp))
             FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 MacroPill(
                     label = "CHO",
-                    value = "${formatMacroValue(favorite.choG)}g",
+                    value = formatCompactGrams(favorite.choG),
                     containerColor = UgoSemanticColors.choContainer,
                     contentColor = UgoSemanticColors.onChoContainer,
+                    compact = true,
                 )
                 if (favorite.proteineG > 0.0) {
                     MacroPill(
                         label = "P",
-                        value = "${formatMacroValue(favorite.proteineG)}g",
+                        value = formatCompactGrams(favorite.proteineG),
                         containerColor = UgoSemanticColors.proteinContainer,
                         contentColor = UgoSemanticColors.onProteinContainer,
+                        compact = true,
                     )
                 }
                 MacroPill(
                     label = "G",
-                    value = "${formatMacroValue(favorite.grassiG)}g",
+                    value = formatCompactGrams(favorite.grassiG),
                     containerColor = UgoSemanticColors.fatContainer,
                     contentColor = UgoSemanticColors.onFatContainer,
+                    compact = true,
                 )
             }
             Spacer(modifier = Modifier.height(6.dp))
@@ -1851,7 +1881,7 @@ private fun RecentMealEditorialRow(
         },
     ) {
         Text(
-            text = meal.foodTitle.ifBlank { "Pasto" },
+            text = formatMealDisplayTitle(meal.foodTitle),
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface,
@@ -1859,29 +1889,32 @@ private fun RecentMealEditorialRow(
             overflow = TextOverflow.Ellipsis,
         )
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(5.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(top = 2.dp),
         ) {
             MacroPill(
                 label = "CHO",
-                value = "${formatMacroValue(meal.totalChoG)}g",
+                value = formatCompactGrams(meal.totalChoG),
                 containerColor = UgoSemanticColors.choContainer,
                 contentColor = UgoSemanticColors.onChoContainer,
+                compact = true,
             )
             if (meal.totalProteineG > 0.0) {
                 MacroPill(
                     label = "P",
-                    value = "${formatMacroValue(meal.totalProteineG)}g",
+                    value = formatCompactGrams(meal.totalProteineG),
                     containerColor = UgoSemanticColors.proteinContainer,
                     contentColor = UgoSemanticColors.onProteinContainer,
+                    compact = true,
                 )
             }
             MacroPill(
                 label = "G",
-                value = "${formatMacroValue(meal.totalGrassiG)}g",
+                value = formatCompactGrams(meal.totalGrassiG),
                 containerColor = UgoSemanticColors.fatContainer,
                 contentColor = UgoSemanticColors.onFatContainer,
+                compact = true,
             )
             if (meal.glycemicLoad > 0.0) {
                 MacroPill(
@@ -1889,16 +1922,11 @@ private fun RecentMealEditorialRow(
                     value = "%.1f".format(Locale.ITALIAN, meal.glycemicLoad),
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    compact = true,
                 )
             }
         }
     }
-}
-
-private fun formatMacroValue(value: Double): String = when {
-    value == 0.0 -> "0"
-    value >= 100.0 -> "%.0f".format(Locale.ITALIAN, value)
-    else -> "%.1f".format(Locale.ITALIAN, value)
 }
 
 private fun formatCompactRelativeTime(epochMillis: Long): String {

@@ -1,10 +1,20 @@
 package com.ugocalc.app.domain.model
 
+import com.ugocalc.app.data.remote.ai.client.putClaudeEffortAndMaxTokens
+import com.ugocalc.app.data.remote.ai.client.putGeminiThinkingConfig
+import com.ugocalc.app.data.remote.ai.client.putOpenAiEffort
 import com.ugocalc.app.domain.inference.m1.PerceptionPrompt
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.prompts.PromptTemplates
+import com.ugocalc.app.ui.components.formatCompactGrams
+import com.ugocalc.app.ui.components.formatMealDisplayTitle
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -62,5 +72,56 @@ class AiModelCatalogTest {
         assertTrue(v2Prompt.contains(note))
 
         assertEquals(PromptTemplates.VISION_PROMPT, PromptTemplates.visionPrompt(null, "   "))
+    }
+
+    @Test
+    fun `effective HTTP effort payloads serialize official provider fields`() {
+        val g3Flash = buildJsonObject { putGeminiThinkingConfig("gemini-3-flash-preview", AiEffort.OFF) }
+        assertEquals("MINIMAL", g3Flash["thinkingConfig"]?.jsonObject?.get("thinkingLevel")?.jsonPrimitive?.content)
+
+        val g3ProMed = buildJsonObject { putGeminiThinkingConfig("gemini-3-pro-preview", AiEffort.MEDIUM) }
+        assertEquals("HIGH", g3ProMed["thinkingConfig"]?.jsonObject?.get("thinkingLevel")?.jsonPrimitive?.content)
+
+        val g31ProMed = buildJsonObject { putGeminiThinkingConfig("gemini-3.1-pro-preview", AiEffort.MEDIUM) }
+        assertEquals("MEDIUM", g31ProMed["thinkingConfig"]?.jsonObject?.get("thinkingLevel")?.jsonPrimitive?.content)
+
+        val g4Max = buildJsonObject { putGeminiThinkingConfig("gemini-4-neon", AiEffort.MAX) }
+        assertEquals("XHIGH", g4Max["thinkingConfig"]?.jsonObject?.get("thinkingLevel")?.jsonPrimitive?.content)
+
+        val g25ProHigh = buildJsonObject { putGeminiThinkingConfig("gemini-2.5-pro", AiEffort.HIGH) }
+        assertEquals(24576, g25ProHigh["thinkingConfig"]?.jsonObject?.get("thinkingBudget")?.jsonPrimitive?.int)
+
+        val g25FlashOff = buildJsonObject { putGeminiThinkingConfig("gemini-2.5-flash", AiEffort.OFF) }
+        assertEquals(0, g25FlashOff["thinkingConfig"]?.jsonObject?.get("thinkingBudget")?.jsonPrimitive?.int)
+
+        val gNoThink = buildJsonObject { putGeminiThinkingConfig("gemini-3-flash-preview", AiEffort.HIGH, aiStudioThinkingOverride = false) }
+        assertNull(gNoThink["thinkingConfig"])
+
+        val openAiMax = buildJsonObject { putOpenAiEffort("gpt-5.4", AiEffort.MAX) }
+        assertEquals("xhigh", openAiMax["reasoning_effort"]?.jsonPrimitive?.content)
+
+        val openAiGpt4o = buildJsonObject { putOpenAiEffort("gpt-4o", AiEffort.HIGH) }
+        assertNull(openAiGpt4o["reasoning_effort"])
+
+        val claudeOpus46Max = buildJsonObject { putClaudeEffortAndMaxTokens("claude-opus-4-6", 16384, AiEffort.MAX) }
+        assertEquals("adaptive", claudeOpus46Max["thinking"]?.jsonObject?.get("type")?.jsonPrimitive?.content)
+        assertEquals("max", claudeOpus46Max["output_config"]?.jsonObject?.get("effort")?.jsonPrimitive?.content)
+
+        val claudeSonnet46Max = buildJsonObject { putClaudeEffortAndMaxTokens("claude-sonnet-4-6", 16384, AiEffort.MAX) }
+        assertEquals("high", claudeSonnet46Max["output_config"]?.jsonObject?.get("effort")?.jsonPrimitive?.content)
+
+        val nonClaudeBedrock = buildJsonObject { putClaudeEffortAndMaxTokens("qwen.qwen-4.5-72b", 16384, AiEffort.HIGH) }
+        assertNull(nonClaudeBedrock["thinking"])
+        assertNull(nonClaudeBedrock["output_config"])
+    }
+
+    @Test
+    fun `display formatting helpers capitalize meal titles and trim trailing zero decimals`() {
+        assertEquals("Fettine di maiale alla griglia", formatMealDisplayTitle("fettine di maiale alla griglia"))
+        assertEquals("Pasto", formatMealDisplayTitle("   "))
+        assertEquals("0g", formatCompactGrams(0.0))
+        assertEquals("21g", formatCompactGrams(21.0))
+        assertEquals("19,9g", formatCompactGrams(19.9))
+        assertEquals("124g", formatCompactGrams(124.4))
     }
 }

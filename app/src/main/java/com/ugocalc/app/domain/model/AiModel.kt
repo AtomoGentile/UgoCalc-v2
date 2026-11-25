@@ -103,14 +103,24 @@ fun AiModel.supportedEfforts(): List<AiEffort> {
             "o1" in lower || "o3" in lower || "o4" in lower -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
             else -> emptyList()
         }
-        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE -> when {
-            "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower || "4-6" in lower || "4.6" in lower ->
-                listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
-            "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
-                "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
-                "3-7" in lower || "3.7" in lower ->
-                listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
-            else -> emptyList()
+        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE -> {
+            val isClaude = "claude" in lower || "sonnet" in lower || "opus" in lower || "haiku" in lower
+            if (!isClaude) {
+                emptyList()
+            } else {
+                val isAdaptiveMax = "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower ||
+                    "4-7" in lower || "4.7" in lower || ("opus" in lower && ("4-6" in lower || "4.6" in lower))
+                val isAdaptiveNoMax = "4-6" in lower || "4.6" in lower
+                when {
+                    isAdaptiveMax -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH, AiEffort.MAX)
+                    isAdaptiveNoMax -> listOf(AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+                    "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
+                        "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
+                        "3-7" in lower || "3.7" in lower ->
+                        listOf(AiEffort.OFF, AiEffort.LOW, AiEffort.MEDIUM, AiEffort.HIGH)
+                    else -> emptyList()
+                }
+            }
         }
         AiProviderType.BEDROCK_IAM_AMAZON -> emptyList()
     }
@@ -149,47 +159,59 @@ fun AiModel.effortLabel(effort: AiEffort): String {
             }
             else -> effort.label
         }
+        AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE -> {
+            val isAdaptiveMax = "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower ||
+                "4-7" in lower || "4.7" in lower || ("opus" in lower && ("4-6" in lower || "4.6" in lower))
+            if (effort == AiEffort.MAX && !isAdaptiveMax) "High" else effort.label
+        }
         else -> effort.label
     }
 }
 
-/** Descrizione tecnica fedele al parametro realmente inviato all'API per questo modello. */
-fun AiModel.effortDescription(effort: AiEffort): String {
+/** Sintesi compatta del parametro API realmente inviato per questo modello (usata nel riepilogo multi-modello). */
+fun AiModel.apiEffortSummary(requested: AiEffort): String {
+    val resolved = effectiveEffort(requested) ?: return "Standard (no thinking)"
     val lower = id.lowercase()
-    val realLabel = effortLabel(effort)
+    val realLabel = effortLabel(resolved)
     return when (provider) {
         AiProviderType.GEMINI, AiProviderType.VERTEX_AI -> when {
-            "gemini-4" in lower || "gemini-3" in lower ->
-                "thinkingLevel: ${realLabel.lowercase()} · ${effort.description}"
+            "gemini-4" in lower || "gemini-3" in lower -> "thinkingLevel: ${realLabel.uppercase()}"
             "2.5" in lower -> {
-                val budget = when (effort) {
+                val budget = when (resolved) {
                     AiEffort.OFF -> if ("pro" in lower) 1024 else 0
                     AiEffort.LOW -> 1024
                     AiEffort.MEDIUM -> 8192
                     AiEffort.HIGH, AiEffort.MAX -> 24576
                 }
-                if (budget == 0) "thinkingBudget: 0 (disattivato · immediato)"
-                else "thinkingBudget: $budget token · ${effort.description}"
+                if (budget == 0) "thinkingBudget: 0 (Off)" else "thinkingBudget: $budget"
             }
-            else -> effort.description
+            thinkingSupported == true -> "thinkingLevel: ${realLabel.uppercase()}"
+            else -> "Standard (no thinking)"
         }
         AiProviderType.OPENAI_API, AiProviderType.BEDROCK_GPT, AiProviderType.BEDROCK_IAM_GPT ->
-            "reasoning_effort: ${realLabel.lowercase()} · ${effort.description}"
+            "reasoning_effort: ${realLabel.lowercase()}"
         AiProviderType.ANTHROPIC, AiProviderType.BEDROCK_CLAUDE, AiProviderType.BEDROCK_IAM_CLAUDE ->
-            if ("5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower || "4-6" in lower || "4.6" in lower) {
-                "adaptive effort: ${realLabel.lowercase()} · ${effort.description}"
+            if ("5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower ||
+                "4-7" in lower || "4.7" in lower || "4-6" in lower || "4.6" in lower
+            ) {
+                "output_config.effort: ${realLabel.lowercase()}"
             } else {
-                val budget = when (effort) {
+                val budget = when (resolved) {
                     AiEffort.OFF -> 0
                     AiEffort.LOW -> 1024
                     AiEffort.MEDIUM -> 4096
                     AiEffort.HIGH, AiEffort.MAX -> 16384
                 }
-                if (budget == 0) "thinking disattivato · risposta immediata"
-                else "thinking budget: $budget token · ${effort.description}"
+                if (budget == 0) "thinking: Off" else "budget_tokens: $budget"
             }
-        else -> effort.description
+        else -> "Standard"
     }
+}
+
+/** Descrizione tecnica fedele al parametro realmente inviato all'API per questo modello. */
+fun AiModel.effortDescription(effort: AiEffort): String {
+    val summary = apiEffortSummary(effort)
+    return "$summary · ${effort.description}"
 }
 
 /** Adatta l'effort scelto dall'utente al livello più vicino realmente supportato dal modello. */

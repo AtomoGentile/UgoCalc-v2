@@ -40,6 +40,17 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.6.2",
+            categories = listOf("Aggiornamenti In-App", "Effort Effettivi", "Spazi & Coerenza UI"),
+            highlights = listOf(
+                "Download e installazione aggiornamenti direttamente in app: barra di progresso live in MB/%, annulla/riprova, verifica integrità APK e avvio guidato dell'installer Android (sia dal popup iniziale sia da Impostazioni > Software e aggiornamenti).",
+                "Effort AI verificati end-to-end: enum ufficiali Proto3 maiuscoli (MINIMAL/LOW/MEDIUM/HIGH/XHIGH) per Gemini 3/4, protezione modelli Bedrock non-Claude, auto-sync silenzioso dei flag thinking da Google AI Studio per le chiavi già salvate e riepilogo trasparente del parametro API reale per ogni modello selezionato.",
+                "Corretto: sovrapposizioni del footer Impostazioni e dei pasti in Home dietro la barra a pillola grazie allo scrim sfumato e al padding dinamico della navigation bar su tutte le schermate.",
+                "Corretto: formattazione unificata di titoli pasto (iniziale maiuscola) e pillole macro compatte (CHO/P/G/GL senza zeri superflui e senza andare a capo), top bar coerenti su tutte e 4 le schede e testi corretti in Impostazioni (\"1 attivo\").",
+                "Corretto in CameraX Studio: altezza uniforme di tutte le pillole inferiori (Zoom, Nota, Scala, Pre-pasto) e posizionamento pulito della Nota AI nel dock inferiore senza collisioni con la telemetria e la livella.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.6.1",
             categories = listOf("Chat → Prompt AI", "Effort Reali AI Studio", "Pillola & Animazioni"),
             highlights = listOf(

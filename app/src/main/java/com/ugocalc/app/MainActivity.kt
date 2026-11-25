@@ -59,6 +59,7 @@ class MainActivity : AppCompatActivity() {
             val settings by appViewModel.settings.collectAsState()
             val showWhatsNew by appViewModel.showWhatsNew.collectAsState()
             val appUpdateStatus by appViewModel.appUpdateStatus.collectAsState()
+            val apkDownloadState by appViewModel.apkDownloadState.collectAsState()
 
             val isLoggedIn by authRepository.isLoggedInFlow.collectAsState(initial = null)
             val awsEnabled = awsBaseUrl.isNotBlank()
@@ -119,6 +120,7 @@ class MainActivity : AppCompatActivity() {
                         navController = navController,
                         startDestination = startDestination,
                         isCognitoAuthenticated = isLoggedIn == true,
+                        hasUpdateAvailable = appUpdateStatus != null,
                         pendingInviteToken = pendingInviteToken,
                         onInviteTokenConsumed = { pendingInviteToken = null },
                         onCompleteOnboarding = appViewModel::completeOnboarding,
@@ -126,7 +128,14 @@ class MainActivity : AppCompatActivity() {
                     )
 
                     appUpdateStatus?.let { status ->
-                        AppUpdateDialog(status = status, onDismiss = { appViewModel.dismissAppUpdate() })
+                        AppUpdateDialog(
+                            status = status,
+                            downloadState = apkDownloadState,
+                            onStartDownload = { appViewModel.startApkDownload(status) },
+                            onCancelDownload = { appViewModel.cancelApkDownload() },
+                            onLaunchInstall = { ctx, file -> appViewModel.launchApkInstall(ctx, file) },
+                            onDismiss = { appViewModel.dismissAppUpdate() },
+                        )
                     }
                     if (appUpdateStatus?.mandatory != true) {
                         if (settings.hasCompletedOnboarding && !settings.hasSeenDataDisclaimer) {

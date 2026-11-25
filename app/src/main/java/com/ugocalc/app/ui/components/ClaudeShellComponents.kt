@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -236,7 +237,8 @@ fun EditorialTopBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = 16.dp, vertical = 10.dp)
+            .defaultMinSize(minHeight = 42.dp),
     ) {
         Box(modifier = Modifier.align(Alignment.CenterStart)) {
             leading()
@@ -246,6 +248,85 @@ fun EditorialTopBar(
         }
         Box(modifier = Modifier.align(Alignment.CenterEnd)) {
             trailing()
+        }
+    }
+}
+
+/**
+ * Pillola informativa o cliccabile coerente per la fascia superiore (versione app, conteggio alimenti, ecc.).
+ */
+@Composable
+fun FloatingTopBarPill(
+    text: String,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    highlight: Boolean = false,
+) {
+    val isDark = isDarkSurfaceTheme()
+    val containerColor = when {
+        highlight -> MaterialTheme.colorScheme.primaryContainer
+        isDark -> MaterialTheme.colorScheme.surfaceContainerLow
+        else -> MaterialTheme.colorScheme.surfaceContainerLowest
+    }
+    val contentColor = if (highlight) {
+        MaterialTheme.colorScheme.onPrimaryContainer
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val borderColor = if (highlight) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+    } else {
+        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
+    }
+
+    if (onClick != null) {
+        val interaction = remember { MutableInteractionSource() }
+        Surface(
+            onClick = onClick,
+            interactionSource = interaction,
+            modifier = modifier
+                .height(36.dp)
+                .animatedPressScale(interaction, pressedScale = 0.94f),
+            shape = RoundedCornerShape(50),
+            color = containerColor,
+            contentColor = contentColor,
+            border = BorderStroke(0.75.dp, borderColor),
+            shadowElevation = if (isDark) 0.dp else 1.5.dp,
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 13.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (highlight) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    } else {
+        Surface(
+            modifier = modifier.height(36.dp),
+            shape = RoundedCornerShape(50),
+            color = containerColor,
+            contentColor = contentColor,
+            border = BorderStroke(0.75.dp, borderColor),
+            shadowElevation = if (isDark) 0.dp else 1.5.dp,
+        ) {
+            Box(
+                modifier = Modifier.padding(horizontal = 13.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (highlight) FontWeight.SemiBold else FontWeight.Medium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
         }
     }
 }

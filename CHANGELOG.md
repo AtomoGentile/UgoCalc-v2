@@ -2,6 +2,18 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.6.2] - 2026-11-25
+
+### Fixed & Improved
+- **In-App Updates & APK Download/Install**: Added `ApkUpdateDownloader` with real-time progress bar, cancel/retry, ZIP/APK integrity verification, and direct Android installer launch via `FileProvider` + `REQUEST_INSTALL_PACKAGES` inside both `AppUpdateDialog` and `Software e aggiornamenti` (with notification dot on Settings tab and GitHub fallback). Fixed `GitHubReleaseClient` to use `@Named("no_auth")` OkHttp client and expose APK file size + clear rate-limit errors.
+- **Verified Effective AI Efforts**: Standardized Gemini 3/4 `thinkingLevel` payloads to official Proto3 uppercase (`MINIMAL`, `LOW`, `MEDIUM`, `HIGH`, `XHIGH`), guarded Bedrock Claude effort serialization against non-Claude models, capped Claude Sonnet 4.6 adaptive effort safely at `high` (keeping `max` for Opus 4.6 / Claude 4.7+), added pagination and silent startup auto-sync of Google AI Studio `thinking` capabilities for existing Gemini keys, and added per-model real API parameter breakdown in `ModelEffortBottomSheet` when multiple models are active.
+- **UI Formatting, Spacing & Consistency**:
+  - Added smooth vertical fade scrims behind the floating pill bottom bar and `HomeChatComposerCard`, and dynamic `WindowInsets.navigationBars` scroll clearance across Home, History, Food Hub, and Settings (eliminating overlap of the Settings footer and peeking meals behind the Home composer).
+  - Unified top bar layout and pill styling across all 4 main tabs (`Home`, `Cronologia`, `Alimenti`, `Impostazioni`).
+  - Added `formatCompactGrams` & `formatMealDisplayTitle` with compact `MacroPill` mode so meal titles are capitalized and `CHO / P / G / GL` stay crisp and consistent across Home, History, and Food Search; aligned `TodayNutritionCard` to display `CHO / Prot / Grassi`.
+  - Fixed Settings copy bugs (`"1 attivo"` singular, removed duplicate Effort label and duplicate `"backup"` subtitle).
+  - Fixed `CameraXStudioView` bottom pill height alignment (`36dp` uniform height across `Zoom`, `Nota`, `Scala`, `Pre-pasto`) and moved `Nota AI` into the bottom dock with zero collision against the top telemetry HUD and spirit level.
+
 ## [4.6.1] - 2026-11-25
 
 ### Changed

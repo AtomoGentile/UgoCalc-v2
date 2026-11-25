@@ -57,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -151,6 +152,7 @@ fun UgoCalcNavHost(
     navController: NavHostController,
     startDestination: String = Routes.HOME,
     isCognitoAuthenticated: Boolean = false,
+    hasUpdateAvailable: Boolean = false,
     pendingInviteToken: String? = null,
     onInviteTokenConsumed: () -> Unit = {},
     onCompleteOnboarding: () -> Unit = {},
@@ -474,6 +476,7 @@ fun UgoCalcNavHost(
                     onOpenCostManagement = { navController.navigate(Routes.SETTINGS_COST_MANAGEMENT) },
                     onOpenBiasEvolution = { navController.navigate(Routes.BIAS_EVOLUTION) },
                     onOpenGlycemicProfile = { navController.navigate(Routes.GLYCEMIC_PROFILE_SETTINGS) },
+                    hasUpdateAvailable = hasUpdateAvailable,
                     showBackButton = false,
                 )
             }
@@ -569,6 +572,7 @@ fun UgoCalcNavHost(
             UgoBottomNavigationBar(
                 currentRoute = currentRoute,
                 onSelectRoute = navigateTopLevel,
+                badgeRoutes = if (hasUpdateAvailable) setOf(Routes.SETTINGS) else emptySet(),
             )
         }
     }
@@ -605,6 +609,7 @@ private fun UgoBottomNavigationBar(
     } else {
         MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
     }
+    val scrimSurface = MaterialTheme.colorScheme.surface
 
     fun indexForX(x: Float): Int {
         val count = TOP_LEVEL_DESTINATIONS.size
@@ -616,6 +621,14 @@ private fun UgoBottomNavigationBar(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .background(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.35f to scrimSurface.copy(alpha = 0.86f),
+                    0.75f to scrimSurface.copy(alpha = 0.97f),
+                    1f to scrimSurface,
+                ),
+            )
             .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter,
     ) {

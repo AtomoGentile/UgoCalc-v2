@@ -265,9 +265,9 @@ private fun selectPreferredTextBlock(textBlocks: List<String>): String {
 /** Una singola immagine allegata a una chiamata AI (già codificata in base64). */
 data class ImagePart(val base64: String, val mimeType: String)
 
-private fun JsonObjectBuilder.putOpenAiEffort(modelId: String, effort: AiEffort) {
+internal fun resolveOpenAiEffortValue(modelId: String, effort: AiEffort): String? {
     val lower = modelId.lowercase()
-    val value = when {
+    return when {
         "gpt-5.2" in lower || "gpt-5.3" in lower || "gpt-5.4" in lower || "gpt-5-pro" in lower || "o3-pro" in lower -> when (effort) {
             AiEffort.OFF -> "none"
             AiEffort.LOW -> "low"
@@ -288,14 +288,25 @@ private fun JsonObjectBuilder.putOpenAiEffort(modelId: String, effort: AiEffort)
         }
         else -> null
     }
+}
+
+internal fun JsonObjectBuilder.putOpenAiEffort(modelId: String, effort: AiEffort) {
+    val value = resolveOpenAiEffortValue(modelId, effort)
     if (value != null) {
         put("reasoning_effort", value)
     }
 }
 
-private fun JsonObjectBuilder.putClaudeEffortAndMaxTokens(modelId: String, baseMaxTokens: Int, effort: AiEffort) {
+internal fun JsonObjectBuilder.putClaudeEffortAndMaxTokens(modelId: String, baseMaxTokens: Int, effort: AiEffort) {
     val lower = modelId.lowercase()
-    val isAdaptive = "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower || "4-6" in lower || "4.6" in lower
+    val isClaude = "claude" in lower || "sonnet" in lower || "opus" in lower || "haiku" in lower
+    if (!isClaude) {
+        put("max_tokens", baseMaxTokens)
+        return
+    }
+    val isAdaptiveMax = "5-5" in lower || "5.5" in lower || "5-2" in lower || "5.2" in lower ||
+        "4-7" in lower || "4.7" in lower || ("opus" in lower && ("4-6" in lower || "4.6" in lower))
+    val isAdaptive = isAdaptiveMax || "4-6" in lower || "4.6" in lower
     val supportsThinking = isAdaptive || "4-5" in lower || "4.5" in lower || "4-1" in lower || "4.1" in lower ||
         "4-0" in lower || "sonnet-4" in lower || "opus-4" in lower || "haiku-4" in lower ||
         "3-7" in lower || "3.7" in lower
@@ -310,7 +321,7 @@ private fun JsonObjectBuilder.putClaudeEffortAndMaxTokens(modelId: String, baseM
                         AiEffort.OFF, AiEffort.LOW -> "low"
                         AiEffort.MEDIUM -> "medium"
                         AiEffort.HIGH -> "high"
-                        AiEffort.MAX -> "max"
+                        AiEffort.MAX -> if (isAdaptiveMax) "max" else "high"
                     },
                 )
             }
@@ -332,30 +343,39 @@ private fun JsonObjectBuilder.putClaudeEffortAndMaxTokens(modelId: String, baseM
     }
 }
 
-private fun JsonObjectBuilder.putGeminiThinkingConfig(modelId: String, effort: AiEffort) {
+internal fun JsonObjectBuilder.putGeminiThinkingConfig(
+    modelId: String,
+    effort: AiEffort,
+    aiStudioThinkingOverride: Boolean? = null,
+) {
     val lower = modelId.lowercase()
-    val aiStudioThinking = com.ugocalc.app.domain.model.AiModelCatalog.ALL
-        .firstOrNull { it.id == modelId && (it.provider == com.ugocalc.app.domain.model.AiProviderType.GEMINI || it.provider == com.ugocalc.app.domain.model.AiProviderType.VERTEX_AI) }
+    val aiStudioThinking = aiStudioThinkingOverride ?: com.ugocalc.app.domain.model.AiModelCatalog.ALL
+        .firstOrNull {
+            it.id == modelId && (
+                it.provider == com.ugocalc.app.domain.model.AiProviderType.GEMINI ||
+                    it.provider == com.ugocalc.app.domain.model.AiProviderType.VERTEX_AI
+                )
+        }
         ?.thinkingSupported
     if (aiStudioThinking == false) return
 
     when {
         "gemini-4" in lower -> {
             val level = when (effort) {
-                AiEffort.OFF, AiEffort.LOW -> "low"
-                AiEffort.MEDIUM -> "medium"
-                AiEffort.HIGH -> "high"
-                AiEffort.MAX -> "xhigh"
+                AiEffort.OFF, AiEffort.LOW -> "LOW"
+                AiEffort.MEDIUM -> "MEDIUM"
+                AiEffort.HIGH -> "HIGH"
+                AiEffort.MAX -> "XHIGH"
             }
             putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
         }
         "gemini-3" in lower -> {
             val isLegacy3Pro = "pro" in lower && "3.1" !in lower && "3-1" !in lower && "3.5" !in lower
             val level = when (effort) {
-                AiEffort.OFF -> if ("pro" in lower) "low" else "minimal"
-                AiEffort.LOW -> "low"
-                AiEffort.MEDIUM -> if (isLegacy3Pro) "high" else "medium"
-                AiEffort.HIGH, AiEffort.MAX -> "high"
+                AiEffort.OFF -> if ("pro" in lower) "LOW" else "MINIMAL"
+                AiEffort.LOW -> "LOW"
+                AiEffort.MEDIUM -> if (isLegacy3Pro) "HIGH" else "MEDIUM"
+                AiEffort.HIGH, AiEffort.MAX -> "HIGH"
             }
             putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
         }
@@ -370,9 +390,9 @@ private fun JsonObjectBuilder.putGeminiThinkingConfig(modelId: String, effort: A
         }
         aiStudioThinking == true -> {
             val level = when (effort) {
-                AiEffort.OFF, AiEffort.LOW -> "low"
-                AiEffort.MEDIUM -> "medium"
-                AiEffort.HIGH, AiEffort.MAX -> "high"
+                AiEffort.OFF, AiEffort.LOW -> "LOW"
+                AiEffort.MEDIUM -> "MEDIUM"
+                AiEffort.HIGH, AiEffort.MAX -> "HIGH"
             }
             putJsonObject("thinkingConfig") { put("thinkingLevel", level) }
         }

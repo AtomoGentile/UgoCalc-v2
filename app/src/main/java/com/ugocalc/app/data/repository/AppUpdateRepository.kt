@@ -13,7 +13,13 @@ data class AppUpdateStatus(
     val changelog: String,
     val apkUrl: String,
     val mandatory: Boolean,
-)
+    val releasePageUrl: String = apkUrl,
+    val apkSizeBytes: Long? = null,
+) {
+    /** True se [apkUrl] punta direttamente a un pacchetto `.apk` scaricabile in-app. */
+    val hasDirectApkDownload: Boolean
+        get() = apkUrl.isNotBlank() && apkUrl.substringBefore("?").endsWith(".apk", ignoreCase = true)
+}
 
 sealed interface AppUpdateCheckResult {
     data class UpdateAvailable(val status: AppUpdateStatus) : AppUpdateCheckResult
@@ -54,6 +60,8 @@ class AppUpdateRepository @Inject constructor(
                             changelog = release.body,
                             apkUrl = release.apkDownloadUrl ?: release.htmlUrl,
                             mandatory = false,
+                            releasePageUrl = release.htmlUrl,
+                            apkSizeBytes = release.apkSizeBytes,
                         ),
                     )
                 } else {

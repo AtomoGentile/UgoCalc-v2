@@ -8,6 +8,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -18,9 +19,12 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -87,6 +91,9 @@ import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.UgoSectionHeader
 import com.ugocalc.app.ui.components.buildHighlightedMatchText
+import com.ugocalc.app.ui.components.formatCompactGrams
+import com.ugocalc.app.ui.components.formatMealDisplayTitle
+import com.ugocalc.app.ui.components.isDarkSurfaceTheme
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -132,6 +139,8 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         groupHistoryByDay(filteredHistory)
     }
+    val navBarBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val isDark = isDarkSurfaceTheme()
 
     EditorialCanvasShell(
         topBar = {
@@ -162,6 +171,27 @@ fun HistoryScreen(
                                     contentDescription = "Indietro",
                                     onClick = onBack,
                                 )
+                            } else {
+                                Surface(
+                                    modifier = Modifier.size(42.dp),
+                                    shape = CircleShape,
+                                    color = if (isDark) {
+                                        MaterialTheme.colorScheme.surfaceContainerLow
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceContainerLowest
+                                    },
+                                    border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                                    shadowElevation = if (isDark) 0.dp else 2.dp,
+                                ) {
+                                    Box(contentAlignment = Alignment.Center) {
+                                        Icon(
+                                            imageVector = Icons.Default.History,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                            modifier = Modifier.size(19.dp),
+                                        )
+                                    }
+                                }
                             }
                         },
                         trailing = {
@@ -201,7 +231,7 @@ fun HistoryScreen(
 
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 112.dp),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = navBarBottom + 108.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             if (!isSearchActive && searchQuery.isEmpty()) {
@@ -498,16 +528,17 @@ private fun HistoryEntryRow(
             }
         },
     ) {
+        val displayTitle = formatMealDisplayTitle(entry.foodTitle)
         Text(
             text = if (searchQuery.isNotBlank()) {
                 buildHighlightedMatchText(
-                    text = entry.foodTitle,
+                    text = displayTitle,
                     query = searchQuery,
                     highlightColor = MaterialTheme.colorScheme.onSurface,
                     baseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
                 )
             } else {
-                androidx.compose.ui.text.AnnotatedString(entry.foodTitle)
+                androidx.compose.ui.text.AnnotatedString(displayTitle)
             },
             style = MaterialTheme.typography.bodyLarge,
             fontWeight = if (searchQuery.isNotBlank()) FontWeight.Normal else FontWeight.SemiBold,
@@ -517,29 +548,32 @@ private fun HistoryEntryRow(
         )
 
         FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.padding(top = 3.dp),
         ) {
             MacroPill(
                 label = "CHO",
-                value = "${"%.1f".format(entry.totalChoG)} g",
+                value = formatCompactGrams(entry.totalChoG),
                 containerColor = UgoSemanticColors.choContainer,
                 contentColor = UgoSemanticColors.onChoContainer,
+                compact = true,
             )
             if (entry.totalProteineG > 0.0) {
                 MacroPill(
                     label = "P",
-                    value = "${"%.1f".format(entry.totalProteineG)} g",
+                    value = formatCompactGrams(entry.totalProteineG),
                     containerColor = UgoSemanticColors.proteinContainer,
                     contentColor = UgoSemanticColors.onProteinContainer,
+                    compact = true,
                 )
             }
             MacroPill(
                 label = "G",
-                value = "${"%.1f".format(entry.totalGrassiG)} g",
+                value = formatCompactGrams(entry.totalGrassiG),
                 containerColor = UgoSemanticColors.fatContainer,
                 contentColor = UgoSemanticColors.onFatContainer,
+                compact = true,
             )
             if (entry.glycemicLoad > 0.0) {
                 MacroPill(
@@ -547,6 +581,7 @@ private fun HistoryEntryRow(
                     value = "%.1f".format(Locale.ITALIAN, entry.glycemicLoad),
                     containerColor = MaterialTheme.colorScheme.surfaceContainer,
                     contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    compact = true,
                 )
             }
         }

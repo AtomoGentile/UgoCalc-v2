@@ -702,18 +702,7 @@ class SettingsViewModel @Inject constructor(
         setProviderTestState(AiProviderType.GEMINI, ProviderTestState.Testing)
         try {
             val (ids, thinkingCaps) = withContext(Dispatchers.IO) {
-                val request = Request.Builder()
-                    .url("https://generativelanguage.googleapis.com/v1beta/models?pageSize=100")
-                    .header("x-goog-api-key", apiKey)
-                    .get()
-                    .build()
-                httpClient.newCall(request).execute().use { response ->
-                    val body = response.body?.string().orEmpty()
-                    if (!response.isSuccessful) {
-                        throw Exception(formatProviderHttpError("Gemini", response.code, body))
-                    }
-                    parseGeminiModelsFromAiStudio(body)
-                }
+                fetchAllGeminiModelsFromAiStudio(apiKey)
             }
             if (ids.isEmpty()) throw Exception("Nessun modello Gemini compatibile trovato per questa chiave")
             settingsRepository.setGeminiAvailableModels(ids)
@@ -735,14 +724,47 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    private fun fetchAllGeminiModelsFromAiStudio(apiKey: String): Pair<List<String>, Map<String, Boolean>> {
+        val allIds = mutableListOf<String>()
+        val allThinkingCaps = linkedMapOf<String, Boolean>()
+        var pageToken: String? = null
+        var pages = 0
+        do {
+            val url = buildString {
+                append("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200")
+                if (!pageToken.isNullOrBlank()) {
+                    append("&pageToken=")
+                    append(java.net.URLEncoder.encode(pageToken, "UTF-8"))
+                }
+            }
+            val request = Request.Builder()
+                .url(url)
+                .header("x-goog-api-key", apiKey)
+                .get()
+                .build()
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw Exception(formatProviderHttpError("Gemini", response.code, body))
+                }
+                val (ids, caps, nextToken) = parseGeminiModelsPageFromAiStudio(body)
+                allIds += ids
+                allThinkingCaps.putAll(caps)
+                pageToken = nextToken
+            }
+            pages++
+        } while (!pageToken.isNullOrBlank() && pages < 5)
+        return allIds.distinct() to allThinkingCaps
+    }
+
     /**
-     * Estrae dalla risposta ufficiale di Google AI Studio (`/v1beta/models`) sia gli ID dei modelli
-     * compatibili con `generateContent` sia il flag reale `thinking` quando dichiarato dall'API.
+     * Estrae dalla risposta ufficiale di Google AI Studio (`/v1beta/models`) gli ID dei modelli
+     * compatibili con `generateContent`, il flag reale `thinking` e l'eventuale `nextPageToken`.
      */
-    private fun parseGeminiModelsFromAiStudio(json: String): Pair<List<String>, Map<String, Boolean>> {
+    private fun parseGeminiModelsPageFromAiStudio(json: String): Triple<List<String>, Map<String, Boolean>, String?> {
         return try {
             val root = JSONObject(json)
-            val arr = root.optJSONArray("models") ?: return emptyList<String>() to emptyMap()
+            val arr = root.optJSONArray("models") ?: return Triple(emptyList(), emptyMap(), null)
             val excludedTokens = listOf("embedding", "imagen", "veo", "tts", "aqa", "bison")
             val ids = mutableListOf<String>()
             val thinkingCaps = linkedMapOf<String, Boolean>()
@@ -762,10 +784,11 @@ class SettingsViewModel @Inject constructor(
                     }
                 }
             }
-            ids.distinct() to thinkingCaps
+            val nextPageToken = root.optString("nextPageToken").takeIf { it.isNotBlank() }
+            Triple(ids.distinct(), thinkingCaps, nextPageToken)
         } catch (e: Exception) {
             Log.e("Gemini", "Parsing modelli fallito: ${e.message}", e)
-            emptyList<String>() to emptyMap()
+            Triple(emptyList(), emptyMap(), null)
         }
     }
 
