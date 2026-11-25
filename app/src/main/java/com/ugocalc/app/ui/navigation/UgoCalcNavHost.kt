@@ -1,15 +1,26 @@
 package com.ugocalc.app.ui.navigation
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -17,14 +28,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.RestaurantMenu
 import androidx.compose.material.icons.rounded.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -33,22 +48,32 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlin.math.roundToInt
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -521,89 +546,223 @@ private fun UgoBottomNavigationBar(
     currentRoute: String?,
     onSelectRoute: (String) -> Unit,
     modifier: Modifier = Modifier,
+    badgeRoutes: Set<String> = emptySet(),
 ) {
     val haptic = LocalHapticFeedback.current
+    val density = LocalDensity.current
     val isDark = isDarkSurfaceTheme()
-    val containerColor = if (isDark) {
-        MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.94f)
-    } else {
-        MaterialTheme.colorScheme.surfaceContainerLowest.copy(alpha = 0.96f)
-    }
-    val barShape = RoundedCornerShape(28.dp)
 
-    // Barra davvero flottante in overlay trasparente: zero banda opaca dietro, larghezze fisse (zero lag).
-    Surface(
-        modifier = modifier
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 10.dp)
-            .fillMaxWidth()
-            .height(56.dp),
-        shape = barShape,
-        color = containerColor,
-        shadowElevation = 6.dp,
-        tonalElevation = 2.dp,
-        border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+    val selectedIndex = TOP_LEVEL_DESTINATIONS
+        .indexOfFirst { it.route == currentRoute }
+        .coerceAtLeast(0)
+
+    var isScrubbing by remember { mutableStateOf(false) }
+    var scrubIndex by remember { mutableIntStateOf(selectedIndex) }
+    var barWidthPx by remember { mutableIntStateOf(1) }
+
+    val displayedIndex = if (isScrubbing) scrubIndex else selectedIndex
+    val activeDestination = TOP_LEVEL_DESTINATIONS[displayedIndex]
+
+    val containerColor = MaterialTheme.colorScheme.surface
+    val pillColor = if (isDark) {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+    } else {
+        MaterialTheme.colorScheme.primary.copy(alpha = 0.10f)
+    }
+
+    fun indexForX(x: Float): Int {
+        val count = TOP_LEVEL_DESTINATIONS.size
+        if (barWidthPx <= 0) return selectedIndex
+        val slotW = barWidthPx.toFloat() / count.toFloat()
+        return (x / slotW).toInt().coerceIn(0, count - 1)
+    }
+
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.BottomCenter,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 6.dp, vertical = 5.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Barra inferiore pulita stile Claude: icone essenziali, pillola scorrevole con scrub orizzontale
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            color = containerColor,
+            shadowElevation = if (isDark) 0.dp else 4.dp,
+            tonalElevation = 0.dp,
         ) {
-            TOP_LEVEL_DESTINATIONS.forEach { destination ->
-                val selected = currentRoute == destination.route
-                val pillBg by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                    animationSpec = tween(110),
-                    label = "nav_bg_${destination.route}",
+            Column(modifier = Modifier.fillMaxWidth()) {
+                HorizontalDivider(
+                    thickness = 0.75.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
                 )
-                val fg by animateColorAsState(
-                    targetValue = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                    animationSpec = tween(110),
-                    label = "nav_fg_${destination.route}",
-                )
-                val interactionSource = remember { MutableInteractionSource() }
-                Column(
+                BoxWithConstraints(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(pillBg)
-                        .semantics {
-                            role = Role.Tab
-                            this.selected = selected
-                        }
-                        .clickable(
-                            interactionSource = interactionSource,
-                            indication = null,
-                        ) {
-                            if (!selected) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            onSelectRoute(destination.route)
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                        .height(48.dp)
+                        .onSizeChanged { barWidthPx = it.width.coerceAtLeast(1) }
+                        .pointerInput(selectedIndex) {
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    isScrubbing = true
+                                    val nextIdx = indexForX(offset.x)
+                                    scrubIndex = nextIdx
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                },
+                                onDragEnd = {
+                                    val targetRoute = TOP_LEVEL_DESTINATIONS[scrubIndex].route
+                                    isScrubbing = false
+                                    onSelectRoute(targetRoute)
+                                },
+                                onDragCancel = {
+                                    isScrubbing = false
+                                },
+                                onHorizontalDrag = { change, _ ->
+                                    change.consume()
+                                    val nextIdx = indexForX(change.position.x)
+                                    if (nextIdx != scrubIndex) {
+                                        scrubIndex = nextIdx
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    }
+                                },
+                            )
                         },
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(
-                        imageVector = destination.icon,
-                        contentDescription = destination.label,
-                        tint = fg,
-                        modifier = Modifier.size(20.dp),
+                    val slotWidth = maxWidth / TOP_LEVEL_DESTINATIONS.size
+                    val pillWidth = 58.dp
+                    val pillHeight = 40.dp
+                    val pillTargetX = slotWidth * displayedIndex + (slotWidth - pillWidth) / 2
+                    val animatedPillX by animateDpAsState(
+                        targetValue = pillTargetX,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMedium,
+                        ),
+                        label = "bottom_bar_pill_x",
                     )
-                    Text(
-                        text = destination.label,
-                        fontSize = 10.sp,
-                        lineHeight = 12.sp,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = fg,
-                        maxLines = 1,
-                        softWrap = false,
-                        overflow = TextOverflow.Ellipsis,
+
+                    // Pillola scorrevole dietro l'icona selezionata / trascinata
+                    Box(
+                        modifier = Modifier
+                            .offset(x = animatedPillX)
+                            .align(Alignment.CenterStart)
+                            .size(width = pillWidth, height = pillHeight)
+                            .clip(RoundedCornerShape(50))
+                            .background(pillColor),
                     )
+
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        TOP_LEVEL_DESTINATIONS.forEachIndexed { index, destination ->
+                            val isActive = index == displayedIndex
+                            val iconTint by animateColorAsState(
+                                targetValue = if (isActive) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+                                },
+                                animationSpec = tween(140),
+                                label = "nav_icon_${destination.route}",
+                            )
+                            val iconScale by animateFloatAsState(
+                                targetValue = if (isActive && isScrubbing) 1.12f else if (isActive) 1.04f else 1f,
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+                                label = "nav_scale_${destination.route}",
+                            )
+                            val interactionSource = remember { MutableInteractionSource() }
+
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .semantics {
+                                        role = Role.Tab
+                                        selected = currentRoute == destination.route
+                                        contentDescription = destination.label
+                                    }
+                                    .clickable(
+                                        interactionSource = interactionSource,
+                                        indication = null,
+                                    ) {
+                                        if (currentRoute != destination.route) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        }
+                                        onSelectRoute(destination.route)
+                                    },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(contentAlignment = Alignment.TopEnd) {
+                                    Icon(
+                                        imageVector = destination.icon,
+                                        contentDescription = destination.label,
+                                        tint = iconTint,
+                                        modifier = Modifier
+                                            .size(23.dp)
+                                            .graphicsLayer {
+                                                scaleX = iconScale
+                                                scaleY = iconScale
+                                            },
+                                    )
+                                    if (destination.route in badgeRoutes) {
+                                        Box(
+                                            modifier = Modifier
+                                                .offset(x = 3.dp, y = (-2).dp)
+                                                .size(7.dp)
+                                                .clip(CircleShape)
+                                                .background(MaterialTheme.colorScheme.primary),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
+            }
+        }
+
+        // Tooltip scuro flottante sopra la tab evidenziata durante lo scrub orizzontale
+        val tooltipTargetX = remember(displayedIndex, barWidthPx) {
+            val count = TOP_LEVEL_DESTINATIONS.size
+            val slotW = barWidthPx.toFloat() / count.toFloat()
+            val padPx = with(density) { 16.dp.toPx() }
+            (padPx + slotW * (displayedIndex + 0.5f) - (barWidthPx / 2f + padPx)).roundToInt()
+        }
+        val animatedTooltipOffsetX by animateFloatAsState(
+            targetValue = tooltipTargetX.toFloat(),
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMedium,
+            ),
+            label = "tooltip_x",
+        )
+
+        AnimatedVisibility(
+            visible = isScrubbing,
+            enter = fadeIn(tween(110)) + scaleIn(initialScale = 0.88f, animationSpec = tween(120)) +
+                slideInVertically(tween(120)) { it / 2 },
+            exit = fadeOut(tween(120)) + scaleOut(targetScale = 0.90f, animationSpec = tween(120)) +
+                slideOutVertically(tween(120)) { it / 3 },
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 70.dp)
+                .offset { IntOffset(animatedTooltipOffsetX.roundToInt(), 0) },
+        ) {
+            Surface(
+                shape = RoundedCornerShape(50),
+                color = MaterialTheme.colorScheme.inverseSurface,
+                contentColor = MaterialTheme.colorScheme.inverseOnSurface,
+                shadowElevation = 6.dp,
+            ) {
+                Text(
+                    text = activeDestination.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.inverseOnSurface,
+                    maxLines = 1,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 7.dp),
+                )
             }
         }
     }

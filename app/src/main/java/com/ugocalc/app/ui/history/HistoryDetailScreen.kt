@@ -47,8 +47,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
 import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.CalculatedFoodLine
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
+import com.ugocalc.app.ui.components.FloatingCircleIconButton
+import com.ugocalc.app.ui.components.FloatingSplitPillActions
 import com.ugocalc.app.ui.components.GlycemicCurveCard
 import com.ugocalc.app.ui.components.MacroMetricTile
 import com.ugocalc.app.ui.components.MacroPill
@@ -59,7 +61,6 @@ import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.UgoSectionHeader
 import com.ugocalc.app.ui.components.formatMealShareSummary
 import com.ugocalc.app.ui.components.shareText
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,64 +91,55 @@ fun HistoryDetailScreen(
     val canShare = uiState.lines.isNotEmpty() || uiState.foodTitle.isNotBlank() ||
         uiState.totalChoG > 0.0 || uiState.totalGrassiG > 0.0 || uiState.totalProteineG > 0.0
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = uiState.foodTitle.ifBlank { "Dettaglio pasto" },
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-                actions = {
-                    if (canShare) {
-                        IconButton(
-                            onClick = {
-                                val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
-                                val dateText = uiState.analyzedAtEpochMillis?.let { detailDateFormat.format(Date(it)) }
-                                val modeText = uiState.sessionMode.takeIf { it.isNotBlank() }?.let {
-                                    if (isRistorante) "Ristorante" else "Casa"
-                                }
-                                val summary = formatMealShareSummary(
-                                    title = mealTitle,
-                                    totalChoG = uiState.totalChoG,
-                                    totalGrassiG = uiState.totalGrassiG,
-                                    lines = uiState.lines,
-                                    totalProteineG = uiState.totalProteineG,
-                                    estimatedKcal = kcalEstimate,
-                                    glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad
-                                        ?: uiState.glycemicLoad.takeIf { it > 0.0 },
-                                    sessionModeLabel = modeText,
-                                    dateLabel = dateText,
-                                )
-                                shareText(context, mealTitle, summary)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Share,
-                                contentDescription = "Condividi riepilogo pasto",
-                            )
-                        }
-                    }
-                    IconButton(onClick = { showDeleteConfirm = true }) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = "Elimina analisi",
-                            tint = MaterialTheme.colorScheme.error,
-                        )
-                    }
-                },
-            )
+    EditorialDetailScaffold(
+        title = uiState.foodTitle.ifBlank { "Dettaglio pasto" },
+        onBack = onBack,
+        trailing = {
+            val onShare: () -> Unit = {
+                val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
+                val dateText = uiState.analyzedAtEpochMillis?.let { detailDateFormat.format(Date(it)) }
+                val modeText = uiState.sessionMode.takeIf { it.isNotBlank() }?.let {
+                    if (isRistorante) "Ristorante" else "Casa"
+                }
+                val summary = formatMealShareSummary(
+                    title = mealTitle,
+                    totalChoG = uiState.totalChoG,
+                    totalGrassiG = uiState.totalGrassiG,
+                    lines = uiState.lines,
+                    totalProteineG = uiState.totalProteineG,
+                    estimatedKcal = kcalEstimate,
+                    glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad
+                        ?: uiState.glycemicLoad.takeIf { it > 0.0 },
+                    sessionModeLabel = modeText,
+                    dateLabel = dateText,
+                )
+                shareText(context, mealTitle, summary)
+            }
+            if (canShare) {
+                FloatingSplitPillActions(
+                    leftIcon = Icons.Default.Share,
+                    leftDescription = "Condividi riepilogo pasto",
+                    onLeftClick = onShare,
+                    rightIcon = Icons.Default.Delete,
+                    rightDescription = "Elimina analisi",
+                    onRightClick = { showDeleteConfirm = true },
+                    rightActive = true,
+                    activeColor = MaterialTheme.colorScheme.error,
+                )
+            } else {
+                FloatingCircleIconButton(
+                    icon = Icons.Default.Delete,
+                    contentDescription = "Elimina analisi",
+                    onClick = { showDeleteConfirm = true },
+                    contentColor = MaterialTheme.colorScheme.error,
+                    size = 40.dp,
+                )
+            }
         },
-    ) { padding ->
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "hero_nutrition") {

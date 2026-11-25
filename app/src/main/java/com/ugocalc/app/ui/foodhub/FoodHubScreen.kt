@@ -19,7 +19,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.rounded.RestaurantMenu
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.TableChart
@@ -60,6 +60,9 @@ import com.ugocalc.app.domain.inference.model.SessionMode
 import com.ugocalc.app.domain.model.NormalizedFoodEntry
 import com.ugocalc.app.ui.AnalysisSessionStore
 import com.ugocalc.app.ui.components.AddComboFavoriteDialog
+import com.ugocalc.app.ui.components.EditorialCanvasShell
+import com.ugocalc.app.ui.components.EditorialSectionLabel
+import com.ugocalc.app.ui.components.EditorialTopBar
 import com.ugocalc.app.ui.components.FoodSearchPicker
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
@@ -192,8 +195,7 @@ fun FoodHubScreen(
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
+    EditorialCanvasShell(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             FoodHubHeader(
@@ -201,13 +203,12 @@ fun FoodHubScreen(
                 tableCount = uiState.tableCount,
             )
         },
-    ) { padding ->
+    ) {
         if (isLandscape) {
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
+                    .padding(horizontal = 20.dp, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
             ) {
                 Column(
@@ -217,6 +218,13 @@ fun FoodHubScreen(
                         .verticalScroll(rememberScrollState()),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
+                    Text(
+                        text = "Alimenti",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(bottom = 4.dp),
+                    )
                     FoodHubQuickAccessCard(
                         icon = Icons.Rounded.TableChart,
                         accent = MaterialTheme.colorScheme.primary,
@@ -226,7 +234,7 @@ fun FoodHubScreen(
                         modifier = Modifier.fillMaxWidth(),
                     )
                     FoodHubQuickAccessCard(
-                        icon = Icons.Rounded.MenuBook,
+                        icon = Icons.AutoMirrored.Rounded.MenuBook,
                         accent = MaterialTheme.colorScheme.secondary,
                         title = "Ricette",
                         subtitle = "${uiState.recipeCount} ${if (uiState.recipeCount == 1) "ricetta" else "ricette"}",
@@ -248,11 +256,10 @@ fun FoodHubScreen(
                         .weight(0.60f)
                         .fillMaxHeight(),
                 ) {
-                    UgoSectionHeader(
-                        title = "Cerca nel database",
-                        subtitle = "Tocca un alimento per calcolare subito i CHO",
+                    EditorialSectionLabel(
+                        title = "Database locale · per 100g",
+                        modifier = Modifier.padding(bottom = 10.dp),
                     )
-                    Spacer(modifier = Modifier.height(10.dp))
                     FoodSearchPicker(
                         onSelect = { entry ->
                             viewModel.startManualEntryWithFood(entry)
@@ -268,12 +275,19 @@ fun FoodHubScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(padding)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 20.dp),
             ) {
-                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Alimenti",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
 
-                // 3 visual quick-access cards
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 3 visual quick-access pills
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -287,7 +301,7 @@ fun FoodHubScreen(
                         modifier = Modifier.weight(1f),
                     )
                     FoodHubCompactTile(
-                        icon = Icons.Rounded.MenuBook,
+                        icon = Icons.AutoMirrored.Rounded.MenuBook,
                         accent = MaterialTheme.colorScheme.secondary,
                         title = "Ricette",
                         countLabel = "${uiState.recipeCount}",
@@ -306,12 +320,10 @@ fun FoodHubScreen(
 
                 Spacer(modifier = Modifier.height(18.dp))
 
-                UgoSectionHeader(
-                    title = "Cerca nel database",
-                    subtitle = "Valori per 100g · tocca per avviare un calcolo rapido",
+                EditorialSectionLabel(
+                    title = "Database locale · valori per 100g",
+                    modifier = Modifier.padding(bottom = 10.dp),
                 )
-
-                Spacer(modifier = Modifier.height(10.dp))
 
                 FoodSearchPicker(
                     onSelect = { entry ->
@@ -350,60 +362,46 @@ private fun FoodHubHeader(
     tableCount: Int,
 ) {
     val tablesWord = if (tableCount == 1) "tabella" else "tabelle"
-    Surface(
-        color = MaterialTheme.colorScheme.background,
-        tonalElevation = 0.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .statusBarsPadding()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
+    EditorialTopBar(
+        leading = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(MaterialTheme.colorScheme.primaryContainer),
+                        .size(34.dp)
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLowest),
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
                         imageVector = Icons.Rounded.RestaurantMenu,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                     )
                 }
-                Text(
-                    text = "Alimenti",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onBackground,
-                )
             }
-
+        },
+        trailing = {
             Surface(
                 shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f),
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                shadowElevation = 1.dp,
             ) {
                 Text(
-                    text = "$totalFoodCount alimenti in $tableCount $tablesWord",
+                    text = "$totalFoodCount alimenti · $tableCount $tablesWord",
                     style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
                 )
             }
-        }
-    }
+        },
+    )
 }
 
 @Composable

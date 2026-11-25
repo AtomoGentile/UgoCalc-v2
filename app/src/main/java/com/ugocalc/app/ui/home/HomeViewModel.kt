@@ -12,9 +12,12 @@ import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
 import com.ugocalc.app.domain.glycemic.GlycemicIndexResolver
 import com.ugocalc.app.domain.glycemic.MealTimelineInput
 import com.ugocalc.app.domain.inference.model.SessionMode
+import com.ugocalc.app.domain.model.AiEffort
 import com.ugocalc.app.domain.model.AiModel
 import com.ugocalc.app.domain.model.AiModelCatalog
+import com.ugocalc.app.domain.model.AiModelTier
 import com.ugocalc.app.domain.model.AiProviderType
+import com.ugocalc.app.domain.model.recommendedTier
 import com.ugocalc.app.domain.model.AnalysisTotals
 import com.ugocalc.app.domain.model.CalculatedFoodLine
 import com.ugocalc.app.domain.model.Confidence
@@ -69,6 +72,7 @@ data class HomeUiState(
     val todayGlycemicLoad: Double = 0.0,
     val todayGlycemicTimeline: DailyGlycemicTimeline? = null,
     val recentMeals: List<AnalysisHistoryEntity> = emptyList(),
+    val searchableMeals: List<AnalysisHistoryEntity> = emptyList(),
     val hasAnyAiKey: Boolean = false,
     val totalFoodCount: Int = 0,
     val tableCount: Int = 0,
@@ -77,6 +81,10 @@ data class HomeUiState(
     val favorites: List<FavoriteDisplay> = emptyList(),
     /** Modelli preferiti (§2.2) pronti all'uso (chiave configurata): se non vuoto, "Analizza" salta la scelta modello. */
     val preferredModels: List<AiModel> = emptyList(),
+    /** Tutti i modelli AI attualmente disponibili con chiave configurata, ordinati per tier. */
+    val availableModels: List<AiModel> = emptyList(),
+    /** Effort AI attivo, regolabile dal bottom sheet rapido in Home. */
+    val aiEffort: AiEffort = AiEffort.MEDIUM,
     /** Scelta esplicita Casa/Ristorante per la prossima analisi (piano V2 §8): mai dedotta, sempre scelta qui prima di "Analizza". */
     val sessionMode: SessionMode = SessionMode.CASA,
 )
@@ -156,7 +164,8 @@ class HomeViewModel @Inject constructor(
                 todayGrassiG = todayMeals.sumOf { it.totalGrassiG },
                 todayGlycemicLoad = totalGl,
                 todayGlycemicTimeline = timeline,
-                recentMeals = history.take(3),
+                recentMeals = history.take(4),
+                searchableMeals = history.take(60),
             )
         }
             .flowOn(Dispatchers.Default)
@@ -171,6 +180,7 @@ class HomeViewModel @Inject constructor(
                         todayGlycemicLoad = snap.todayGlycemicLoad,
                         todayGlycemicTimeline = snap.todayGlycemicTimeline,
                         recentMeals = snap.recentMeals,
+                        searchableMeals = snap.searchableMeals,
                     )
                 }
             }
@@ -241,6 +251,25 @@ class HomeViewModel @Inject constructor(
             refreshTrigger,
         ) { settings, isOnline, _, _ ->
             val hasKey = settingsRepository.hasAnyApiKeyConfigured()
+            val enabledIds = settings.enabledAnalysisModelIds
+            val available = if (!isOnline) {
+                emptyList()
+            } else {
+                AiModelCatalog.ALL
+                    .filter { model ->
+                        val isEnabled = enabledIds.isEmpty() || model.uid in enabledIds || model.id in enabledIds
+                        isEnabled && isProviderConfigured(model.provider)
+                    }
+                    .distinctBy { it.uid }
+                    .sortedBy {
+                        when (it.recommendedTier()) {
+                            AiModelTier.RECOMMENDED -> 0
+                            AiModelTier.FAST -> 1
+                            AiModelTier.ACCURATE -> 2
+                            AiModelTier.STANDARD -> 3
+                        }
+                    }
+            }
             val preferred = if (!isOnline) {
                 emptyList()
             } else {
@@ -251,16 +280,23 @@ class HomeViewModel @Inject constructor(
                     }
                     .distinctBy { it.uid }
             }
-            Triple(settings, hasKey, preferred)
+            HomeAiConfigSnapshot(
+                settings = settings,
+                hasKey = hasKey,
+                preferred = preferred,
+                available = available,
+            )
         }
             .flowOn(Dispatchers.IO)
-            .onEach { (settings, hasKey, models) ->
+            .onEach { snap ->
                 _uiState.update {
                     it.copy(
-                        hasAnyAiKey = hasKey,
-                        preferredModels = models,
-                        favoritesEnabled = settings.favoritesEnabled,
-                        sessionMode = settings.activeSessionMode,
+                        hasAnyAiKey = snap.hasKey,
+                        preferredModels = snap.preferred,
+                        availableModels = snap.available,
+                        aiEffort = snap.settings.aiEffort,
+                        favoritesEnabled = snap.settings.favoritesEnabled,
+                        sessionMode = snap.settings.activeSessionMode,
                     )
                 }
             }
@@ -296,6 +332,18 @@ class HomeViewModel @Inject constructor(
     fun setSessionMode(mode: SessionMode) {
         _uiState.update { it.copy(sessionMode = mode) }
         viewModelScope.launch { settingsRepository.setActiveSessionMode(mode) }
+    }
+
+    /** Selezione rapida del modello attivo dal bottom sheet stile Claude in Home. */
+    fun selectQuickModel(model: AiModel) {
+        _uiState.update { it.copy(preferredModels = listOf(model)) }
+        viewModelScope.launch { settingsRepository.setPreferredModelIds(setOf(model.uid)) }
+    }
+
+    /** Aggiorna l'effort AI dallo slider tattile nel bottom sheet in Home. */
+    fun setAiEffort(effort: AiEffort) {
+        _uiState.update { it.copy(aiEffort = effort) }
+        viewModelScope.launch { settingsRepository.setAiEffort(effort) }
     }
 
     /** Azzera lo stato di una eventuale analisi precedente prima di avviarne una nuova (§2.4 punto 1). */
@@ -430,6 +478,13 @@ class HomeViewModel @Inject constructor(
     }
 }
 
+private data class HomeAiConfigSnapshot(
+    val settings: com.ugocalc.app.data.local.prefs.UserSettings,
+    val hasKey: Boolean,
+    val preferred: List<AiModel>,
+    val available: List<AiModel>,
+)
+
 private data class TodayHistorySnapshot(
     val todayMealsCount: Int,
     val weekMealsCount: Int,
@@ -439,6 +494,7 @@ private data class TodayHistorySnapshot(
     val todayGlycemicLoad: Double,
     val todayGlycemicTimeline: DailyGlycemicTimeline?,
     val recentMeals: List<AnalysisHistoryEntity>,
+    val searchableMeals: List<AnalysisHistoryEntity>,
 )
 
 internal fun buildMealTimelineInput(

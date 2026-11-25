@@ -22,7 +22,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Restaurant
@@ -54,12 +54,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.glycemic.GlycemicCurveCalculator
 import com.ugocalc.app.domain.glycemic.GlycemicLoadLevel
 import com.ugocalc.app.ui.components.AnimatedMacroMetricTile
-import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.FoodSearchPicker
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.util.Locale
 
@@ -108,7 +107,7 @@ private fun ManualStepIndicator(
             modifier = Modifier.weight(1f),
         )
         Icon(
-            imageVector = Icons.Filled.ArrowForward,
+            imageVector = Icons.AutoMirrored.Rounded.ArrowForward,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(16.dp),
@@ -201,42 +200,30 @@ private fun SelectStep(
     onBack: () -> Unit,
 ) {
     val selectedCount = uiState.selected.size
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        if (selectedCount == 0) {
-                            "Aggiungi alimenti"
-                        } else if (selectedCount == 1) {
-                            "1 alimento selezionato"
-                        } else {
-                            "$selectedCount selezionati"
-                        }
-                    )
-                },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
+    EditorialDetailScaffold(
+        title = when (selectedCount) {
+            0 -> "Aggiungi alimenti"
+            1 -> "1 alimento selezionato"
+            else -> "$selectedCount selezionati"
         },
+        onBack = onBack,
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 6.dp,
-                tonalElevation = 2.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         OutlinedButton(
                             onClick = onBack,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp),
@@ -246,7 +233,7 @@ private fun SelectStep(
                         Button(
                             enabled = uiState.selected.isNotEmpty(),
                             onClick = viewModel::confirmSelection,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .weight(1.4f)
                                 .height(50.dp),
@@ -260,11 +247,11 @@ private fun SelectStep(
                 }
             }
         },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(top = 8.dp),
         ) {
             ManualStepIndicator(
                 currentStep = ManualEntryStep.SELECT,
@@ -277,7 +264,7 @@ private fun SelectStep(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
                 fillAvailableHeight = true,
             )
         }
@@ -297,32 +284,26 @@ private fun QuantityStep(
         if (uiState.skipSelectStep) onBack() else viewModel.backToSelection()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Indica le quantità") },
-                navigationIcon = { BackIconButton(handleBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    EditorialDetailScaffold(
+        title = "Indica le quantità",
+        onBack = handleBack,
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 6.dp,
-                tonalElevation = 2.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                            .padding(horizontal = 20.dp, vertical = 12.dp),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         OutlinedButton(
                             onClick = handleBack,
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .weight(1f)
                                 .height(50.dp),
@@ -332,7 +313,7 @@ private fun QuantityStep(
                         Button(
                             enabled = uiState.canProceed,
                             onClick = { if (viewModel.confirmAndProceed()) onProceed() },
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(50),
                             modifier = Modifier
                                 .weight(1.4f)
                                 .height(50.dp),
@@ -343,11 +324,11 @@ private fun QuantityStep(
                 }
             }
         },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(top = 8.dp),
         ) {
             ManualStepIndicator(
                 currentStep = ManualEntryStep.QUANTITY,

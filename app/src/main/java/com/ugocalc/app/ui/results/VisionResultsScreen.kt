@@ -60,16 +60,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.domain.model.Confidence
 import com.ugocalc.app.domain.model.ConfidenceScore
 import com.ugocalc.app.domain.model.ModelVisionOutcome
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.ConfidenceBadge
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
 import com.ugocalc.app.ui.components.LoadingOverlay
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.ModelLogoBox
 import com.ugocalc.app.ui.components.StatusBanner
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 /** Visualizzazione dei risultati del Passaggio 1, separati per modello (§2.4 punto 4). */
@@ -93,37 +92,31 @@ fun VisionResultsScreen(
         }
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Risultati analisi") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    EditorialDetailScaffold(
+        title = "Risultati analisi",
+        onBack = onBack,
         bottomBar = {
             if (!uiState.allFailed && uiState.successfulOutcomes.isNotEmpty()) {
                 Surface(
                     color = MaterialTheme.colorScheme.surface,
-                    shadowElevation = 6.dp,
-                    tonalElevation = 2.dp,
+                    tonalElevation = 0.dp,
                 ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding(),
                     ) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 10.dp),
+                                .padding(horizontal = 20.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
                         ) {
                             Button(
                                 onClick = { viewModel.receiveCho() },
                                 enabled = !uiState.isMatching,
-                                shape = RoundedCornerShape(14.dp),
+                                shape = RoundedCornerShape(50),
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp),
@@ -151,12 +144,8 @@ fun VisionResultsScreen(
                 }
             }
         },
-    ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-        ) {
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
             if (uiState.allFailed) {
                 AllModelsFailedView(
                     outcomes = uiState.outcomes.filterIsInstance<ModelVisionOutcome.Failure>(),

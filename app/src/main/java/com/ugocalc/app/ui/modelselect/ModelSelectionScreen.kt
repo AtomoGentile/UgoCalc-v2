@@ -69,14 +69,15 @@ import com.ugocalc.app.domain.model.AiModelTier
 import com.ugocalc.app.domain.model.effectiveEffort
 import com.ugocalc.app.domain.model.recommendedTier
 import com.ugocalc.app.domain.model.supportedEfforts
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
 import com.ugocalc.app.ui.components.BrandFilterRow
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
+import com.ugocalc.app.ui.components.EditorialSearchBarRow
 import com.ugocalc.app.ui.components.EmptyStateMessage
 import com.ugocalc.app.ui.components.ModelLogoBox
 import com.ugocalc.app.ui.components.StatusBanner
+import com.ugocalc.app.ui.components.TactilePillEffortSlider
 import com.ugocalc.app.ui.components.UgoCard
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 
 /** Schermata di selezione modello ed effort AI: lista guidata con badge Consigliato / Veloce / Preciso. */
@@ -141,30 +142,24 @@ fun ModelSelectionScreen(
     }
     val canProceed = selectedCount > 0 && !isSavingCredentials && !uiState.isOffline
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Modello ed Effort AI") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-            )
-        },
+    EditorialDetailScaffold(
+        title = "Modello ed Effort AI",
+        onBack = onBack,
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 6.dp,
-                tonalElevation = 2.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     Button(
                         enabled = canProceed,
                         onClick = { onNext(viewModel.confirmSelectionAndProceed()) },
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(50),
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
                             .height(52.dp),
                     ) {
                         val ctaLabel = when {
@@ -182,12 +177,11 @@ fun ModelSelectionScreen(
                 }
             }
         },
-    ) { padding ->
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp),
         ) {
             if (uiState.isRefreshing) {
                 LinearProgressIndicator(
@@ -230,25 +224,12 @@ fun ModelSelectionScreen(
                 Spacer(Modifier.height(10.dp))
 
                 if (uiState.availableModels.size > 5) {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        placeholder = { Text("Cerca modello o provider…") },
-                        leadingIcon = {
-                            Icon(imageVector = Icons.Filled.Search, contentDescription = null)
-                        },
-                        trailingIcon = if (searchQuery.isNotEmpty()) {
-                            {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(imageVector = Icons.Filled.Close, contentDescription = "Pulisci ricerca")
-                                }
-                            }
-                        } else null,
-                        singleLine = true,
-                        shape = RoundedCornerShape(14.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                    EditorialSearchBarRow(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        placeholder = "Cerca modello o provider…",
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(10.dp))
                 }
 
                 if (activeBrands.size > 1) {
@@ -380,7 +361,7 @@ fun AiEffortSelectorCard(
 
     UgoCard(
         modifier = modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(12.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -404,58 +385,20 @@ fun AiEffortSelectorCard(
                 )
             }
             Text(
-                text = activeEffort.description,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+                text = activeEffort.label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.primary,
             )
         }
-        Spacer(Modifier.height(8.dp))
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(MaterialTheme.colorScheme.surfaceContainerHigh)
-                .padding(3.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            supportedEfforts.forEach { option ->
-                val selected = activeEffort == option
-                val bg by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.primary else Color.Transparent,
-                    animationSpec = tween(120),
-                    label = "effort_bg_${option.name}",
-                )
-                val fg by animateColorAsState(
-                    targetValue = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    animationSpec = tween(120),
-                    label = "effort_fg_${option.name}",
-                )
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(9.dp))
-                        .background(bg)
-                        .clickable {
-                            if (!selected) {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                onSelectEffort(option)
-                            }
-                        }
-                        .padding(vertical = 8.dp),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        text = option.label,
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                        color = fg,
-                        maxLines = 1,
-                    )
-                }
-            }
-        }
+        Spacer(Modifier.height(10.dp))
+        TactilePillEffortSlider(
+            efforts = supportedEfforts,
+            selectedEffort = activeEffort,
+            onSelectEffort = onSelectEffort,
+            showHeaderLabel = false,
+            showDescription = true,
+        )
     }
 }
 

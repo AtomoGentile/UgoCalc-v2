@@ -7,15 +7,15 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 
 /**
- * Colori puliti abbinati alla superficie per TopAppBar moderne.
+ * Colori puliti abbinati alla cornice calda esterna (`background`) per TopAppBar editoriali.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ugoTopAppBarColors(): TopAppBarColors = TopAppBarDefaults.topAppBarColors(
-    containerColor = MaterialTheme.colorScheme.surface,
-    scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-    navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-    titleContentColor = MaterialTheme.colorScheme.onSurface,
+    containerColor = MaterialTheme.colorScheme.background,
+    scrolledContainerColor = MaterialTheme.colorScheme.background,
+    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+    titleContentColor = MaterialTheme.colorScheme.onBackground,
     actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
 )
 

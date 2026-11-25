@@ -138,52 +138,28 @@ fun FoodSearchPicker(
             .fillMaxWidth()
             .let { if (fillAvailableHeight) it.fillMaxHeight() else it },
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            OutlinedTextField(
-                value = query,
-                onValueChange = viewModel::setQuery,
-                placeholder = { Text("Cerca alimento…") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Default.Search,
-                        contentDescription = null,
-                    )
-                },
-                trailingIcon = if (query.isNotEmpty()) {
-                    {
-                        IconButton(onClick = { viewModel.setQuery("") }) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Pulisci ricerca",
-                            )
-                        }
-                    }
-                } else null,
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.weight(1f),
-            )
-            FilledTonalIconButton(
-                onClick = {
-                    newFoodName = query.trim()
-                    newFoodCho = ""
-                    newFoodProteine = ""
-                    newFoodGrassi = ""
-                    newFoodGi = ""
-                    showCreateDialog = true
-                },
-                modifier = Modifier.size(50.dp),
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
+        EditorialSearchBarRow(
+            query = query,
+            onQueryChange = viewModel::setQuery,
+            placeholder = "Cerca alimento…",
+            trailingAction = {
+                FloatingCircleIconButton(
+                    icon = Icons.Default.Add,
                     contentDescription = "Crea nuovo alimento",
+                    onClick = {
+                        newFoodName = query.trim()
+                        newFoodCho = ""
+                        newFoodProteine = ""
+                        newFoodGrassi = ""
+                        newFoodGi = ""
+                        showCreateDialog = true
+                    },
+                    size = 44.dp,
+                    iconSize = 21.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 )
-            }
-        }
+            },
+        )
 
         if (showChoFilter) {
             Spacer(modifier = Modifier.height(10.dp))
@@ -283,6 +259,7 @@ fun FoodSearchPicker(
                         items(filteredMostSearched, key = { "recent_${it.entryId}" }) { result ->
                             FoodResultRow(
                                 result = result,
+                                highlightQuery = "",
                                 onFavorite = onFavorite,
                                 showPin = true,
                                 selectionMode = selectionMode,
@@ -305,15 +282,15 @@ fun FoodSearchPicker(
                             val browseTitle = selectedCategory?.let {
                                 "${it.label} (${filteredBrowseEntries.size})"
                             } ?: "Esplora alimenti (${filteredBrowseEntries.size})"
-                            UgoSectionHeader(
+                            EditorialSectionLabel(
                                 title = browseTitle,
-                                subtitle = "Dalle tue tabelle nutrizionali",
-                                modifier = Modifier.padding(top = if (filteredMostSearched.isNotEmpty()) 8.dp else 2.dp),
+                                modifier = Modifier.padding(top = if (filteredMostSearched.isNotEmpty()) 12.dp else 4.dp, bottom = 2.dp),
                             )
                         }
                         items(filteredBrowseEntries, key = { "browse_${it.entryId}" }) { result ->
                             FoodResultRow(
                                 result = result,
+                                highlightQuery = "",
                                 onFavorite = onFavorite,
                                 showPin = false,
                                 selectionMode = selectionMode,
@@ -357,21 +334,22 @@ fun FoodSearchPicker(
             } else {
                 LazyColumn(
                     modifier = resultsModifier,
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
                     contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
                 ) {
                     item(key = "__header_search_results__") {
                         val resultsTitle = selectedCategory?.let {
                             "${it.label} (${filteredResults.size})"
                         } ?: "Risultati (${filteredResults.size})"
-                        UgoSectionHeader(
+                        EditorialSectionLabel(
                             title = resultsTitle,
-                            modifier = Modifier.padding(top = 2.dp),
+                            modifier = Modifier.padding(top = 2.dp, bottom = 4.dp),
                         )
                     }
                     items(filteredResults, key = { "search_${it.entryId}" }) { result ->
                         FoodResultRow(
                             result = result,
+                            highlightQuery = query,
                             onFavorite = onFavorite,
                             showPin = false,
                             selectionMode = selectionMode,
@@ -600,6 +578,7 @@ private fun CategoryFilterChipsRow(
 @Composable
 private fun FoodResultRow(
     result: FoodSearchResult,
+    highlightQuery: String = "",
     onFavorite: ((NormalizedFoodEntry) -> Unit)?,
     showPin: Boolean,
     selectionMode: Boolean,
@@ -608,108 +587,112 @@ private fun FoodResultRow(
     onTogglePin: () -> Unit,
 ) {
     val isDark = isDarkSurfaceTheme()
-    val containerColor = when {
-        selectionMode && selected -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.35f else 0.45f)
-        isDark -> MaterialTheme.colorScheme.surfaceContainerLow
-        else -> MaterialTheme.colorScheme.surfaceContainerLowest
-    }
-    val borderColor = if (selectionMode && selected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)
-    }
+    val isSelectedHighlight = selectionMode && selected
 
-    UgoCard(
-        onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+    Surface(
+        color = if (isSelectedHighlight) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = if (isDark) 0.30f else 0.40f)
+        } else {
+            androidx.compose.ui.graphics.Color.Transparent
+        },
         shape = RoundedCornerShape(14.dp),
-        containerColor = containerColor,
-        borderColor = borderColor,
-        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth(),
+        FramelessListRow(
+            onClick = onClick,
+            showDivider = !isSelectedHighlight,
+            leading = if (selectionMode) {
+                {
+                    Checkbox(
+                        checked = selected,
+                        onCheckedChange = null,
+                        colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+                    )
+                }
+            } else null,
+            trailing = {
+                if (showPin) {
+                    IconButton(onClick = onTogglePin, modifier = Modifier.size(34.dp)) {
+                        Icon(
+                            imageVector = if (result.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                            contentDescription = if (result.pinned) "Non fissare più" else "Fissa in cima",
+                            tint = if (result.pinned) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+                if (onFavorite != null) {
+                    IconButton(onClick = { onFavorite(result.entry) }, modifier = Modifier.size(34.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.StarBorder,
+                            contentDescription = "Aggiungi ai preferiti",
+                            tint = MaterialTheme.colorScheme.tertiary,
+                            modifier = Modifier.size(19.dp),
+                        )
+                    }
+                }
+            },
         ) {
-            if (selectionMode) {
-                Checkbox(
-                    checked = selected,
-                    onCheckedChange = null,
-                    colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.primary),
+            Text(
+                text = if (highlightQuery.isNotBlank()) {
+                    buildHighlightedMatchText(
+                        text = result.entry.nome,
+                        query = highlightQuery,
+                        highlightColor = MaterialTheme.colorScheme.onSurface,
+                        baseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                    )
+                } else {
+                    androidx.compose.ui.text.AnnotatedString(result.entry.nome)
+                },
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = if (highlightQuery.isNotBlank()) FontWeight.Normal else FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+                modifier = Modifier.padding(top = 3.dp),
+            ) {
+                MacroPill(
+                    label = "CHO",
+                    value = "${"%.1f".format(result.entry.choPer100g)}g",
+                    containerColor = UgoSemanticColors.choContainer,
+                    contentColor = UgoSemanticColors.onChoContainer,
                 )
+                if (result.entry.proteinePer100g > 0.0) {
+                    MacroPill(
+                        label = "P",
+                        value = "${"%.1f".format(result.entry.proteinePer100g)}g",
+                        containerColor = UgoSemanticColors.proteinContainer,
+                        contentColor = UgoSemanticColors.onProteinContainer,
+                    )
+                }
+                MacroPill(
+                    label = "G",
+                    value = "${"%.1f".format(result.entry.grassiPer100g)}g",
+                    containerColor = UgoSemanticColors.fatContainer,
+                    contentColor = UgoSemanticColors.onFatContainer,
+                )
+                result.entry.indiceGlicemico?.let { gi ->
+                    MacroPill(
+                        label = "IG",
+                        value = "$gi",
+                        containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
-            Column(modifier = Modifier.weight(1f)) {
+            if (result.tableDisplayName.isNotBlank()) {
                 Text(
-                    text = result.entry.nome,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 2,
+                    text = "${result.tableDisplayName} · per 100g",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(top = 2.dp),
                 )
-                Spacer(modifier = Modifier.height(6.dp))
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp),
-                ) {
-                    MacroPill(
-                        label = "CHO",
-                        value = "${"%.1f".format(result.entry.choPer100g)}g",
-                        containerColor = UgoSemanticColors.choContainer,
-                        contentColor = UgoSemanticColors.onChoContainer,
-                    )
-                    if (result.entry.proteinePer100g > 0.0) {
-                        MacroPill(
-                            label = "Prot",
-                            value = "${"%.1f".format(result.entry.proteinePer100g)}g",
-                            containerColor = UgoSemanticColors.proteinContainer,
-                            contentColor = UgoSemanticColors.onProteinContainer,
-                        )
-                    }
-                    MacroPill(
-                        label = "Grassi",
-                        value = "${"%.1f".format(result.entry.grassiPer100g)}g",
-                        containerColor = UgoSemanticColors.fatContainer,
-                        contentColor = UgoSemanticColors.onFatContainer,
-                    )
-                    result.entry.indiceGlicemico?.let { gi ->
-                        MacroPill(
-                            label = "IG",
-                            value = "$gi",
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-                if (result.tableDisplayName.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "${result.tableDisplayName} · per 100g",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            if (showPin) {
-                IconButton(onClick = onTogglePin) {
-                    Icon(
-                        imageVector = if (result.pinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
-                        contentDescription = if (result.pinned) "Non fissare più" else "Fissa in cima",
-                        tint = if (result.pinned) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            if (onFavorite != null) {
-                IconButton(onClick = { onFavorite(result.entry) }) {
-                    Icon(
-                        imageVector = Icons.Default.StarBorder,
-                        contentDescription = "Aggiungi ai preferiti",
-                        tint = MaterialTheme.colorScheme.tertiary,
-                    )
-                }
             }
         }
     }

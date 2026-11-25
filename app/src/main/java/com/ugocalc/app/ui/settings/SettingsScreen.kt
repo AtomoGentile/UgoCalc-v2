@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.outlined.AutoAwesome
 import androidx.compose.material.icons.outlined.Backup
 import androidx.compose.material.icons.outlined.BarChart
@@ -30,8 +31,8 @@ import androidx.compose.material.icons.outlined.Payments
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Science
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Security
-import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.StarOutline
 import androidx.compose.material.icons.outlined.Straighten
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -69,6 +70,10 @@ import com.ugocalc.app.BuildConfig
 import com.ugocalc.app.R
 import com.ugocalc.app.data.local.prefs.AppTheme
 import com.ugocalc.app.ui.components.BackIconButton
+import com.ugocalc.app.ui.components.EditorialCanvasShell
+import com.ugocalc.app.ui.components.EditorialSectionLabel
+import com.ugocalc.app.ui.components.EditorialTopBar
+import com.ugocalc.app.ui.components.FloatingCircleIconButton
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
 import com.ugocalc.app.ui.components.ugoTopAppBarColors
@@ -181,7 +186,7 @@ fun SettingsScreen(
                 ),
                 SettingsMenuItemData(
                     id = "glycemic_profile",
-                    icon = Icons.Outlined.ShowChart,
+                    icon = Icons.AutoMirrored.Outlined.ShowChart,
                     title = "Curva e profilo glicemico",
                     subtitle = if (settings.showGlycemicCurve) {
                         "Attiva · ${settings.toGlycemicProfile().preset.label}"
@@ -289,30 +294,54 @@ fun SettingsScreen(
         ),
     )
 
-    Scaffold(
+    EditorialCanvasShell(
         topBar = {
-            TopAppBar(
-                title = { Text("Impostazioni") },
-                navigationIcon = {
+            EditorialTopBar(
+                leading = {
                     if (showBackButton) {
-                        BackIconButton(onBack)
+                        FloatingCircleIconButton(
+                            icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                            contentDescription = "Indietro",
+                            onClick = onBack,
+                        )
                     }
                 },
-                colors = ugoTopAppBarColors(),
+                trailing = {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        shadowElevation = 1.dp,
+                    ) {
+                        Text(
+                            text = "v${BuildConfig.VERSION_NAME}",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                        )
+                    }
+                },
             )
         },
-    ) { padding ->
+    ) {
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 96.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
+            item(key = "settings_title") {
+                Text(
+                    text = "Impostazioni",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+
             mainSections.forEach { section ->
                 item(key = "section_${section.title}", contentType = "settings_section") {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        UgoSectionHeader(title = section.title)
+                        EditorialSectionLabel(title = section.title)
                         UgoCard(modifier = Modifier.fillMaxWidth()) {
                             section.items.forEachIndexed { index, item ->
                                 SettingsMenuItemRow(item = item)

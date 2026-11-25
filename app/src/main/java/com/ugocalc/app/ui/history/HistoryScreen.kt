@@ -1,7 +1,17 @@
 package com.ugocalc.app.ui.history
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,13 +23,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.FilterList
@@ -37,15 +49,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RangeSlider
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -56,6 +63,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -63,18 +71,22 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.ugocalc.app.data.local.db.entity.AnalysisHistoryEntity
 import com.ugocalc.app.domain.inference.model.SessionMode
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.DailyGlycemicTimelineCard
+import com.ugocalc.app.ui.components.EditorialCanvasShell
+import com.ugocalc.app.ui.components.EditorialSearchBarRow
+import com.ugocalc.app.ui.components.EditorialSectionLabel
+import com.ugocalc.app.ui.components.EditorialTopBar
 import com.ugocalc.app.ui.components.EmptyStateMessage
+import com.ugocalc.app.ui.components.FloatingCircleIconButton
+import com.ugocalc.app.ui.components.FloatingSplitPillActions
+import com.ugocalc.app.ui.components.FramelessListRow
 import com.ugocalc.app.ui.components.HistoryColumnChart
 import com.ugocalc.app.ui.components.HistoryLineChart
 import com.ugocalc.app.ui.components.MacroPill
 import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoConfirmDialog
 import com.ugocalc.app.ui.components.UgoSectionHeader
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
-import com.ugocalc.app.ui.theme.SpaceM
-import com.ugocalc.app.ui.theme.SpaceS
+import com.ugocalc.app.ui.components.buildHighlightedMatchText
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -85,7 +97,7 @@ private val timeFormat = SimpleDateFormat("HH:mm", Locale.ITALIAN)
 private val groupDateFormat = SimpleDateFormat("dd MMM yyyy", Locale.ITALIAN)
 private val dateOnlyFormat = SimpleDateFormat("dd/MM/yyyy", Locale.ITALY)
 
-/** Elenco delle analisi svolte, dalla più recente alla più antica (§2.3), con ricerca e filtri per data/CHO/ora. */
+/** Elenco delle analisi svolte, dalla più recente alla più antica (§2.3), con ricerca live e filtri per data/CHO/ora. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryScreen(
@@ -108,107 +120,166 @@ fun HistoryScreen(
     val searchQuery by viewModel.searchQuery.collectAsState()
 
     var showFilters by rememberSaveable { mutableStateOf(false) }
+    var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var showClearConfirm by remember { mutableStateOf(false) }
     var pendingDeleteEntry by remember { mutableStateOf<AnalysisHistoryEntity?>(null) }
+
+    BackHandler(enabled = isSearchActive) {
+        isSearchActive = false
+        viewModel.setSearchQuery("")
+    }
 
     val groupedHistory = remember(filteredHistory) {
         groupHistoryByDay(filteredHistory)
     }
 
-    Scaffold(
+    EditorialCanvasShell(
         topBar = {
-            TopAppBar(
-                title = { Text("Cronologia") },
-                navigationIcon = {
-                    if (showBackButton) {
-                        BackIconButton(onBack)
-                    }
-                },
-                colors = ugoTopAppBarColors(),
-                actions = {
-                    IconButton(onClick = { showFilters = !showFilters }) {
-                        Icon(
-                            Icons.Default.FilterList,
-                            contentDescription = "Filtri",
-                            tint = if (filters.isActive || showFilters) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        )
-                    }
-                    if (history.isNotEmpty()) {
-                        IconButton(onClick = { showClearConfirm = true }) {
-                            Icon(
-                                Icons.Default.DeleteSweep,
-                                contentDescription = "Pulisci cronologia",
-                                tint = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    }
-                },
-            )
+            AnimatedContent(
+                targetState = isSearchActive || searchQuery.isNotEmpty(),
+                transitionSpec = { fadeIn(tween(150)) togetherWith fadeOut(tween(120)) },
+                label = "history_topbar_mode",
+            ) { searching ->
+                if (searching) {
+                    EditorialSearchBarRow(
+                        query = searchQuery,
+                        onQueryChange = viewModel::setSearchQuery,
+                        placeholder = "Cerca pasto o alimento…",
+                        onBack = {
+                            isSearchActive = false
+                            viewModel.setSearchQuery("")
+                        },
+                        modifier = Modifier
+                            .statusBarsPadding()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    )
+                } else {
+                    EditorialTopBar(
+                        leading = {
+                            if (showBackButton) {
+                                FloatingCircleIconButton(
+                                    icon = Icons.AutoMirrored.Rounded.ArrowBack,
+                                    contentDescription = "Indietro",
+                                    onClick = onBack,
+                                )
+                            }
+                        },
+                        trailing = {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                if (history.isNotEmpty()) {
+                                    FloatingCircleIconButton(
+                                        icon = Icons.Default.DeleteSweep,
+                                        contentDescription = "Pulisci cronologia",
+                                        onClick = { showClearConfirm = true },
+                                        contentColor = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                                FloatingSplitPillActions(
+                                    leftIcon = Icons.Default.Search,
+                                    leftDescription = "Cerca nella cronologia",
+                                    onLeftClick = { isSearchActive = true },
+                                    rightIcon = Icons.Default.FilterList,
+                                    rightDescription = "Filtri",
+                                    onRightClick = { showFilters = !showFilters },
+                                    rightActive = filters.isActive || showFilters,
+                                )
+                            }
+                        },
+                    )
+                }
+            }
         },
-    ) { padding ->
-        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            val modeTabs: List<Pair<SessionMode?, String>> = listOf(
-                null to "Tutti",
-                SessionMode.CASA to "Casa",
-                SessionMode.RISTORANTE to "Ristorante",
-            )
-            val selectedTabIndex = modeTabs.indexOfFirst { it.first == selectedMode }.coerceAtLeast(0)
-            TabRow(
-                selectedTabIndex = selectedTabIndex,
-                containerColor = MaterialTheme.colorScheme.surface,
-            ) {
-                modeTabs.forEachIndexed { index, (mode, label) ->
-                    Tab(
-                        selected = selectedTabIndex == index,
-                        onClick = { viewModel.setSelectedMode(mode) },
-                        text = { Text(label, maxLines = 1) },
+    ) {
+        val modeTabs: List<Pair<SessionMode?, String>> = listOf(
+            null to "Tutti",
+            SessionMode.CASA to "Casa",
+            SessionMode.RISTORANTE to "Ristorante",
+        )
+
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            if (!isSearchActive && searchQuery.isEmpty()) {
+                item(key = "page_title") {
+                    Text(
+                        text = "Cronologia",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface,
                     )
                 }
             }
 
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = viewModel::setSearchQuery,
-                placeholder = { Text("Cerca pasto o alimento…") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.setSearchQuery("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "Cancella ricerca")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = SpaceM, vertical = 10.dp),
-            )
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = SpaceM, end = SpaceM, top = 4.dp, bottom = 96.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-            ) {
-                if (showFilters) {
-                    item(key = "filter_panel") {
-                        AnimatedVisibility(visible = showFilters) {
-                            HistoryFilterPanel(
-                                filters = filters,
-                                onDateFromSelected = viewModel::setDateFrom,
-                                onDateToSelected = viewModel::setDateTo,
-                                onChoRangeChange = viewModel::setChoRange,
-                                onHourRangeChange = viewModel::setHourRange,
-                                onReset = viewModel::resetFilters,
-                            )
+            item(key = "mode_segmented_bar") {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(50))
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    modeTabs.forEach { (mode, label) ->
+                        val isSelected = selectedMode == mode
+                        val pillBg by animateColorAsState(
+                            targetValue = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
+                            animationSpec = tween(150),
+                            label = "hist_mode_bg_$label",
+                        )
+                        val textColor by animateColorAsState(
+                            targetValue = if (isSelected) {
+                                MaterialTheme.colorScheme.onSurface
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                            animationSpec = tween(150),
+                            label = "hist_mode_fg_$label",
+                        )
+                        Surface(
+                            onClick = { viewModel.setSelectedMode(mode) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(50),
+                            color = pillBg,
+                            shadowElevation = if (isSelected) 1.dp else 0.dp,
+                        ) {
+                            Box(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Text(
+                                    text = label,
+                                    style = MaterialTheme.typography.labelLarge,
+                                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Medium,
+                                    color = textColor,
+                                    maxLines = 1,
+                                )
+                            }
                         }
                     }
                 }
+            }
 
+            if (showFilters) {
+                item(key = "filter_panel") {
+                    AnimatedVisibility(visible = showFilters) {
+                        HistoryFilterPanel(
+                            filters = filters,
+                            onDateFromSelected = viewModel::setDateFrom,
+                            onDateToSelected = viewModel::setDateTo,
+                            onChoRangeChange = viewModel::setChoRange,
+                            onHourRangeChange = viewModel::setHourRange,
+                            onReset = viewModel::resetFilters,
+                        )
+                    }
+                }
+            }
+
+            if (!isSearchActive && searchQuery.isEmpty()) {
                 todayTimeline?.let { timeline ->
                     item(key = "today_glycemic_timeline") {
                         DailyGlycemicTimelineCard(
@@ -266,50 +337,47 @@ fun HistoryScreen(
                         }
                     }
                 }
+            }
 
-                val hasActiveSearchOrFilters = filters.isActive || searchQuery.isNotBlank()
-                if (filteredHistory.isEmpty()) {
-                    item(key = "empty_history") {
-                        EmptyStateMessage(
-                            icon = Icons.Default.History,
-                            title = if (hasActiveSearchOrFilters) "Nessun risultato" else "Cronologia vuota",
-                            message = if (hasActiveSearchOrFilters) {
-                                "Nessuna analisi corrisponde alla ricerca o ai filtri impostati."
-                            } else {
-                                "Le analisi completate appariranno qui automaticamente."
-                            },
-                            actionLabel = if (hasActiveSearchOrFilters) "Ripristina filtri" else null,
-                            onAction = if (hasActiveSearchOrFilters) {
-                                { viewModel.clearAllFiltersAndSearch() }
-                            } else null,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 28.dp),
+            val hasActiveSearchOrFilters = filters.isActive || searchQuery.isNotBlank()
+            if (filteredHistory.isEmpty()) {
+                item(key = "empty_history") {
+                    EmptyStateMessage(
+                        icon = Icons.Default.History,
+                        title = if (hasActiveSearchOrFilters) "Nessun risultato" else "Cronologia vuota",
+                        message = if (hasActiveSearchOrFilters) {
+                            "Nessuna analisi corrisponde alla ricerca o ai filtri impostati."
+                        } else {
+                            "Le analisi completate appariranno qui automaticamente."
+                        },
+                        actionLabel = if (hasActiveSearchOrFilters) "Ripristina filtri" else null,
+                        onAction = if (hasActiveSearchOrFilters) {
+                            { viewModel.clearAllFiltersAndSearch() }
+                        } else null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 28.dp),
+                    )
+                }
+            } else {
+                groupedHistory.forEach { (dateLabel, entries) ->
+                    item(key = "header_$dateLabel") {
+                        EditorialSectionLabel(
+                            title = "$dateLabel · ${if (entries.size == 1) "1 pasto" else "${entries.size} pasti"}",
+                            modifier = Modifier.padding(top = 8.dp),
                         )
                     }
-                } else {
-                    groupedHistory.forEach { (dateLabel, entries) ->
-                        item(key = "header_$dateLabel") {
-                            UgoSectionHeader(
-                                title = dateLabel,
-                                subtitle = if (entries.size == 1) "1 pasto" else "${entries.size} pasti",
-                                modifier = Modifier.padding(top = 6.dp),
-                            )
-                        }
-                        items(entries, key = { it.id }) { entry ->
-                            HistoryEntryCard(
-                                entry = entry,
-                                isFavorite = entry.id in favoritedIds,
-                                onClick = { onOpenEntry(entry.id) },
-                                onToggleFavorite = { viewModel.toggleFavorite(entry) },
-                                onRequestDelete = { pendingDeleteEntry = entry },
-                            )
-                        }
+                    itemsIndexed(entries, key = { _, entry -> entry.id }) { index, entry ->
+                        HistoryEntryRow(
+                            entry = entry,
+                            searchQuery = searchQuery,
+                            isFavorite = entry.id in favoritedIds,
+                            showDivider = index < entries.lastIndex,
+                            onClick = { onOpenEntry(entry.id) },
+                            onToggleFavorite = { viewModel.toggleFavorite(entry) },
+                            onRequestDelete = { pendingDeleteEntry = entry },
+                        )
                     }
-                }
-
-                item(key = "bottom_spacer") {
-                    Spacer(modifier = Modifier.height(16.dp))
                 }
             }
         }
@@ -346,9 +414,11 @@ fun HistoryScreen(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun HistoryEntryCard(
+private fun HistoryEntryRow(
     entry: AnalysisHistoryEntity,
+    searchQuery: String,
     isFavorite: Boolean,
+    showDivider: Boolean,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
     onRequestDelete: () -> Unit,
@@ -358,121 +428,123 @@ private fun HistoryEntryCard(
         timeFormat.format(Date(entry.analyzedAtEpochMillis))
     }
 
-    UgoCard(
+    FramelessListRow(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
-        contentPadding = PaddingValues(14.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = entry.foodTitle,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = formattedTime,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(50),
-                        color = if (isRistorante) {
-                            MaterialTheme.colorScheme.secondaryContainer
+        showDivider = showDivider,
+        dividerStartPadding = 44.dp,
+        leading = {
+            Box(
+                modifier = Modifier
+                    .size(34.dp)
+                    .clip(CircleShape)
+                    .background(
+                        if (isRistorante) {
+                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
                         } else {
-                            MaterialTheme.colorScheme.surfaceContainerHigh
+                            MaterialTheme.colorScheme.surfaceContainerLow
                         },
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    imageVector = if (isRistorante) Icons.Default.Restaurant else Icons.Default.Home,
+                    contentDescription = if (isRistorante) "Ristorante" else "Casa",
+                    modifier = Modifier.size(16.dp),
+                    tint = if (isRistorante) {
+                        MaterialTheme.colorScheme.onSecondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+            }
+        },
+        trailing = {
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    text = formattedTime,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(
+                        onClick = onToggleFavorite,
+                        modifier = Modifier.size(32.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (isRistorante) Icons.Default.Restaurant else Icons.Default.Home,
-                                contentDescription = null,
-                                modifier = Modifier.size(12.dp),
-                                tint = if (isRistorante) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                            Text(
-                                text = if (isRistorante) "Ristorante" else "Casa",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isRistorante) {
-                                    MaterialTheme.colorScheme.onSecondaryContainer
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(10.dp))
-
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    MacroPill(
-                        label = "CHO",
-                        value = "${"%.1f".format(entry.totalChoG)} g",
-                        containerColor = UgoSemanticColors.choContainer,
-                        contentColor = UgoSemanticColors.onChoContainer,
-                    )
-                    if (entry.totalProteineG > 0.0) {
-                        MacroPill(
-                            label = "Prot",
-                            value = "${"%.1f".format(entry.totalProteineG)} g",
-                            containerColor = UgoSemanticColors.proteinContainer,
-                            contentColor = UgoSemanticColors.onProteinContainer,
+                        Icon(
+                            imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = if (isFavorite) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+                            tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            modifier = Modifier.size(18.dp),
                         )
                     }
-                    MacroPill(
-                        label = "Grassi",
-                        value = "${"%.1f".format(entry.totalGrassiG)} g",
-                        containerColor = UgoSemanticColors.fatContainer,
-                        contentColor = UgoSemanticColors.onFatContainer,
-                    )
-                    if (entry.glycemicLoad > 0.0) {
-                        MacroPill(
-                            label = "GL",
-                            value = "%.1f".format(Locale.ITALIAN, entry.glycemicLoad),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface,
+                    IconButton(
+                        onClick = onRequestDelete,
+                        modifier = Modifier.size(32.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteOutline,
+                            contentDescription = "Elimina analisi",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
+                            modifier = Modifier.size(18.dp),
                         )
                     }
                 }
             }
+        },
+    ) {
+        Text(
+            text = if (searchQuery.isNotBlank()) {
+                buildHighlightedMatchText(
+                    text = entry.foodTitle,
+                    query = searchQuery,
+                    highlightColor = MaterialTheme.colorScheme.onSurface,
+                    baseColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.72f),
+                )
+            } else {
+                androidx.compose.ui.text.AnnotatedString(entry.foodTitle)
+            },
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = if (searchQuery.isNotBlank()) FontWeight.Normal else FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onToggleFavorite) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Star else Icons.Default.StarBorder,
-                        contentDescription = if (isFavorite) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
-                        tint = if (isFavorite) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                IconButton(onClick = onRequestDelete) {
-                    Icon(
-                        imageVector = Icons.Default.DeleteOutline,
-                        contentDescription = "Elimina analisi",
-                        tint = MaterialTheme.colorScheme.error.copy(alpha = 0.85f),
-                    )
-                }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.padding(top = 3.dp),
+        ) {
+            MacroPill(
+                label = "CHO",
+                value = "${"%.1f".format(entry.totalChoG)} g",
+                containerColor = UgoSemanticColors.choContainer,
+                contentColor = UgoSemanticColors.onChoContainer,
+            )
+            if (entry.totalProteineG > 0.0) {
+                MacroPill(
+                    label = "P",
+                    value = "${"%.1f".format(entry.totalProteineG)} g",
+                    containerColor = UgoSemanticColors.proteinContainer,
+                    contentColor = UgoSemanticColors.onProteinContainer,
+                )
+            }
+            MacroPill(
+                label = "G",
+                value = "${"%.1f".format(entry.totalGrassiG)} g",
+                containerColor = UgoSemanticColors.fatContainer,
+                contentColor = UgoSemanticColors.onFatContainer,
+            )
+            if (entry.glycemicLoad > 0.0) {
+                MacroPill(
+                    label = "GL",
+                    value = "%.1f".format(Locale.ITALIAN, entry.glycemicLoad),
+                    containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
         }
     }

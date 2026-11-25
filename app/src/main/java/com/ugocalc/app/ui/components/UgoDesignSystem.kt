@@ -74,14 +74,14 @@ fun isDarkSurfaceTheme(): Boolean = MaterialTheme.colorScheme.background.luminan
 fun UgoCard(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    shape: Shape = MaterialTheme.shapes.medium,
+    shape: Shape = MaterialTheme.shapes.large,
     containerColor: Color = if (isDarkSurfaceTheme()) {
         MaterialTheme.colorScheme.surfaceContainerLow
     } else {
-        MaterialTheme.colorScheme.surfaceContainerLowest
+        MaterialTheme.colorScheme.surfaceContainerLow
     },
-    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-    elevation: Dp = 1.dp,
+    borderColor: Color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f),
+    elevation: Dp = 0.dp,
     contentPadding: PaddingValues = PaddingValues(0.dp),
     content: @Composable ColumnScope.() -> Unit,
 ) {

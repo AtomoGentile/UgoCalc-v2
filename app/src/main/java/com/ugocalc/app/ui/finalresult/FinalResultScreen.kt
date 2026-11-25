@@ -75,8 +75,10 @@ import com.ugocalc.app.domain.model.OnlineFoodResearchResult
 import com.ugocalc.app.domain.model.OnlineResearchReliability
 import com.ugocalc.app.ui.components.AnimatedMacroMetricTile
 import com.ugocalc.app.ui.components.AnimatedMetricValue
-import com.ugocalc.app.ui.components.BackIconButton
 import com.ugocalc.app.ui.components.BannerTone
+import com.ugocalc.app.ui.components.EditorialDetailScaffold
+import com.ugocalc.app.ui.components.FloatingCircleIconButton
+import com.ugocalc.app.ui.components.FloatingSplitPillActions
 import com.ugocalc.app.ui.components.FoodSearchPicker
 import com.ugocalc.app.ui.components.GlycemicCurveCard
 import com.ugocalc.app.ui.components.MacroPill
@@ -86,7 +88,6 @@ import com.ugocalc.app.ui.components.UgoCard
 import com.ugocalc.app.ui.components.UgoSectionHeader
 import com.ugocalc.app.ui.components.formatMealShareSummary
 import com.ugocalc.app.ui.components.shareText
-import com.ugocalc.app.ui.components.ugoTopAppBarColors
 import com.ugocalc.app.ui.theme.UgoSemanticColors
 import com.ugocalc.app.util.parsePositiveLocaleDoubleOrNull
 import java.util.Locale
@@ -120,62 +121,62 @@ fun FinalResultScreen(
         if (uiState.saved) onSaved()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text("Risultato") },
-                navigationIcon = { BackIconButton(onBack) },
-                colors = ugoTopAppBarColors(),
-                actions = {
-                    val shareTotals = uiState.totals
-                    if (shareTotals != null) {
-                        IconButton(
-                            onClick = {
-                                val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
-                                val summary = formatMealShareSummary(
-                                    title = mealTitle,
-                                    totalChoG = shareTotals.totalChoG,
-                                    totalGrassiG = shareTotals.totalGrassiG,
-                                    lines = shareTotals.lines,
-                                    totalProteineG = shareTotals.totalProteineG,
-                                    estimatedKcal = shareTotals.estimatedKcal.roundToInt(),
-                                    glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad,
-                                )
-                                shareText(context, mealTitle, summary)
-                            },
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Share,
-                                contentDescription = "Condividi riepilogo pasto",
-                            )
-                        }
-                    }
-                    IconButton(onClick = { viewModel.toggleFavoriteRequested() }) {
-                        Icon(
-                            imageVector = if (uiState.favoriteRequested) Icons.Filled.Star else Icons.Filled.StarBorder,
-                            contentDescription = if (uiState.favoriteRequested) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
-                            tint = if (uiState.favoriteRequested) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                },
-            )
+    EditorialDetailScaffold(
+        title = "Risultato",
+        onBack = onBack,
+        trailing = {
+            val shareTotals = uiState.totals
+            val onShare: () -> Unit = {
+                if (shareTotals != null) {
+                    val mealTitle = uiState.foodTitle.ifBlank { "Pasto UgoCalc" }
+                    val summary = formatMealShareSummary(
+                        title = mealTitle,
+                        totalChoG = shareTotals.totalChoG,
+                        totalGrassiG = shareTotals.totalGrassiG,
+                        lines = shareTotals.lines,
+                        totalProteineG = shareTotals.totalProteineG,
+                        estimatedKcal = shareTotals.estimatedKcal.roundToInt(),
+                        glycemicLoad = uiState.glycemicSimulation?.totalGlycemicLoad,
+                    )
+                    shareText(context, mealTitle, summary)
+                }
+            }
+            if (shareTotals != null) {
+                FloatingSplitPillActions(
+                    leftIcon = Icons.Filled.Share,
+                    leftDescription = "Condividi riepilogo pasto",
+                    onLeftClick = onShare,
+                    rightIcon = if (uiState.favoriteRequested) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    rightDescription = if (uiState.favoriteRequested) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+                    onRightClick = { viewModel.toggleFavoriteRequested() },
+                    rightActive = uiState.favoriteRequested,
+                    activeColor = MaterialTheme.colorScheme.tertiary,
+                )
+            } else {
+                FloatingCircleIconButton(
+                    icon = if (uiState.favoriteRequested) Icons.Filled.Star else Icons.Filled.StarBorder,
+                    contentDescription = if (uiState.favoriteRequested) "Rimuovi dai preferiti" else "Aggiungi ai preferiti",
+                    onClick = { viewModel.toggleFavoriteRequested() },
+                    contentColor = if (uiState.favoriteRequested) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
+                    size = 40.dp,
+                )
+            }
         },
         bottomBar = {
             Surface(
                 color = MaterialTheme.colorScheme.surface,
-                shadowElevation = 6.dp,
-                tonalElevation = 2.dp,
+                tonalElevation = 0.dp,
             ) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                     Button(
                         onClick = { viewModel.finish() },
                         enabled = !uiState.isFinishing,
-                        shape = RoundedCornerShape(14.dp),
+                        shape = RoundedCornerShape(50),
                         modifier = Modifier
                             .fillMaxWidth()
                             .navigationBarsPadding()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
                             .height(52.dp),
                     ) {
                         if (uiState.isFinishing) {
@@ -195,13 +196,11 @@ fun FinalResultScreen(
                 }
             }
         },
-    ) { padding ->
+    ) {
         val totals = uiState.totals
         LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item(key = "__title_field__") {
