@@ -2,6 +2,13 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.6.3] - 2026-11-25
+
+### Fixed & Changed
+- **Glycemic Curve & Diabetic Profile**: Removed the multi-meal `"Andamento glicemico"` strip from `HomeScreen` (which was also leaking when `showGlycemicCurve` was Off), gated daily glycemic timeline off for `IMPATTO_PIENO` (diabetic profile) in `HomeViewModel` and `HistoryViewModel`, and fixed `GlycemicCurveCalculator` so the `"Diabete / Impatto pieno"` preset models cumulative CHO + FPU absorption without a false spontaneous return to baseline.
+- **Cleaner Home Top**: Removed the greeting block (`Buonasera.`, date, instruction line, and `A casa` subtitle) from `HomeScreen` so the screen starts cleanly with the *Oggi* summary card (while keeping `Casa / Ristorante` in the top bar).
+- **Spacious Composer Card**: Increased vertical breathing room inside `HomeChatComposerCard` so the bottom action buttons (`+`, model chip, effort chip, Camera CTA) sit clearly lower down beneath the note input area.
+
 ## [4.6.2] - 2026-11-25
 
 ### Fixed & Improved

@@ -30,17 +30,33 @@ object GlycemicCurveCalculator {
         val choAmp: Double,
         val tFp: Double,
         val fpAmp: Double,
+        val cumulativeWithoutInsulin: Boolean = false,
     ) {
         fun choDeltaAt(tMin: Double): Double {
             if (tMin <= 0.0 || choAmp <= 0.0 || tPeak <= 0.0) return 0.0
-            val r = tMin / tPeak
-            return choAmp * r * r * exp(2.0 * (1.0 - r))
+            return if (cumulativeWithoutInsulin) {
+                // Senza insulina endogena (diabete): l'assorbimento dei CHO fa salire la glicemia
+                // in modo cumulativo verso il plateau senza rientro spontaneo alla basale.
+                val tau = (tPeak * 0.65).coerceAtLeast(15.0)
+                val x = tMin / tau
+                choAmp * (1.0 - (1.0 + x) * exp(-x))
+            } else {
+                val r = tMin / tPeak
+                choAmp * r * r * exp(2.0 * (1.0 - r))
+            }
         }
 
         fun fpDeltaAt(tMin: Double): Double {
             if (tMin <= 0.0 || fpAmp <= 0.0 || tFp <= 0.0) return 0.0
-            val r = tMin / tFp
-            return fpAmp * r * r * r * exp(3.0 * (1.0 - r))
+            return if (cumulativeWithoutInsulin) {
+                // Onda cumulativa ritardata da grassi e proteine (effetto pizza senza bolo esteso).
+                val tau = (tFp * 0.48).coerceAtLeast(45.0)
+                val x = tMin / tau
+                fpAmp * (1.0 - (1.0 + x + 0.5 * x * x) * exp(-x))
+            } else {
+                val r = tMin / tFp
+                fpAmp * r * r * r * exp(3.0 * (1.0 - r))
+            }
         }
     }
 
@@ -289,11 +305,13 @@ object GlycemicCurveCalculator {
             0.0
         }
 
+        val isCumulative = profile.preset == GlycemicProfilePreset.IMPATTO_PIENO
         return WaveParams(
             tPeak = tPeak,
             choAmp = choAmp.coerceAtLeast(0.0),
             tFp = T_FP_MINUTES,
             fpAmp = fpAmp,
+            cumulativeWithoutInsulin = isCumulative,
         )
     }
 
@@ -344,6 +362,8 @@ object GlycemicCurveCalculator {
 
         val returnToBaselineMinutes: Int? = if (deltaPeakMgDl < 1.0) {
             0
+        } else if (wave.cumulativeWithoutInsulin) {
+            null
         } else {
             ((peakTimeMinutes + 1)..CURVE_DURATION_MIN).firstOrNull { t ->
                 val g = baseline + wave.choDeltaAt(t.toDouble()) + wave.fpDeltaAt(t.toDouble())
@@ -365,6 +385,7 @@ object GlycemicCurveCalculator {
             peakTimeMinutes = peakTimeMinutes,
             targetMaxMgDl = profile.targetPostPrandialMaxMgDl,
             returnToBaselineMinutes = returnToBaselineMinutes,
+            cumulativeWithoutInsulin = wave.cumulativeWithoutInsulin,
         )
 
         return GlycemicSimulationResult(
@@ -396,12 +417,22 @@ object GlycemicCurveCalculator {
         peakTimeMinutes: Int,
         targetMaxMgDl: Double,
         returnToBaselineMinutes: Int?,
+        cumulativeWithoutInsulin: Boolean = false,
     ): String {
         if (totalChoG < 0.5 && fpuCount < 0.5) {
             return "Impatto glicemico trascurabile: curva sostanzialmente stabile intorno al valore basale."
         }
         if (totalChoG < 0.5 && fpuCount >= 0.5) {
             return "Pasto a bassissimi carboidrati con %.1f FPU: possibile lieve salita tardiva verso 2–3 ore (+${deltaPeakMgDl.roundToInt()} mg/dL).".format(fpuCount)
+        }
+
+        if (cumulativeWithoutInsulin) {
+            val parts = mutableListOf<String>()
+            parts += "Profilo diabete (senza bolo insulinico): assorbimento cumulativo stimato fino a ~${peakMgDl.roundToInt()} mg/dL (+${deltaPeakMgDl.roundToInt()} mg/dL) senza rientro spontaneo alla basale."
+            if (fpuCount >= 1.5) {
+                parts += "Quota grassi/proteine significativa (%.1f FPU): ulteriore spinta glicemica tardiva tra 2 e 4 ore.".format(fpuCount)
+            }
+            return parts.joinToString(" ")
         }
 
         val parts = mutableListOf<String>()

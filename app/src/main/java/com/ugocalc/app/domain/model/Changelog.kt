@@ -40,6 +40,15 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.6.3",
+            categories = listOf("Home Pulita", "Profilo Diabete", "Composer"),
+            highlights = listOf(
+                "Corretto andamento glicemico per diabetici: rimossa la barra \"Andamento glicemico\" dalla Home (che appariva anche con curva disattivata), disabilitata la timeline giornaliera nel preset \"Diabete / Impatto pieno\" e corretto il simulatore singolo pasto affinché senza bolo l'assorbimento CHO/FPU salga in modo cumulativo senza rientro spontaneo.",
+                "Home più pulita: rimosso il blocco iniziale con saluto (\"Buonasera.\"), data e istruzioni ridondanti.",
+                "Card di testo più ariosa: i pulsanti inferiori (+, modello, effort, fotocamera) ora sono posizionati più in basso rispetto all'area di scrittura.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.6.2",
             categories = listOf("Aggiornamenti In-App", "Effort Effettivi", "Spazi & Coerenza UI"),
             highlights = listOf(

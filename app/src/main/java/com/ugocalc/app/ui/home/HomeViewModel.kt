@@ -160,7 +160,11 @@ class HomeViewModel @Inject constructor(
             val weekCount = history.count { it.analyzedAtEpochMillis >= weekStart }
             val profile = settings.toGlycemicProfile()
             val todayInputs = todayMeals.map { meal -> buildMealTimelineInput(meal, json) }
-            val timeline = GlycemicCurveCalculator.simulateDayTimeline(todayInputs, profile)
+            val timeline = if (settings.showGlycemicCurve && profile.preset != com.ugocalc.app.domain.glycemic.GlycemicProfilePreset.IMPATTO_PIENO) {
+                GlycemicCurveCalculator.simulateDayTimeline(todayInputs, profile)
+            } else {
+                null
+            }
             val totalGl = timeline?.totalDailyGl ?: todayInputs.sumOf { it.glycemicLoad }
             TodayHistorySnapshot(
                 todayMealsCount = todayMeals.size,

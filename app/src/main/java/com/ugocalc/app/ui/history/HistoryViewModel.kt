@@ -116,6 +116,8 @@ class HistoryViewModel @Inject constructor(
         settingsRepository.settings,
     ) { allEntries, settings ->
         if (!settings.showGlycemicCurve) return@combine null
+        val profile = settings.toGlycemicProfile()
+        if (profile.preset == com.ugocalc.app.domain.glycemic.GlycemicProfilePreset.IMPATTO_PIENO) return@combine null
         val todayStart = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0)
             set(Calendar.MINUTE, 0)
@@ -125,7 +127,7 @@ class HistoryViewModel @Inject constructor(
         val todayMeals = allEntries
             .filter { it.analyzedAtEpochMillis >= todayStart }
             .map { buildMealTimelineInput(it, json) }
-        GlycemicCurveCalculator.simulateDayTimeline(todayMeals, settings.toGlycemicProfile())
+        GlycemicCurveCalculator.simulateDayTimeline(todayMeals, profile)
     }
         .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)

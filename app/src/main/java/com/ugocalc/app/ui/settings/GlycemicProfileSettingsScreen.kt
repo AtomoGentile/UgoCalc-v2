@@ -261,7 +261,7 @@ fun GlycemicProfileSettingsScreen(
                 StatusBanner(
                     icon = Icons.Outlined.Info,
                     title = "Curva senza insulina / uso educativo",
-                    subtitle = "Simula l'assorbimento del pasto (CHO reali + ritardo grassi/proteine) senza considerare boli o insulina attiva. Non sostituisce glucometro, CGM o indicazioni mediche.",
+                    subtitle = "Con il preset \"Diabete / Impatto pieno\" la curva mostra l'assorbimento cumulativo senza rientro spontaneo (in assenza di bolo). La timeline giornaliera resta comunque nascosta con questo preset o quando la curva è disattivata. Non sostituisce glucometro, CGM o indicazioni mediche.",
                     tone = BannerTone.INFO,
                 )
             }

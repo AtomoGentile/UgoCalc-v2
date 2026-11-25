@@ -40,6 +40,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -180,7 +181,6 @@ fun HomeScreen(
     var activeModelSheetPage by remember { mutableStateOf<ModelSheetPage?>(null) }
     var isSearchActive by rememberSaveable { mutableStateOf(false) }
     var quickSearchQuery by rememberSaveable { mutableStateOf("") }
-    var timelineExpanded by rememberSaveable { mutableStateOf(false) }
     var quickActionsExpanded by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
@@ -405,16 +405,9 @@ fun HomeScreen(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 224.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 244.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
-                        item(key = "greeting") {
-                            HomeEditorialGreeting(
-                                greeting = uiState.greeting,
-                                sessionMode = uiState.sessionMode,
-                                weekMealsCount = uiState.weekMealsCount,
-                            )
-                        }
                         if (shouldShowHomeBanner(uiState)) {
                             item(key = "status_banner") {
                                 HomeStatusBanner(
@@ -434,23 +427,13 @@ fun HomeScreen(
                                 onClick = onNavigateToHistory,
                             )
                         }
-                        uiState.todayGlycemicTimeline?.let { timeline ->
-                            item(key = "today_timeline") {
-                                CollapsibleDailyTimelineSection(
-                                    timeline = timeline,
-                                    expanded = timelineExpanded,
-                                    onToggleExpand = { timelineExpanded = !timelineExpanded },
-                                    onOpenSettings = onOpenGlycemicSettings,
-                                )
-                            }
-                        }
                     }
 
                     LazyColumn(
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight(),
-                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 224.dp),
+                        contentPadding = PaddingValues(top = 18.dp, bottom = navBarBottom + 244.dp),
                         verticalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
                         if (uiState.favoritesEnabled) {
@@ -475,17 +458,9 @@ fun HomeScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = navBarBottom + 236.dp),
+                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 20.dp, bottom = navBarBottom + 256.dp),
                     verticalArrangement = Arrangement.spacedBy(20.dp),
                 ) {
-                    item(key = "greeting") {
-                        HomeEditorialGreeting(
-                            greeting = uiState.greeting,
-                            sessionMode = uiState.sessionMode,
-                            weekMealsCount = uiState.weekMealsCount,
-                        )
-                    }
-
                     if (shouldShowHomeBanner(uiState)) {
                         item(key = "status_banner") {
                             HomeStatusBanner(
@@ -505,17 +480,6 @@ fun HomeScreen(
                             glycemicLoad = uiState.todayGlycemicLoad,
                             onClick = onNavigateToHistory,
                         )
-                    }
-
-                    uiState.todayGlycemicTimeline?.let { timeline ->
-                        item(key = "today_timeline") {
-                            CollapsibleDailyTimelineSection(
-                                timeline = timeline,
-                                expanded = timelineExpanded,
-                                onToggleExpand = { timelineExpanded = !timelineExpanded },
-                                onOpenSettings = onOpenGlycemicSettings,
-                            )
-                        }
                     }
 
                     if (uiState.favoritesEnabled) {
@@ -778,80 +742,6 @@ private fun HomeEditorialTopBar(
     )
 }
 
-@Composable
-private fun HomeEditorialGreeting(
-    greeting: String,
-    sessionMode: SessionMode,
-    weekMealsCount: Int,
-) {
-    val todayLabel = remember {
-        SimpleDateFormat("EEEE d MMMM", Locale.ITALIAN)
-            .format(Date())
-            .replaceFirstChar { it.uppercase() }
-    }
-
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            Text(
-                text = todayLabel,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = MaterialTheme.colorScheme.surfaceContainerLow,
-                border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
-            ) {
-                Text(
-                    text = if (weekMealsCount == 1) "1 pasto · 7 gg" else "$weekMealsCount pasti · 7 gg",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    softWrap = false,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                )
-            }
-        }
-
-        Text(
-            text = "$greeting.",
-            style = editorialDisplayTextStyle(MaterialTheme.typography.headlineLarge),
-            fontWeight = FontWeight.Normal,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-
-        AnimatedContent(
-            targetState = sessionMode,
-            transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(150)) },
-            label = "greeting_subtitle_mode",
-        ) { mode ->
-            Text(
-                text = if (mode == SessionMode.RISTORANTE) {
-                    "Fuori casa · descrivi il piatto sotto o scatta subito"
-                } else {
-                    "A casa · aggiungi note al prompt o fotografa il piatto"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-    }
-}
-
 /**
  * Vera card Composer stile Claude flottante sopra la pillola di navigazione:
  * - Riga superiore: campo chat reale per aggiungere note al prompt Vision AI (V1 e V2)
@@ -980,22 +870,23 @@ private fun HomeChatComposerCard(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+                    .padding(start = 14.dp, end = 12.dp, top = 14.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                // Riga 1: vero campo chat per arricchire il prompt Vision AI
+                // Riga 1: vero campo chat spazioso in alto per arricchire il prompt Vision AI
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                        .heightIn(min = 38.dp)
+                        .padding(horizontal = 2.dp),
+                    verticalAlignment = Alignment.Top,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .padding(vertical = 2.dp),
-                        contentAlignment = Alignment.CenterStart,
+                            .padding(top = 2.dp),
+                        contentAlignment = Alignment.TopStart,
                     ) {
                         if (uiState.promptNote.isEmpty()) {
                             Text(
@@ -1501,64 +1392,6 @@ private fun TodayNutritionCard(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CollapsibleDailyTimelineSection(
-    timeline: com.ugocalc.app.domain.glycemic.DailyGlycemicTimeline,
-    expanded: Boolean,
-    onToggleExpand: () -> Unit,
-    onOpenSettings: () -> Unit,
-) {
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (expanded) 180f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "timeline_chevron",
-    )
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Surface(
-            onClick = onToggleExpand,
-            shape = RoundedCornerShape(16.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-            border = BorderStroke(0.75.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.50f)),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    text = "Andamento glicemico · Picco ${timeline.peakMgDl.roundToInt()} mg/dL",
-                    style = MaterialTheme.typography.labelLarge,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f),
-                )
-                Icon(
-                    imageVector = Icons.Rounded.KeyboardArrowDown,
-                    contentDescription = if (expanded) "Comprimi timeline" else "Espandi timeline",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.graphicsLayer { rotationZ = chevronRotation },
-                )
-            }
-        }
-        AnimatedVisibility(
-            visible = expanded,
-            enter = expandVertically(spring(dampingRatio = Spring.DampingRatioNoBouncy)) + fadeIn(tween(180)),
-            exit = shrinkVertically(tween(160)) + fadeOut(tween(120)),
-        ) {
-            DailyGlycemicTimelineCard(
-                timeline = timeline,
-                onOpenSettings = onOpenSettings,
-            )
         }
     }
 }

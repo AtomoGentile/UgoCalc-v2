@@ -227,4 +227,23 @@ class GlycemicCurveCalculatorTest {
         assertEquals(140.0, timeline.targetMaxMgDl, 1e-6)
         assertTrue("Expected daytime peak well above baseline", timeline.peakMgDl > 130.0)
     }
+
+    @Test
+    fun `diabetic IMPATTO_PIENO preset rises cumulatively without spontaneous return to baseline`() {
+        val diabeticProfile = GlycemicProfile(
+            preset = GlycemicProfilePreset.IMPATTO_PIENO,
+            baselineGlucoseMgDl = 110.0,
+            carbSensitivityMgDlPer10g = 40.0,
+            targetPostPrandialMaxMgDl = 180.0,
+        )
+        val meal = listOf(
+            line("Pasta di semola", weightG = 80.0, choPer100g = 72.0, grassiPer100g = 1.5, proteinePer100g = 12.5, indiceGlicemico = 49)
+        )
+        val result = GlycemicCurveCalculator.simulateMeal(meal, diabeticProfile)
+
+        assertNull("Without insulin bolus, diabetic curve should not spontaneously return to baseline", result.returnToBaselineMinutes)
+        assertTrue("Glucose at 180m (${result.glucoseAt180MinMgDl}) should remain >= glucose at 60m (${result.glucoseAt60MinMgDl})", result.glucoseAt180MinMgDl >= result.glucoseAt60MinMgDl)
+        assertTrue("Final glucose at 240m should stay elevated well above baseline", result.points.last().glucoseMgDl > diabeticProfile.baselineGlucoseMgDl + 100.0)
+        assertTrue(result.insightText.contains("senza bolo", ignoreCase = true))
+    }
 }
