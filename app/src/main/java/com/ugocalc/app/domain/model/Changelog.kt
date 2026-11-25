@@ -40,6 +40,17 @@ data class ChangelogEntry(
 object Changelog {
     val ENTRIES = listOf(
         ChangelogEntry(
+            version = "4.6.0",
+            categories = listOf("Nuova UI Editoriale", "Barra con Scrub", "Selettore Modello & Effort"),
+            highlights = listOf(
+                "Nuova interfaccia editoriale: foglio arrotondato pulito su cornice calda, saluto in tipografia serif, top bar con pulsanti circolari/pillole e liste ariose senza card pesanti (mantenendo i colori Casa Verde / Ristorante Bordeaux e dei macronutrienti).",
+                "Dock rapida in Home: tutto a portata di pollice sopra la bottom bar — inserimento manuale (+), chip Modello & Effort, scanner Barcode e pulsante circolare Foto AI.",
+                "Selettore Modello & Effort stile Claude: bottom sheet rapido con indicatori a puntini e slider tattile a pillola scura per regolare l'effort (Off / Low / Medium / High / Max) con trascinamento e feedback aptico.",
+                "Bottom bar essenziale con scrub: 4 icone pulite, trascinamento orizzontale col dito e tooltip scuro flottante al passaggio tra le schede.",
+                "Ricerca live istantanea: ricerca rapida in Home, Cronologia e Alimenti con evidenziazione in grassetto dei risultati trovati.",
+            ),
+        ),
+        ChangelogEntry(
             version = "4.5.1",
             categories = listOf("Barra Flottante", "Effort Reali", "UI & Modelli"),
             highlights = listOf(

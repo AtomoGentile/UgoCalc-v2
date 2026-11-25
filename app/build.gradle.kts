@@ -17,8 +17,8 @@ android {
         applicationId = "com.ugocalc.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "4.5.1"
+        versionCode = 14
+        versionName = "4.6.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

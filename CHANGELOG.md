@@ -2,6 +2,15 @@
 
 All notable changes to UgoCalc2 will be documented in this file.
 
+## [4.6.0] - 2026-11-25
+
+### Changed
+- **Editorial UI Restyling (Claude-inspired Hybrid)**: Redesigned the app shell with a warm outer frame (`background`) and pure-white/elevated-dark rounded content sheets (`28dp` top corners), editorial serif greeting typography (respecting Accessibility font overrides), and frameless editorial list rows while preserving Casa (Emerald) / Ristorante (Bordeaux) and macronutrient color identities.
+- **Icon-Only Scrub Bottom Navigation Bar**: Upgraded the 4-tab bottom bar with a gliding selection pill, horizontal finger-scrub gesture with haptic feedback, and floating dark tab tooltips (`Home`, `Cronologia`, `Alimenti`, `Impostazioni`).
+- **Tactile Model & Effort Bottom Sheet**: Added a 2-stage Claude-style `ModelEffortBottomSheet` accessible directly from the Home dock, featuring inline effort dot indicators (`· | · · ·`) and a tactile pill-track discrete slider (`TactilePillEffortSlider`) with tap + drag support for `Off / Low / Medium / High / Max`.
+- **Home Floating Action Dock & Live Search**: Added a thumb-friendly bottom dock on Home (`+` Manual entry, `Model · Effort ∨` picker chip, Barcode shortcut, primary circular Photo AI CTA), a top-bar split pill (`Search | Casa/Ristorante` toggle), and instant live search with bold matched-substring highlighting across Home, History, and Food Search.
+- **Unified Secondary Flow**: Aligned `ModelSelectionScreen`, `ManualFoodEntryScreen`, `VisionResultsScreen`, `FinalResultScreen`, `HistoryDetailScreen`, `RecipeListScreen`, and shared `BackIconButton` / `TopAppBar` styling to the same editorial rounded sheet and circular action pills.
+
 ## [4.5.1] - 2026-11-23
 
 ### Fixed
